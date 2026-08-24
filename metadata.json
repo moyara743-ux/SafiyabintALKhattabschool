@@ -1,0 +1,6 @@
+{
+  "name": "مدرسة صفية بنت عمر",
+  "description": "منصة إلكترونية متكاملة لمدرسة صفية بنت عمر تشمل الأخبار والأنشطة، الفعاليات، معرض الصور، الإعلانات، وسجل الإنجازات مع نظام صلاحيات RBAC متقدم للمديرة والمشرفين",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

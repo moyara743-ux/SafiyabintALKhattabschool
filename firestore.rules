@@ -1,0 +1,126 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper function to check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Helper to get the user's document
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+    
+    // Check if user is active (not suspended)
+    function isActive() {
+      return isAuthenticated() && (
+        !exists(/databases/$(database)/documents/users/$(request.auth.uid)) ||
+        getUserData().status != 'suspended'
+      );
+    }
+    
+    // Check if user is the Owner (Main Admin / Directrice)
+    function isOwner() {
+      return isAuthenticated() && (
+        request.auth.token.email == 'moyara743@gmail.com' ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && getUserData().role == 'owner')
+      );
+    }
+    
+    // Check if user has administrative or moderator permissions
+    function isAdminOrModerator() {
+      return isOwner() || (
+        isAuthenticated() && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+        (getUserData().role in ['admin', 'teacher', 'editor']) &&
+        getUserData().status == 'active'
+      );
+    }
+
+    // Users Collection
+    match /users/{userId} {
+      // Authenticated users can read users (Owner gets full data, users can get basic profile)
+      allow read: if isAuthenticated();
+      
+      // A user can create their own profile upon registration, or Owner can create
+      allow create: if isAuthenticated() && (
+        request.auth.uid == userId || isOwner()
+      );
+      
+      // Owner can update any user (change role, permissions, status), user can update own displayName/photoURL
+      // BUT non-owner CANNOT elevate their own role or un-suspend themselves or modify Owner's account
+      allow update: if isAuthenticated() && (
+        isOwner() || 
+        (
+          request.auth.uid == userId && 
+          request.resource.data.role == resource.data.role && 
+          request.resource.data.status == resource.data.status &&
+          request.resource.data.email == resource.data.email
+        )
+      );
+      
+      // ONLY the Owner can delete a user (and never delete the owner himself)
+      allow delete: if isOwner() && resource.data.role != 'owner' && resource.data.email != 'moyara743@gmail.com';
+    }
+
+    // Posts Collection (News, What Happened Today, Announcements, Achievements)
+    match /posts/{postId} {
+      // Authenticated users can read published posts. Admins/Moderators can read drafts/pending.
+      allow read: if isAuthenticated() && (
+        resource.data.status == 'published' || isAdminOrModerator()
+      );
+      
+      // Authenticated active staff can create posts
+      allow create: if isActive() && isAdminOrModerator();
+      
+      // Authors can update their own posts, or Owner/Admin can update any post.
+      // Regular users can update likedBy array if they are just toggling likes.
+      allow update: if isActive() && (
+        isOwner() ||
+        (isAdminOrModerator() && (resource.data.authorId == request.auth.uid || getUserData().role == 'admin')) ||
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likesCount', 'likedBy']))
+      );
+      
+      // Owner or Author with moderator role can delete
+      allow delete: if isActive() && (
+        isOwner() || 
+        (isAdminOrModerator() && resource.data.authorId == request.auth.uid) ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && getUserData().role == 'admin')
+      );
+    }
+
+    // Events Collection
+    match /events/{eventId} {
+      allow read: if isAuthenticated();
+      allow create: if isActive() && isAdminOrModerator();
+      allow update: if isActive() && isAdminOrModerator();
+      allow delete: if isActive() && (isOwner() || (isAdminOrModerator() && resource.data.authorId == request.auth.uid));
+    }
+
+    // Gallery Collection
+    match /gallery/{photoId} {
+      allow read: if isAuthenticated();
+      allow create: if isActive() && isAdminOrModerator();
+      allow update: if isActive() && isAdminOrModerator();
+      allow delete: if isActive() && (isOwner() || (isAdminOrModerator() && resource.data.authorId == request.auth.uid));
+    }
+
+    // Activity Logs Collection (Audit trail)
+    match /activityLogs/{logId} {
+      // Only Owner and Admins can view activity logs
+      allow read: if isOwner() || (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && getUserData().role == 'admin');
+      // Any authenticated active user/system can append audit records
+      allow create: if isAuthenticated() && isActive();
+      // Immutable logs: cannot be updated or deleted by anyone
+      allow update: if false;
+      allow delete: if false;
+    }
+
+    // Site Settings Collection
+    match /settings/{settingId} {
+      allow read: if true; // Public or authenticated
+      allow write: if isOwner();
+    }
+  }
+}

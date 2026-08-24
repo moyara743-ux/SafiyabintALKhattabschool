@@ -1,0 +1,118 @@
+{
+  "entities": {
+    "users": {
+      "title": "User Profiles",
+      "description": "Registered users with role assignments (Owner, Admin, Teacher, Editor, User) and specific granular permissions",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "format": "email" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "role": { "type": "string", "enum": ["owner", "admin", "teacher", "editor", "user"] },
+        "status": { "type": "string", "enum": ["active", "suspended"] },
+        "permissions": {
+          "type": "object",
+          "properties": {
+            "canPublishNews": { "type": "boolean" },
+            "canManageEvents": { "type": "boolean" },
+            "canUploadPhotos": { "type": "boolean" },
+            "canPostTodaySummary": { "type": "boolean" },
+            "canManageAnnouncements": { "type": "boolean" },
+            "requiresReview": { "type": "boolean" }
+          }
+        },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "lastLoginAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["email", "role", "status", "createdAt"]
+    },
+    "posts": {
+      "title": "School News & Posts",
+      "description": "School news, achievements, competitions, and daily activities",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "category": { "type": "string" },
+        "type": { "type": "string", "enum": ["news", "today_summary", "announcement", "achievement"] },
+        "images": { "type": "array", "items": { "type": "string" } },
+        "authorId": { "type": "string" },
+        "authorName": { "type": "string" },
+        "authorRole": { "type": "string" },
+        "status": { "type": "string", "enum": ["published", "draft", "pending_review"] },
+        "isPinned": { "type": "boolean" },
+        "likesCount": { "type": "number" },
+        "likedBy": { "type": "array", "items": { "type": "string" } },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "content", "category", "type", "authorId", "status", "createdAt"]
+    },
+    "events": {
+      "title": "School Events Calendar",
+      "description": "Events, dates, times, locations, descriptions, and statuses",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "date": { "type": "string" },
+        "time": { "type": "string" },
+        "location": { "type": "string" },
+        "description": { "type": "string" },
+        "image": { "type": "string" },
+        "status": { "type": "string", "enum": ["upcoming", "completed", "cancelled"] },
+        "category": { "type": "string" },
+        "authorId": { "type": "string" },
+        "authorName": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "date", "status", "createdAt"]
+    },
+    "gallery": {
+      "title": "School Photo Gallery & Albums",
+      "description": "Albums and curated photos from events, achievements, and ceremonies",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "album": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "description": { "type": "string" },
+        "authorId": { "type": "string" },
+        "authorName": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "album", "imageUrl", "createdAt"]
+    },
+    "activityLogs": {
+      "title": "Security & Activity Audit Log",
+      "description": "Immutable log of admin/moderator actions",
+      "type": "object",
+      "properties": {
+        "action": { "type": "string" },
+        "details": { "type": "string" },
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "userEmail": { "type": "string" },
+        "targetId": { "type": "string" },
+        "targetType": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["action", "details", "userId", "userName", "timestamp"]
+    },
+    "settings": {
+      "title": "School Site Settings",
+      "description": "School contact information, hero message, motto, and config",
+      "type": "object",
+      "properties": {
+        "schoolName": { "type": "string" },
+        "motto": { "type": "string" },
+        "aboutText": { "type": "string" },
+        "phone": { "type": "string" },
+        "email": { "type": "string" },
+        "address": { "type": "string" },
+        "principalName": { "type": "string" },
+        "enableModerationWorkflow": { "type": "boolean" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      }
+    }
+  }
+}
