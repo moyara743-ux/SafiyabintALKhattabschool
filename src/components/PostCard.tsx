@@ -1,27 +1,23 @@
 import React, { useState } from 'react';
-import { Post, UserRole } from '../types';
+import { Post } from '../types';
 import { useAuth } from '../context/AuthContext';
-import { doc, updateDoc, deleteDoc, addDoc, collection } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { dataStore } from '../lib/dataStore';
+import { logActivity } from '../lib/activityLogger';
 import {
   Heart,
   Calendar,
   User,
-  Tag,
   Share2,
   Pin,
   MoreVertical,
   Edit2,
   Trash2,
-  CheckCircle,
-  Eye,
   Clock,
   Sparkles,
   Award,
   Sun,
-  Bell
+  Bell,
 } from 'lucide-react';
-import { motion } from 'motion/react';
 import confetti from 'canvas-confetti';
 
 interface PostCardProps {
@@ -31,16 +27,14 @@ interface PostCardProps {
 }
 
 export const PostCard: React.FC<PostCardProps> = ({ post, onEdit, onViewDetails }) => {
-  const { user, profile, isOwner, isAdmin } = useAuth();
+  const { user, profile, isOwner, hasPerm } = useAuth();
   const [likes, setLikes] = useState(post.likesCount || 0);
   const [isLiked, setIsLiked] = useState(user ? post.likedBy?.includes(user.uid) : false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
-  const canEditOrDelete =
-    isOwner ||
-    (user && post.authorId === user.uid) ||
-    isAdmin;
+  const canEdit = isOwner || (user && post.authorId === user.uid) || hasPerm('editPosts');
+  const canDelete = isOwner || (user && post.authorId === user.uid) || hasPerm('deletePosts');
 
   const handleLikeToggle = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -65,7 +59,7 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onEdit, onViewDetails 
         });
       }
 
-      await updateDoc(doc(db, 'posts', post.id), {
+      await dataStore.updatePost(post.id, {
         likesCount: newLikesCount,
         likedBy: newLikedBy,
       });
@@ -77,23 +71,22 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onEdit, onViewDetails 
   const handleDelete = async (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!window.confirm(`هل أنت متأكد من حذف المنشور "${post.title}"؟`)) return;
+    if (!user || !profile) return;
 
     try {
       setDeleting(true);
-      await deleteDoc(doc(db, 'posts', post.id));
+      await dataStore.deletePost(post.id);
 
-      if (user && profile) {
-        await addDoc(collection(db, 'activityLogs'), {
-          action: 'حذف منشور',
-          details: `تم حذف المنشور "${post.title}" بواسطة ${profile.displayName}`,
-          userId: user.uid,
-          userName: profile.displayName,
-          userEmail: user.email,
-          targetId: post.id,
-          targetType: 'post',
-          timestamp: new Date().toISOString(),
-        }).catch(() => {});
-      }
+      await logActivity({
+        actorId: user.id || user.uid,
+        actorName: profile.name,
+        actorEmail: user.email || '',
+        action: 'DELETE',
+        entity: 'posts',
+        entityId: post.id,
+        oldValue: post.title,
+        details: `حذف المنشور: "${post.title}"`,
+      });
     } catch (err) {
       console.error('Error deleting post:', err);
       alert('حدث خطأ أثناء الحذف أو ليس لديك الصلاحية الكافية.');
@@ -105,26 +98,39 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onEdit, onViewDetails 
   const getTypeIcon = (t: string) => {
     switch (t) {
       case 'today_summary':
-        return <Sun className="w-3.5 h-3.5 text-amber-600" />;
+        return <Sun className="w-3.5 h-3.5 text-amber-400" />;
       case 'achievement':
-        return <Award className="w-3.5 h-3.5 text-purple-600" />;
+        return <Award className="w-3.5 h-3.5 text-purple-400" />;
       case 'announcement':
-        return <Bell className="w-3.5 h-3.5 text-blue-600" />;
+        return <Bell className="w-3.5 h-3.5 text-rose-400" />;
       default:
-        return <Sparkles className="w-3.5 h-3.5 text-emerald-600" />;
+        return <Sparkles className="w-3.5 h-3.5 text-emerald-400" />;
     }
   };
 
   const getTypeBadge = (t: string) => {
     switch (t) {
       case 'today_summary':
-        return 'bg-amber-50 text-amber-800 border-amber-200';
+        return 'bg-amber-500/20 text-amber-300 border-amber-500/40';
       case 'achievement':
-        return 'bg-purple-50 text-purple-800 border-purple-200';
+        return 'bg-purple-500/20 text-purple-300 border-purple-500/40';
       case 'announcement':
-        return 'bg-blue-50 text-blue-800 border-blue-200';
+        return 'bg-rose-500/20 text-rose-300 border-rose-500/40';
       default:
-        return 'bg-emerald-50 text-emerald-800 border-emerald-200';
+        return 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40';
+    }
+  };
+
+  const getTypeLabel = (t: string) => {
+    switch (t) {
+      case 'today_summary':
+        return 'ماذا حدث اليوم؟';
+      case 'achievement':
+        return 'إنجاز وتكريم';
+      case 'announcement':
+        return 'إعلان رسمي';
+      default:
+        return 'خبر مدرسي';
     }
   };
 
@@ -141,78 +147,63 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onEdit, onViewDetails 
     }
   };
 
-  if (deleting) return null;
-
   return (
-    <motion.article
-      layout
-      initial={{ opacity: 0, y: 15 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.95 }}
-      className={`group relative bg-white rounded-2xl border transition-all duration-300 overflow-hidden flex flex-col justify-between ${
-        post.isPinned
-          ? 'border-amber-300 shadow-md ring-1 ring-amber-300/60'
-          : 'border-slate-200 hover:border-emerald-300 hover:shadow-lg'
-      }`}
+    <article
+      onClick={() => onViewDetails?.(post)}
+      className="group relative bg-slate-900 rounded-3xl border border-slate-800 shadow-md hover:shadow-xl hover:border-slate-700 transition-all duration-300 flex flex-col justify-between overflow-hidden cursor-pointer"
       dir="rtl"
     >
-      {/* Top Banner / Image */}
-      <div>
-        {post.images && post.images.length > 0 ? (
-          <div className="relative h-48 sm:h-52 w-full overflow-hidden bg-slate-100 cursor-pointer" onClick={() => onViewDetails?.(post)}>
-            <img
-              src={post.images[0]}
-              alt={post.title}
-              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-              referrerPolicy="no-referrer"
-            />
-            {post.images.length > 1 && (
-              <span className="absolute bottom-2 left-2 bg-slate-900/80 backdrop-blur-sm text-white text-[10px] font-bold px-2 py-0.5 rounded-md border border-white/20">
-                +{post.images.length - 1} صور إضافية
-              </span>
-            )}
-            {post.isPinned && (
-              <div className="absolute top-2 right-2 bg-amber-500 text-slate-950 px-2.5 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1 shadow-md">
-                <Pin className="w-3 h-3" />
-                <span>مثبت</span>
-              </div>
-            )}
+      {/* Pinned indicator banner */}
+      {post.isPinned && (
+        <div className="bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 px-4 py-1 text-[11px] font-black flex items-center justify-between shadow-inner">
+          <div className="flex items-center gap-1.5">
+            <Pin className="w-3.5 h-3.5 fill-current" />
+            <span>منشور مثبت في واجهة المدرسة</span>
           </div>
-        ) : (
-          post.isPinned && (
-            <div className="p-3 bg-amber-50/80 border-b border-amber-200/60 flex items-center gap-1.5 text-xs font-bold text-amber-900">
-              <Pin className="w-3.5 h-3.5 text-amber-700" />
-              <span>منشور مثبت في مقدمة الأخبار</span>
-            </div>
-          )
-        )}
+          <Sparkles className="w-3.5 h-3.5" />
+        </div>
+      )}
 
-        {/* Content Section */}
-        <div className="p-5">
-          {/* Metadata Row */}
-          <div className="flex items-center justify-between gap-2 mb-2.5">
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold border flex items-center gap-1 ${getTypeBadge(post.type)}`}>
-                {getTypeIcon(post.type)}
-                <span>{post.category}</span>
+      {/* Post Cover Image if exists */}
+      {post.images && post.images.length > 0 && (
+        <div className="relative aspect-video w-full overflow-hidden bg-slate-800">
+          <img
+            src={post.images[0]}
+            alt={post.title}
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+            loading="lazy"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-transparent opacity-80" />
+
+          {/* Type Tag Badge */}
+          <div className="absolute bottom-3 right-3 flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold border backdrop-blur-md bg-slate-900/80 text-white border-white/20">
+            {getTypeIcon(post.type)}
+            <span>{getTypeLabel(post.type)}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Post Body Content */}
+      <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
+        <div className="space-y-2">
+          {/* Header Metadata and Action Menu */}
+          <div className="flex items-center justify-between text-xs text-slate-400">
+            <div className="flex items-center gap-2">
+              <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${getTypeBadge(post.type)}`}>
+                {post.category || 'عام'}
               </span>
-
-              {post.status === 'pending_review' && (
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
-                  قيد المراجعة
-                </span>
-              )}
+              <span className="flex items-center gap-1 text-[11px]">
+                <Calendar className="w-3 h-3 text-slate-500" />
+                <span>{formatDate(post.date || post.createdAt)}</span>
+              </span>
             </div>
 
-            {/* Dropdown Options */}
-            {canEditOrDelete && (
-              <div className="relative">
+            {/* Menu Dropdown for Edit / Delete */}
+            {(canEdit || canDelete) && (
+              <div className="relative" onClick={(e) => e.stopPropagation()}>
                 <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setDropdownOpen(!dropdownOpen);
-                  }}
-                  className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100"
+                  onClick={() => setDropdownOpen(!dropdownOpen)}
+                  className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
                 >
                   <MoreVertical className="w-4 h-4" />
                 </button>
@@ -220,28 +211,30 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onEdit, onViewDetails 
                 {dropdownOpen && (
                   <div
                     onMouseLeave={() => setDropdownOpen(false)}
-                    className="absolute left-0 mt-1 w-32 bg-white border border-slate-200 rounded-xl shadow-xl py-1 z-20 text-xs"
+                    className="absolute left-0 mt-1 w-32 bg-slate-800 border border-slate-700 rounded-xl shadow-xl py-1 z-20"
                   >
-                    {onEdit && (
+                    {canEdit && onEdit && (
                       <button
-                        onClick={(e) => {
-                          e.stopPropagation();
+                        onClick={() => {
                           setDropdownOpen(false);
                           onEdit(post);
                         }}
-                        className="w-full px-3 py-1.5 text-right text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+                        className="w-full px-3 py-1.5 text-right text-xs text-slate-200 hover:bg-slate-700 flex items-center gap-2"
                       >
-                        <Edit2 className="w-3.5 h-3.5 text-emerald-600" />
+                        <Edit2 className="w-3.5 h-3.5 text-emerald-400" />
                         <span>تعديل</span>
                       </button>
                     )}
-                    <button
-                      onClick={handleDelete}
-                      className="w-full px-3 py-1.5 text-right text-rose-600 hover:bg-rose-50 flex items-center gap-2"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                      <span>حذف</span>
-                    </button>
+                    {canDelete && (
+                      <button
+                        onClick={handleDelete}
+                        disabled={deleting}
+                        className="w-full px-3 py-1.5 text-right text-xs text-rose-400 hover:bg-rose-500/10 flex items-center gap-2"
+                      >
+                        <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                        <span>{deleting ? 'جارٍ الحذف...' : 'حذف'}</span>
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
@@ -249,58 +242,60 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onEdit, onViewDetails 
           </div>
 
           {/* Title */}
-          <h3
-            onClick={() => onViewDetails?.(post)}
-            className="text-base font-extrabold text-slate-900 hover:text-emerald-800 transition-colors leading-snug line-clamp-2 cursor-pointer mb-2"
-          >
+          <h3 className="text-base font-bold text-white group-hover:text-emerald-400 transition-colors line-clamp-2 leading-snug">
             {post.title}
           </h3>
 
-          {/* Body Preview */}
-          <p className="text-xs text-slate-600 line-clamp-3 leading-relaxed mb-4">
+          {/* Snippet */}
+          <p className="text-xs text-slate-400 line-clamp-3 leading-relaxed">
             {post.content}
           </p>
         </div>
-      </div>
 
-      {/* Footer Info */}
-      <div className="px-5 py-3.5 bg-slate-50/70 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
-        <div className="flex items-center gap-2">
-          <div className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-900 flex items-center justify-center font-bold text-[10px]">
-            {post.authorName?.[0] || 'م'}
-          </div>
-          <div>
-            <span className="font-semibold text-slate-800 block text-[11px]">
-              {post.authorName}
-            </span>
-            <span className="text-[10px] text-slate-400 block">
-              {formatDate(post.createdAt)}
+        {/* Footer info: Author & Like / Views */}
+        <div className="pt-3 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400">
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-6 rounded-full bg-slate-800 flex items-center justify-center text-slate-300 font-bold text-[10px] border border-slate-700">
+              <User className="w-3.5 h-3.5" />
+            </div>
+            <span className="text-[11px] font-semibold text-slate-300">
+              {post.authorName || 'إدارة المدرسة'}
             </span>
           </div>
-        </div>
 
-        {/* Action Controls */}
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handleLikeToggle}
-            className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
-              isLiked
-                ? 'bg-rose-50 text-rose-600 border border-rose-200'
-                : 'text-slate-500 hover:bg-slate-200/60'
-            }`}
-          >
-            <Heart className={`w-3.5 h-3.5 ${isLiked ? 'fill-rose-600 text-rose-600' : ''}`} />
-            <span>{likes}</span>
-          </button>
+          <div className="flex items-center gap-3">
+            {/* Likes button */}
+            <button
+              onClick={handleLikeToggle}
+              className={`flex items-center gap-1 text-xs transition-colors p-1 rounded-lg ${
+                isLiked
+                  ? 'text-rose-400 font-bold'
+                  : 'text-slate-400 hover:text-rose-400'
+              }`}
+            >
+              <Heart className={`w-3.5 h-3.5 ${isLiked ? 'fill-current' : ''}`} />
+              <span className="text-[11px] font-mono">{likes}</span>
+            </button>
 
-          <button
-            onClick={() => onViewDetails?.(post)}
-            className="px-3 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-[11px] font-bold rounded-lg transition-colors"
-          >
-            قراءة المزيد
-          </button>
+            {/* Share link button */}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                if (navigator.share) {
+                  navigator.share({ title: post.title, text: post.content, url: window.location.href });
+                } else {
+                  navigator.clipboard.writeText(window.location.href);
+                  alert('تم نسخ رابط الصفحة');
+                }
+              }}
+              className="text-slate-400 hover:text-emerald-400 transition-colors p-1"
+              title="مشاركة"
+            >
+              <Share2 className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
       </div>
-    </motion.article>
+    </article>
   );
 };

@@ -1,7 +1,23 @@
-import React, { useState } from 'react';
-import { Post, SchoolEvent, GalleryPhoto, PageView, PostType } from '../types';
+import React from 'react';
+import {
+  Post,
+  SchoolEvent,
+  Achievement,
+  SchoolPhoto,
+  SchoolAlbum,
+  Announcement,
+  DailyMessage,
+  PageView,
+  PostType,
+} from '../types';
 import { PostCard } from '../components/PostCard';
 import { useAuth } from '../context/AuthContext';
+import {
+  formatArabicFullDate,
+  formatArabicShortDate,
+  isTodayDate,
+  isTomorrowDate,
+} from '../lib/dateUtils';
 import {
   GraduationCap,
   Sparkles,
@@ -22,92 +38,109 @@ import {
   HeartHandshake,
   Compass,
   Lightbulb,
-  Trophy,
   ExternalLink,
-  Phone,
-  MessageCircle,
-  Layers,
-  ChevronDown,
-  PlusCircle,
-  Plus
+  MessageSquare,
+  Plus,
+  Edit,
+  FolderPlus,
 } from 'lucide-react';
-import { motion } from 'motion/react';
 
 interface HomePageProps {
   posts: Post[];
+  announcements: Announcement[];
   events: SchoolEvent[];
-  gallery: GalleryPhoto[];
+  achievements: Achievement[];
+  photos: SchoolPhoto[];
+  albums: SchoolAlbum[];
+  dailyMessage: DailyMessage | null;
   onNavigate: (view: PageView) => void;
   onSelectPost: (p: Post) => void;
   onOpenAuth: () => void;
-  onOpenNewPostModal?: (defaultType?: PostType) => void;
-  onOpenAddEvent?: () => void;
-  onOpenAddPhoto?: () => void;
+  onOpenCreatePost: (defaultType?: PostType) => void;
+  onOpenCreateAnnouncement: () => void;
+  onOpenAddEvent: () => void;
+  onOpenAddAchievement: () => void;
+  onOpenAddPhoto: () => void;
+  onOpenCreateAlbum: () => void;
+  onOpenDailyMessageModal: () => void;
 }
 
 export const HomePage: React.FC<HomePageProps> = ({
   posts,
+  announcements,
   events,
-  gallery,
+  achievements,
+  photos,
+  albums,
+  dailyMessage,
   onNavigate,
   onSelectPost,
   onOpenAuth,
-  onOpenNewPostModal,
+  onOpenCreatePost,
+  onOpenCreateAnnouncement,
   onOpenAddEvent,
+  onOpenAddAchievement,
   onOpenAddPhoto,
+  onOpenCreateAlbum,
+  onOpenDailyMessageModal,
 }) => {
-  const { user, profile, isOwner, canPublish } = useAuth();
+  const { user, profile, hasPerm } = useAuth();
 
-  // Filtered Highlights
-  const pinnedPost = posts.find((p) => p.isPinned && p.status === 'published');
-  const latestNews = posts.filter((p) => p.status === 'published').slice(0, 3);
-  const todaySummaries = posts.filter((p) => p.type === 'today_summary' && p.status === 'published').slice(0, 2);
-  const upcomingEvents = events.filter((e) => e.status === 'upcoming').slice(0, 3);
-  const achievements = posts.filter((p) => (p.type === 'achievement' || p.category === 'الإنجازات والجوائز') && p.status === 'published').slice(0, 3);
+  // Dynamic Date calculations
+  const todayArabic = formatArabicFullDate(new Date());
 
-  // Statistics data
+  // Filter today's summary posts
+  const todaySummaries = posts.filter(
+    (p) => p.status === 'published' && p.type === 'today_summary'
+  );
+
+  // Filter events of today and tomorrow
+  const todayEvents = events.filter((e) => isTodayDate(e.date));
+  const tomorrowEvents = events.filter((e) => isTomorrowDate(e.date));
+  const upcomingEvents = events.filter((e) => e.status === 'upcoming').slice(0, 4);
+
+  // Filter important announcements
+  const importantAnnouncements = announcements.filter((a) => a.isImportant);
+  const displayAnnouncements =
+    importantAnnouncements.length > 0 ? importantAnnouncements : announcements.slice(0, 3);
+
+  // News and Achievements
+  const latestNews = posts.filter((p) => p.status === 'published' && p.type === 'news').slice(0, 3);
+  const latestAchievements = achievements.slice(0, 4);
+
+  // Statistics
   const stats = [
-    { number: '+650', label: 'طالبة متميزة', sub: 'في بيئة تعليمية محفزة', icon: Users, color: 'text-emerald-700 bg-emerald-50 border-emerald-200' },
-    { number: '+45', label: 'معلمة وإدارية', sub: 'كفاءات وخبرات متخصصة', icon: GraduationCap, color: 'text-teal-700 bg-teal-50 border-teal-200' },
-    { number: '+35', label: 'نشاط وبرنامج إثرائي', sub: 'رعاية المواهب والابتكار', icon: Lightbulb, color: 'text-amber-700 bg-amber-50 border-amber-200' },
-    { number: '100%', label: 'انضباط وبيئة آمنة', sub: 'متابعة ورعاية شاملة', icon: Shield, color: 'text-purple-700 bg-purple-50 border-purple-200' },
-  ];
-
-  // School Distinct Features & Services
-  const features = [
     {
-      icon: Laptop,
-      title: 'الفصول التفاعلية الذكية',
-      desc: 'بيئة رقمية مجهزة بأحدث الشاشات والتقنيات لدعم استراتيجيات التعلم النشط وتنمية التفكير.',
-      color: 'bg-emerald-500/10 text-emerald-800 border-emerald-200',
+      number: `${posts.length + announcements.length}`,
+      label: 'تقرير وخبر معتمد',
+      sub: 'توثيق مستمر لليوم المدرسي',
+      icon: BookOpen,
+      color: 'text-emerald-400 bg-emerald-950/80 border-emerald-500/30',
     },
     {
-      icon: Lightbulb,
-      title: 'رعاية الموهوبات والابتكار',
-      desc: 'برامج إثرائية متخصصة، نوادي الروبوت والذكاء الاصطناعي، ومسابقات التفكير الإبداعي والبحث العلمي.',
-      color: 'bg-amber-500/10 text-amber-800 border-amber-200',
+      number: `${events.length}`,
+      label: 'فعالية ونشاط',
+      sub: 'برامج إثرائية ومسابقات',
+      icon: Calendar,
+      color: 'text-teal-400 bg-teal-950/80 border-teal-500/30',
     },
     {
-      icon: HeartHandshake,
-      title: 'الإرشاد الطلابي والدعم النفسي',
-      desc: 'متابعة تربوية وأكاديمية متكاملة لتعزيز الانضباط، الصحة النفسية، وتطوير المهارات القيادية والشخصية.',
-      color: 'bg-teal-500/10 text-teal-800 border-teal-200',
+      number: `${achievements.length}`,
+      label: 'إنجاز وتكريم',
+      sub: 'تفوق طالبات وكفاءة معلمات',
+      icon: Award,
+      color: 'text-purple-400 bg-purple-950/80 border-purple-500/30',
     },
     {
-      icon: Compass,
-      title: 'الأنشطة اللاصفية والرياضية',
-      desc: 'معارض فنية، بطولات رياضية مدرسية، فعاليات بيئية، ومشاريع تطوعية تغرس روح المسؤولية والمبادرة.',
-      color: 'bg-blue-500/10 text-blue-800 border-blue-200',
-    },
-    {
-      icon: Sun,
-      title: 'التوثيق اليومي الشامل',
-      desc: 'تغطية إعلامية حية للطابور الصباحي، الحصص النموذجية، والزيارات الميدانية عبر منصة المدرسة الرقمية.',
-      color: 'bg-orange-500/10 text-orange-800 border-orange-200',
+      number: `${photos.length + albums.length}`,
+      label: 'صورة وألبوم موثق',
+      sub: 'أرشيف بصري رقمي شامل',
+      icon: ImageIcon,
+      color: 'text-amber-400 bg-amber-950/80 border-amber-500/30',
     },
   ];
 
-  // Quick Access Portals
+  // Quick Portals
   const quickPortals = [
     {
       title: 'بوابة الطالبات',
@@ -115,23 +148,23 @@ export const HomePage: React.FC<HomePageProps> = ({
       icon: GraduationCap,
       action: () => onNavigate('achievements'),
       tag: 'إنجازات ومسابقات',
-      accent: 'hover:border-emerald-400 hover:bg-emerald-50/50',
+      accent: 'hover:border-emerald-500 hover:bg-emerald-900/30',
     },
     {
-      title: 'بوابة المعلمات',
-      subtitle: 'لوحة التحكم ونشر التقارير واليوميات',
+      title: 'بوابة المعلمات والإدارة',
+      subtitle: 'لوحة التحكم والتوثيق اليومي',
       icon: Laptop,
       action: () => (user ? onNavigate('admin_dashboard') : onOpenAuth()),
-      tag: user ? 'لوحة الإدارة' : 'تسجيل الدخول',
-      accent: 'hover:border-teal-400 hover:bg-teal-50/50',
+      tag: user ? 'لوحة التحكم' : 'تسجيل الدخول',
+      accent: 'hover:border-teal-500 hover:bg-teal-900/30',
     },
     {
-      title: 'أولياء الأمور',
-      subtitle: 'التواصل والاستفسارات ومتابعة الفعاليات',
-      icon: Users,
-      action: () => onNavigate('contact'),
-      tag: 'تواصل فوري',
-      accent: 'hover:border-amber-400 hover:bg-amber-50/50',
+      title: 'الإعلانات والتعاميم',
+      subtitle: 'التنبيهات المهمة ومواعيد الاختبارات',
+      icon: Bell,
+      action: () => onNavigate('announcements'),
+      tag: 'إعلانات رسمية',
+      accent: 'hover:border-rose-500 hover:bg-rose-900/30',
     },
     {
       title: 'المنصات التعليمية الرسمية',
@@ -139,48 +172,50 @@ export const HomePage: React.FC<HomePageProps> = ({
       icon: ExternalLink,
       action: () => window.open('https://schools.madrasati.sa', '_blank'),
       tag: 'خدمات وزارية',
-      accent: 'hover:border-indigo-400 hover:bg-indigo-50/50',
+      accent: 'hover:border-blue-500 hover:bg-blue-900/30',
     },
   ];
 
   return (
-    <div className="space-y-16 pb-20" dir="rtl">
+    <div className="space-y-12 pb-16" dir="rtl">
       {/* 1. HERO SECTION */}
-      <motion.section
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-        className="relative overflow-hidden rounded-3xl bg-gradient-to-l from-emerald-950 via-teal-900 to-slate-900 text-white shadow-2xl border border-emerald-800/40"
-      >
-        {/* Subtle patterned overlay */}
+      <section className="relative overflow-hidden rounded-3xl bg-gradient-to-l from-emerald-950 via-teal-950 to-slate-900 text-white shadow-2xl border border-emerald-800/40">
         <div className="absolute inset-0 opacity-10 bg-[radial-gradient(#34d399_1.5px,transparent_1.5px)] [background-size:24px_24px]" />
-        
-        {/* Soft Ambient Glows */}
         <div className="absolute -top-24 -right-24 w-96 h-96 bg-emerald-500/20 rounded-full blur-3xl pointer-events-none" />
         <div className="absolute -bottom-24 -left-24 w-96 h-96 bg-amber-500/15 rounded-full blur-3xl pointer-events-none" />
 
-        <div className="relative z-10 max-w-7xl mx-auto px-6 sm:px-10 lg:px-12 py-14 sm:py-20 grid grid-cols-1 lg:grid-cols-12 gap-10 items-center">
-          <div className="lg:col-span-8 space-y-6">
-            <div className="inline-flex items-center gap-2.5 px-4 py-1.5 rounded-full bg-emerald-500/20 border border-emerald-400/30 text-emerald-300 text-xs font-bold shadow-inner">
-              <Sparkles className="w-4 h-4 text-amber-400" />
-              <span>المنصة الرسمية المعتمدة | مدرسة صفية بنت عمر</span>
+        <div className="relative z-10 max-w-7xl mx-auto px-6 sm:px-10 lg:px-12 py-12 sm:py-16 grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+          <div className="lg:col-span-8 space-y-5">
+            {/* Dynamic Date & Official Identity Badge */}
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-500/20 border border-emerald-400/30 text-emerald-300 text-xs font-bold shadow-inner">
+                <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                <span>المنصة الرسمية المعتمدة</span>
+              </span>
+
+              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-800/80 border border-slate-700 text-slate-300 text-xs font-medium">
+                <Calendar className="w-3.5 h-3.5 text-emerald-400" />
+                <span>{todayArabic}</span>
+              </span>
             </div>
 
-            <h1 className="text-3xl sm:text-5xl font-extrabold font-serif tracking-tight leading-tight sm:leading-tight text-white">
-              نصنع المعرفة... <br />
+            <h1 className="text-3xl sm:text-5xl font-extrabold tracking-tight leading-tight sm:leading-tight text-white">
+              مدرسة صفية بنت عمر <br />
               <span className="bg-gradient-to-r from-emerald-300 via-teal-200 to-amber-200 bg-clip-text text-transparent">
-                ونـوثـق الإنجــاز
+                نصنع المعرفة... ونوثق الإنجاز
               </span>
             </h1>
 
-            <p className="text-emerald-100/90 text-sm sm:text-base leading-relaxed max-w-2xl font-light">
-              مرحباً بكم في الصرح التعليمي والتربوي لـ <strong className="font-bold text-white">مدرسة صفية بنت عمر</strong>. منصة رقمية متكاملة لتوثيق الفعاليات والأنشطة المدرسية، إبراز تفوق الطالبات، ورعاية الإبداع في بيئة تعليمية آمنة ومحفزة.
+            <p className="text-emerald-100/90 text-xs sm:text-sm leading-relaxed max-w-2xl font-light">
+              مرحباً بكم في البوابة الرقمية الرسمية لمدرسة صفية بنت عمر. صرح تربوي وتعليمي رائد
+              يجمع بين التميز الأكاديمي، وتنمية المهارات القيادية، ورعاية الموهوبات، وتوثيق يوميات
+              المدرسة أولاً بأول.
             </p>
 
-            <div className="flex flex-wrap items-center gap-3.5 pt-2">
+            <div className="flex flex-wrap items-center gap-3 pt-2">
               <button
                 onClick={() => onNavigate('news')}
-                className="px-6 py-3 bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs sm:text-sm font-bold rounded-xl shadow-lg transition-transform hover:scale-102 flex items-center gap-2"
+                className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs sm:text-sm font-bold rounded-xl shadow-lg transition-transform hover:scale-105 flex items-center gap-2"
               >
                 <span>استكشاف الأخبار والأنشطة</span>
                 <ArrowLeft className="w-4 h-4" />
@@ -188,116 +223,157 @@ export const HomePage: React.FC<HomePageProps> = ({
 
               <button
                 onClick={() => onNavigate('today')}
-                className="px-6 py-3 bg-white/10 hover:bg-white/20 text-white text-xs sm:text-sm font-bold rounded-xl border border-white/20 transition-all flex items-center gap-2 backdrop-blur-sm"
+                className="px-5 py-2.5 bg-slate-800/80 hover:bg-slate-700 text-white text-xs sm:text-sm font-bold rounded-xl border border-slate-700 transition-all flex items-center gap-2"
               >
                 <Sun className="w-4 h-4 text-amber-300" />
                 <span>ماذا حدث اليوم بالمدرسة؟</span>
               </button>
 
               <button
-                onClick={() => onNavigate('about')}
-                className="px-5 py-3 text-emerald-200 hover:text-white text-xs sm:text-sm font-bold transition-colors flex items-center gap-1"
+                onClick={() => onNavigate('events')}
+                className="px-4 py-2.5 text-emerald-200 hover:text-white text-xs sm:text-sm font-bold transition-colors flex items-center gap-1"
               >
-                <span>عن المدرسة</span>
+                <Calendar className="w-4 h-4 text-emerald-400" />
+                <span>جدول الفعاليات</span>
                 <ChevronLeft className="w-4 h-4" />
               </button>
             </div>
           </div>
 
+          {/* School Card Preview */}
           <div className="lg:col-span-4 hidden lg:flex justify-center">
-            <div className="relative w-72 rounded-3xl bg-emerald-900/60 p-5 border border-emerald-500/30 shadow-2xl backdrop-blur-md flex flex-col justify-between space-y-4">
+            <div className="w-72 rounded-3xl bg-emerald-950/70 p-5 border border-emerald-500/30 shadow-2xl backdrop-blur-md space-y-4">
               <div className="flex items-center justify-between text-xs text-emerald-200">
                 <span className="font-bold flex items-center gap-1.5">
                   <GraduationCap className="w-4 h-4 text-amber-300" />
-                  العام الدراسي 1447هـ
+                  بيئة تعليمية محفزة
                 </span>
                 <span className="bg-emerald-500/30 text-emerald-200 px-2.5 py-0.5 rounded-full text-[11px] font-bold border border-emerald-400/20">
                   نشط ومتميز
                 </span>
               </div>
 
-              <div className="text-center py-4 px-2 bg-slate-900/40 rounded-2xl border border-white/10">
+              <div className="text-center py-5 px-3 bg-slate-900/60 rounded-2xl border border-white/10">
                 <div className="w-14 h-14 bg-gradient-to-tr from-amber-400 to-amber-200 rounded-2xl flex items-center justify-center mx-auto mb-3 shadow-md">
                   <GraduationCap className="w-8 h-8 text-emerald-950" />
                 </div>
                 <h3 className="text-base font-extrabold text-white">مدرسة صفية بنت عمر</h3>
-                <p className="text-xs text-emerald-300 font-medium mt-0.5">تعليم متميز، وقيم أصيلة</p>
+                <p className="text-xs text-emerald-300 font-medium mt-0.5">تعليم متميز وقيم أصيلة</p>
               </div>
 
-              <div className="p-3 bg-emerald-950/70 rounded-2xl text-xs space-y-1.5 border border-emerald-500/20">
+              <div className="p-3 bg-slate-900/80 rounded-2xl text-xs space-y-2 border border-emerald-500/20">
                 <div className="flex items-center justify-between text-slate-300 text-[11px]">
-                  <span>البيئة المدرسية:</span>
-                  <span className="font-bold text-emerald-300">محفزة وآمنة</span>
+                  <span>تاريخ اليوم:</span>
+                  <span className="font-bold text-emerald-300">{formatArabicShortDate(new Date())}</span>
                 </div>
                 <div className="flex items-center justify-between text-slate-300 text-[11px]">
-                  <span>رعاية المواهب:</span>
-                  <span className="font-bold text-amber-300">مسارات إثرائية</span>
+                  <span>فعاليات اليوم:</span>
+                  <span className="font-bold text-amber-300">مجدولة ومتاحة</span>
                 </div>
               </div>
             </div>
-          </div>
-        </div>
-      </motion.section>
-
-      {/* QUICK ADD & CONTENT BAR (شريط الإضافة السريعة لمحتوى الموقع) */}
-      <section className="bg-gradient-to-r from-emerald-900 via-teal-900 to-slate-900 p-4 sm:p-5 rounded-3xl text-white shadow-lg border border-emerald-500/30">
-        <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-3 text-center sm:text-right">
-            <div className="w-10 h-10 rounded-2xl bg-amber-400 text-slate-950 flex items-center justify-center font-bold shadow-md shrink-0">
-              <Sparkles className="w-5 h-5 text-slate-950" />
-            </div>
-            <div>
-              <h3 className="text-sm sm:text-base font-extrabold text-white">إضافة وتوثيق محتوى المنصة</h3>
-              <p className="text-xs text-emerald-200">أضف خبراً، صورة لمعرض المدرسة، فعالية جديدة، أو تكريماً للطالبات</p>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center justify-center gap-2">
-            <button
-              onClick={() => onOpenNewPostModal?.('news')}
-              className="px-3.5 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-sm transition-all"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>خبر جديد</span>
-            </button>
-            <button
-              onClick={() => onOpenAddPhoto?.()}
-              className="px-3.5 py-2 bg-teal-500 hover:bg-teal-400 text-slate-950 text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-sm transition-all"
-            >
-              <ImageIcon className="w-3.5 h-3.5" />
-              <span>رفع صورة</span>
-            </button>
-            <button
-              onClick={() => onOpenAddEvent?.()}
-              className="px-3.5 py-2 bg-indigo-500 hover:bg-indigo-400 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-sm transition-all"
-            >
-              <Calendar className="w-3.5 h-3.5" />
-              <span>إضافة فعالية</span>
-            </button>
-            <button
-              onClick={() => onOpenNewPostModal?.('achievement')}
-              className="px-3.5 py-2 bg-purple-500 hover:bg-purple-400 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-sm transition-all"
-            >
-              <Award className="w-3.5 h-3.5" />
-              <span>إضافة إنجاز</span>
-            </button>
-            <button
-              onClick={() => onOpenNewPostModal?.('today_summary')}
-              className="px-3.5 py-2 bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-sm transition-all"
-            >
-              <Sun className="w-3.5 h-3.5" />
-              <span>يوميات اليوم</span>
-            </button>
           </div>
         </div>
       </section>
 
-      {/* 2. QUICK ACCESS PORTALS (روابط وبوابات سريعة) */}
+      {/* 2. IMPORTANT ANNOUNCEMENTS TICKER / BANNER */}
+      {displayAnnouncements.length > 0 && (
+        <section className="bg-rose-950/40 border border-rose-800/60 rounded-2xl p-4 text-rose-200 shadow-md">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <span className="p-2 rounded-xl bg-rose-600/30 text-rose-400 border border-rose-500/30 shrink-0">
+                <Bell className="w-4 h-4 animate-bounce" />
+              </span>
+              <div>
+                <span className="text-[10px] font-extrabold uppercase tracking-wider text-rose-400 block">
+                  إعلانات وتنبيهات المدرسة
+                </span>
+                <p className="text-xs sm:text-sm font-bold text-white">
+                  {displayAnnouncements[0].title}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 self-end sm:self-auto">
+              <button
+                onClick={() => onNavigate('announcements')}
+                className="px-3 py-1.5 bg-rose-600/30 hover:bg-rose-600/50 text-white rounded-xl text-xs font-bold transition-all border border-rose-500/40"
+              >
+                عرض كل الإعلانات
+              </button>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* 3. DAILY MESSAGE (الرسالة اليومية للمدرسة) */}
+      <section className="bg-gradient-to-r from-orange-950/40 via-amber-950/30 to-slate-900 border border-orange-500/30 rounded-3xl p-6 sm:p-7 text-white shadow-lg relative">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-orange-500/20 text-orange-400 flex items-center justify-center border border-orange-500/30">
+              <MessageSquare className="w-5 h-5" />
+            </div>
+            <div>
+              <span className="text-[11px] font-bold text-orange-400 block">الرسالة اليومية</span>
+              <h2 className="text-base sm:text-lg font-extrabold text-white">
+                إشراقة اليوم في صفية بنت عمر
+              </h2>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {dailyMessage && hasPerm('editDailyMessage') && (
+              <button
+                onClick={onOpenDailyMessageModal}
+                className="px-3 py-1.5 bg-orange-600/30 hover:bg-orange-600/50 text-orange-200 border border-orange-500/30 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all"
+              >
+                <Edit className="w-3.5 h-3.5" />
+                <span>تعديل رسالة اليوم</span>
+              </button>
+            )}
+            {!dailyMessage && hasPerm('createDailyMessage') && (
+              <button
+                onClick={onOpenDailyMessageModal}
+                className="px-3.5 py-1.5 bg-orange-500 hover:bg-orange-400 text-slate-950 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md transition-all"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>إضافة رسالة اليوم</span>
+              </button>
+            )}
+            <button
+              onClick={() => onNavigate('daily_message')}
+              className="text-xs font-bold text-orange-300 hover:underline px-2"
+            >
+              أرشيف الرسائل
+            </button>
+          </div>
+        </div>
+
+        <div className="bg-slate-900/60 p-5 rounded-2xl border border-white/5 mt-3">
+          {dailyMessage ? (
+            <div className="space-y-2">
+              <p className="text-xs sm:text-sm text-slate-200 leading-relaxed font-medium">
+                "{dailyMessage.content}"
+              </p>
+              <div className="flex items-center justify-between text-[11px] text-slate-400 pt-2 border-t border-slate-800">
+                <span>كتبت بواسطة: {dailyMessage.authorName}</span>
+                <span>تاريخ: {dailyMessage.date}</span>
+              </div>
+            </div>
+          ) : (
+            <p className="text-xs text-slate-400 italic">
+              "العلم نورٌ يبني العقول، والأخلاق تاجٌ يزيّن النفوس. نتمنى لطالباتنا ومعلماتنا يوماً مليئاً بالإنجاز والعطاء."
+            </p>
+          )}
+        </div>
+      </section>
+
+      {/* 4. QUICK ACCESS PORTALS */}
       <section className="space-y-4">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-lg sm:text-xl font-extrabold text-slate-900">بوابات وخدمات الوصول السريع</h2>
-            <p className="text-xs text-slate-500">روابط مباشرة مخصصة للطالبات، المعلمات، وأولياء الأمور</p>
+            <h2 className="text-lg sm:text-xl font-extrabold text-white">بوابات وخدمات الوصول السريع</h2>
+            <p className="text-xs text-slate-400">روابط مباشرة مخصصة للطالبات، المعلمات، وأولياء الأمور</p>
           </div>
         </div>
 
@@ -305,306 +381,220 @@ export const HomePage: React.FC<HomePageProps> = ({
           {quickPortals.map((portal, idx) => {
             const Icon = portal.icon;
             return (
-              <motion.div
+              <div
                 key={idx}
-                whileHover={{ y: -3 }}
                 onClick={portal.action}
-                className={`bg-white p-5 rounded-2xl border border-slate-200 shadow-sm cursor-pointer transition-all flex flex-col justify-between group ${portal.accent}`}
+                className={`bg-slate-900 p-5 rounded-2xl border border-slate-800 shadow-md cursor-pointer transition-all flex flex-col justify-between group ${portal.accent}`}
               >
                 <div>
                   <div className="flex items-center justify-between mb-3">
-                    <div className="w-10 h-10 rounded-xl bg-slate-50 text-emerald-800 group-hover:bg-emerald-100 flex items-center justify-center transition-colors">
+                    <div className="w-10 h-10 rounded-xl bg-slate-800 text-emerald-400 group-hover:bg-emerald-600/30 flex items-center justify-center transition-colors">
                       <Icon className="w-5 h-5" />
                     </div>
-                    <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md group-hover:bg-white group-hover:text-emerald-800 transition-colors">
+                    <span className="text-[10px] font-bold text-slate-400 bg-slate-800 px-2 py-0.5 rounded-md group-hover:text-emerald-300 transition-colors">
                       {portal.tag}
                     </span>
                   </div>
 
-                  <h3 className="text-sm font-extrabold text-slate-900 group-hover:text-emerald-900 transition-colors">
+                  <h3 className="text-sm font-extrabold text-white group-hover:text-emerald-300 transition-colors">
                     {portal.title}
                   </h3>
-                  <p className="text-xs text-slate-500 mt-1 line-clamp-2 leading-relaxed">
+                  <p className="text-xs text-slate-400 mt-1 line-clamp-2 leading-relaxed">
                     {portal.subtitle}
                   </p>
                 </div>
 
-                <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-emerald-700 font-bold group-hover:text-emerald-800">
+                <div className="mt-4 pt-3 border-t border-slate-800 flex items-center justify-between text-xs text-emerald-400 font-bold">
                   <span>الدخول للبوابة</span>
                   <ChevronLeft className="w-4 h-4 transition-transform group-hover:-translate-x-1" />
                 </div>
-              </motion.div>
+              </div>
             );
           })}
         </div>
       </section>
 
-      {/* 3. ABOUT SCHOOL BRIEF (نبذة موجزة عن المدرسة) */}
-      <motion.section
-        initial={{ opacity: 0 }}
-        whileInView={{ opacity: 1 }}
-        viewport={{ once: true }}
-        className="bg-white rounded-3xl p-6 sm:p-10 border border-slate-200 shadow-sm grid grid-cols-1 lg:grid-cols-12 gap-8 items-center"
-      >
-        <div className="lg:col-span-7 space-y-4">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 text-xs font-bold border border-emerald-200">
-            <BookOpen className="w-3.5 h-3.5 text-emerald-700" />
-            <span>عن مدرسة صفية بنت عمر</span>
+      {/* 5. "WHAT HAPPENED TODAY?" & "WHAT WILL HAPPEN TOMORROW?" SPOTLIGHT */}
+      <section className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        {/* Today's Updates (7 cols) */}
+        <div className="lg:col-span-7 bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-7 shadow-lg flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between mb-5 flex-wrap gap-2">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center border border-amber-500/30">
+                  <Sun className="w-5 h-5" />
+                </div>
+                <div>
+                  <span className="text-[10px] font-bold text-amber-400 block">توثيق مباشر</span>
+                  <h3 className="text-base font-extrabold text-white">ماذا حدث اليوم في المدرسة؟</h3>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                {hasPerm('createPosts') && (
+                  <button
+                    onClick={() => onOpenCreatePost('today_summary')}
+                    className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-xl text-xs font-bold flex items-center gap-1 shadow-sm"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>توثيق اليوم</span>
+                  </button>
+                )}
+                <button
+                  onClick={() => onNavigate('today')}
+                  className="text-xs font-bold text-amber-400 hover:underline px-2"
+                >
+                  عرض الكل
+                </button>
+              </div>
+            </div>
+
+            {todaySummaries.length > 0 ? (
+              <div className="space-y-3">
+                {todaySummaries.slice(0, 2).map((post) => (
+                  <div
+                    key={post.id}
+                    onClick={() => onSelectPost(post)}
+                    className="p-4 bg-slate-800/60 rounded-2xl border border-slate-700/60 hover:border-amber-500/40 transition-all cursor-pointer group"
+                  >
+                    <div className="flex items-center justify-between text-[11px] text-slate-400 mb-1.5">
+                      <span className="text-amber-400 font-bold">{post.category}</span>
+                      <span>{post.date}</span>
+                    </div>
+                    <h4 className="text-xs sm:text-sm font-bold text-white group-hover:text-amber-300 transition-colors">
+                      {post.title}
+                    </h4>
+                    <p className="text-xs text-slate-300 line-clamp-2 mt-1 leading-relaxed">
+                      {post.content}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="p-6 bg-slate-800/40 rounded-2xl border border-dashed border-slate-700 text-center space-y-2">
+                <p className="text-xs text-slate-400">
+                  لم يتم توثيق ملخص اليوم بعد. ترقبوا التحديثات الصباحية اليومية من معلمات المدرسة.
+                </p>
+                {hasPerm('createPosts') && (
+                  <button
+                    onClick={() => onOpenCreatePost('today_summary')}
+                    className="px-4 py-2 bg-amber-500 text-slate-950 font-bold text-xs rounded-xl inline-flex items-center gap-1.5"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>إضافة ملخص اليوم الأول</span>
+                  </button>
+                )}
+              </div>
+            )}
           </div>
 
-          <h2 className="text-2xl sm:text-3xl font-extrabold font-serif text-slate-900">
-            بيئة تربوية تصنع المستقبل وترعى الإبداع
-          </h2>
-
-          <p className="text-xs sm:text-sm text-slate-600 leading-relaxed font-medium">
-            تعد مدرسة صفية بنت عمر صرحاً تعليمياً متميزاً يسعى لتقديم تعليم رائد يجمع بين التميز الأكاديمي وغرس القيم النبيلة. نحرص على توفير بيئة تعليمية داعمة ومجهزة بأحدث الوسائل، وتشجيع الطالبات على التفكير الناقد والابتكار لتحقيق طموحاتهن والمساهمة الفاعلة في بناء المجتمع.
-          </p>
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
-            <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-100">
-              <span className="text-xs font-bold text-emerald-800 block mb-1">الرؤية التعليمية</span>
-              <p className="text-[11px] text-slate-500 leading-relaxed">الريادة في صناعة المعرفة وبناء جيل متفوق ومبتكر.</p>
-            </div>
-            <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-100">
-              <span className="text-xs font-bold text-amber-800 block mb-1">الرسالة التربوية</span>
-              <p className="text-[11px] text-slate-500 leading-relaxed">تقديم تعليم عالي الجودة وتنمية المهارات المستقبلية والوجدانية.</p>
-            </div>
-            <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-100">
-              <span className="text-xs font-bold text-teal-800 block mb-1">القيم الجوهرية</span>
-              <p className="text-[11px] text-slate-500 leading-relaxed">الأمانة، الإتقان، التعاون، ورعاية المواهب الطلابية.</p>
-            </div>
-          </div>
-
-          <div className="pt-2">
+          <div className="mt-4 pt-3 border-t border-slate-800 text-left">
             <button
-              onClick={() => onNavigate('about')}
-              className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl shadow-sm transition-colors inline-flex items-center gap-1.5"
+              onClick={() => onNavigate('today')}
+              className="text-xs font-bold text-emerald-400 hover:underline flex items-center gap-1 inline-flex"
             >
-              <span>المزيد عن المدرسة والرؤية</span>
+              <span>مشاهدة تقارير يومنا بالمدرسة كاملة</span>
               <ChevronLeft className="w-4 h-4" />
             </button>
           </div>
         </div>
 
-        <div className="lg:col-span-5 bg-gradient-to-br from-emerald-900 to-teal-950 p-6 sm:p-8 rounded-3xl text-white space-y-4 shadow-lg border border-emerald-800/50">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-2xl bg-amber-400/20 border border-amber-400/30 flex items-center justify-center">
-              <Shield className="w-6 h-6 text-amber-300" />
-            </div>
-            <div>
-              <h3 className="text-base font-bold text-white">الاعتماد والجودة المدرسية</h3>
-              <p className="text-xs text-emerald-200">معايير أداء وتربية متميزة</p>
-            </div>
-          </div>
-
-          <p className="text-xs text-emerald-100/90 leading-relaxed">
-            نطبق أعلى المعايير في الإشراف والمتابعة الأكاديمية والتربوية لضمان سلامة وراحة بناتنا الطالبات مع برامج إثرائية متواصلة.
-          </p>
-
-          <ul className="space-y-2 text-xs text-emerald-200 pt-2 border-t border-emerald-800">
-            <li className="flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4 text-amber-300 shrink-0" />
-              <span>متابعة أكاديمية وسلوكية مستمرة</span>
-            </li>
-            <li className="flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4 text-amber-300 shrink-0" />
-              <span>تجهيزات مدرسية ومختبرات علمية متطورة</span>
-            </li>
-            <li className="flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4 text-amber-300 shrink-0" />
-              <span>تواصل مستمر مع الأسرة والمجتمع</span>
-            </li>
-          </ul>
-        </div>
-      </motion.section>
-
-      {/* 4. SCHOOL SERVICES & DISTINCTIONS (أهم الخدمات والمميزات) */}
-      <section className="space-y-6">
-        <div className="text-center max-w-2xl mx-auto space-y-2">
-          <span className="px-3 py-1 rounded-full bg-emerald-100 text-emerald-900 text-xs font-bold">
-            مميزاتنا وخدماتنا
-          </span>
-          <h2 className="text-2xl sm:text-3xl font-extrabold font-serif text-slate-900">
-            ما يميز تجربة التعلم في صفية بنت عمر
-          </h2>
-          <p className="text-xs sm:text-sm text-slate-500">
-            نقدم منظومة شاملة من الخدمات التعليمية والأنشطة الإثرائية التي تصقل شخصية الطالبة
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {features.map((feat, idx) => {
-            const Icon = feat.icon;
-            return (
-              <motion.div
-                key={idx}
-                initial={{ opacity: 0, y: 15 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: idx * 0.05 }}
-                className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm hover:shadow-md transition-all flex flex-col justify-between space-y-4 group"
-              >
-                <div className="space-y-3">
-                  <div className={`w-12 h-12 rounded-2xl flex items-center justify-center border ${feat.color}`}>
-                    <Icon className="w-6 h-6" />
-                  </div>
-
-                  <h3 className="text-base font-extrabold text-slate-900 group-hover:text-emerald-900 transition-colors">
-                    {feat.title}
-                  </h3>
-
-                  <p className="text-xs text-slate-600 leading-relaxed font-medium">
-                    {feat.desc}
-                  </p>
+        {/* Tomorrow's Agenda & Today's Events (5 cols) */}
+        <div className="lg:col-span-5 bg-gradient-to-br from-teal-950/80 to-slate-900 border border-teal-800/50 rounded-3xl p-6 sm:p-7 shadow-lg flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between mb-5 flex-wrap gap-2">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-teal-500/20 text-teal-400 flex items-center justify-center border border-teal-500/30">
+                  <Calendar className="w-5 h-5" />
                 </div>
-
-                <div className="pt-3 border-t border-slate-100 text-xs text-emerald-700 font-bold flex items-center gap-1">
-                  <span>خدمة معتمدة</span>
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                </div>
-              </motion.div>
-            );
-          })}
-        </div>
-      </section>
-
-      {/* 5. SCHOOL STATISTICS (إحصائيات وأرقام المدرسة) */}
-      <motion.section
-        initial={{ opacity: 0, y: 20 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true }}
-        className="bg-gradient-to-r from-emerald-950 via-teal-900 to-emerald-900 rounded-3xl p-8 sm:p-10 text-white shadow-xl"
-      >
-        <div className="text-center max-w-xl mx-auto mb-8 space-y-1.5">
-          <span className="text-amber-300 text-xs font-bold uppercase tracking-wider">
-            أرقام وإنجازات تعكس جودة التعليم
-          </span>
-          <h2 className="text-xl sm:text-2xl font-extrabold font-serif">
-            إحصائيات مدرسة صفية بنت عمر
-          </h2>
-        </div>
-
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-          {stats.map((item, idx) => {
-            const Icon = item.icon;
-            return (
-              <div
-                key={idx}
-                className="p-5 sm:p-6 rounded-2xl bg-white/10 backdrop-blur-md border border-white/15 text-center flex flex-col items-center justify-center space-y-2 hover:bg-white/15 transition-all"
-              >
-                <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center mb-1">
-                  <Icon className="w-5 h-5 text-amber-300" />
-                </div>
-                <span className="text-2xl sm:text-4xl font-extrabold text-white font-serif">
-                  {item.number}
-                </span>
-                <span className="text-xs sm:text-sm font-bold text-emerald-200">
-                  {item.label}
-                </span>
-                <span className="text-[11px] text-slate-300 font-light">
-                  {item.sub}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-      </motion.section>
-
-      {/* 6. "WHAT HAPPENED TODAY?" SPOTLIGHT (ماذا حدث اليوم؟) */}
-      <section className="bg-gradient-to-r from-amber-500/10 via-amber-50/70 to-emerald-50/40 rounded-3xl p-6 sm:p-8 border border-amber-200/80 shadow-sm">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-amber-500 text-slate-950 flex items-center justify-center shadow-md">
-              <Sun className="w-6 h-6 text-slate-950" />
-            </div>
-            <div>
-              <h2 className="text-lg font-extrabold text-slate-900">يومنا في مدرسة صفية بنت عمر (ماذا حدث اليوم؟)</h2>
-              <p className="text-xs text-slate-500">ملخص حي وتغطية مباشرة لأبرز فعاليات وأنشطة اليوم الدراسي</p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 self-start sm:self-auto">
-            <button
-              onClick={() => onOpenNewPostModal?.('today_summary')}
-              className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold rounded-xl flex items-center gap-1 shadow-sm transition-all"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>إضافة ملخص اليوم</span>
-            </button>
-            <button
-              onClick={() => onNavigate('today')}
-              className="text-xs font-bold text-amber-800 hover:text-amber-950 flex items-center gap-1 px-2.5 py-1.5 bg-amber-100/60 rounded-xl"
-            >
-              <span>مشاهدة الكل</span>
-              <ChevronLeft className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        </div>
-
-        {todaySummaries.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {todaySummaries.map((post) => (
-              <div
-                key={post.id}
-                onClick={() => onSelectPost(post)}
-                className="bg-white rounded-2xl p-5 border border-amber-200/90 shadow-sm hover:shadow-md transition-all cursor-pointer flex flex-col justify-between group"
-              >
                 <div>
-                  <div className="flex items-center justify-between gap-2 mb-2">
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
-                      يوميات المدرسة
-                    </span>
-                    <span className="text-[10px] text-slate-400">
-                      {new Date(post.createdAt).toLocaleDateString('ar-SA')}
-                    </span>
-                  </div>
-                  <h3 className="text-sm font-bold text-slate-900 group-hover:text-amber-800 transition-colors mb-2">
-                    {post.title}
-                  </h3>
-                  <p className="text-xs text-slate-600 line-clamp-3 leading-relaxed">
-                    {post.content}
-                  </p>
-                </div>
-
-                <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
-                  <span className="text-[11px] font-medium text-slate-700">بواسطة: {post.authorName}</span>
-                  <span className="text-[11px] font-bold text-amber-700 group-hover:underline">قراءة التقرير الكامل ←</span>
+                  <span className="text-[10px] font-bold text-teal-400 block">جدول الأنشطة</span>
+                  <h3 className="text-base font-extrabold text-white">ماذا سيحدث غداً؟</h3>
                 </div>
               </div>
-            ))}
+
+              {hasPerm('createEvents') && (
+                <button
+                  onClick={onOpenAddEvent}
+                  className="px-2.5 py-1.5 bg-teal-600/30 hover:bg-teal-600/50 text-teal-200 border border-teal-500/30 rounded-xl text-xs font-bold flex items-center gap-1"
+                >
+                  <Plus className="w-3 h-3" />
+                  <span>إضافة فعالية</span>
+                </button>
+              )}
+            </div>
+
+            {tomorrowEvents.length > 0 ? (
+              <div className="space-y-3">
+                <p className="text-[11px] font-bold text-teal-300">فعاليات مجدولة للغد:</p>
+                {tomorrowEvents.map((ev) => (
+                  <div key={ev.id} className="p-3 bg-slate-900/80 rounded-2xl border border-teal-500/30">
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-teal-500/20 text-teal-300">
+                      غداً
+                    </span>
+                    <h4 className="text-xs sm:text-sm font-bold text-white mt-1">{ev.title}</h4>
+                    <p className="text-xs text-slate-300 line-clamp-1 mt-0.5">{ev.description}</p>
+                    <div className="flex items-center gap-3 text-[11px] text-slate-400 mt-2">
+                      {ev.time && <span>{ev.time}</span>}
+                      {ev.location && <span>• {ev.location}</span>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : todayEvents.length > 0 ? (
+              <div className="space-y-3">
+                <p className="text-[11px] font-bold text-emerald-300">فعاليات قائمة اليوم:</p>
+                {todayEvents.map((ev) => (
+                  <div key={ev.id} className="p-3 bg-slate-900/80 rounded-2xl border border-emerald-500/30">
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300">
+                      اليوم
+                    </span>
+                    <h4 className="text-xs sm:text-sm font-bold text-white mt-1">{ev.title}</h4>
+                    <p className="text-xs text-slate-300 line-clamp-1 mt-0.5">{ev.description}</p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="p-6 bg-slate-900/50 rounded-2xl border border-dashed border-teal-500/20 text-center space-y-2">
+                <p className="text-xs text-slate-400">
+                  لا توجد فعاليات مجدولة للغد. يمكنكم الاطلاع على التقويم الشهري المكتمل.
+                </p>
+              </div>
+            )}
           </div>
-        ) : (
-          <div className="text-center py-8 bg-white/60 rounded-2xl border border-dashed border-amber-200 text-slate-600 text-xs flex flex-col items-center justify-center space-y-3">
-            <p>لم يتم نشر ملخص اليوم بعد. ترقبوا التحديثات الصباحية اليومية من معلمات المدرسة.</p>
+
+          <div className="mt-4 pt-3 border-t border-slate-800 text-left">
             <button
-              onClick={() => onOpenNewPostModal?.('today_summary')}
-              className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-xl flex items-center gap-1.5"
+              onClick={() => onNavigate('events')}
+              className="text-xs font-bold text-teal-400 hover:underline flex items-center gap-1 inline-flex"
             >
-              <Plus className="w-3.5 h-3.5" />
-              <span>إضافة ملخص اليوم الأول</span>
+              <span>فتح تقويم الفعاليات بالكامل</span>
+              <ChevronLeft className="w-4 h-4" />
             </button>
           </div>
-        )}
+        </div>
       </section>
 
-      {/* 7. LATEST NEWS & ANNOUNCEMENTS (آخر الأخبار والإعلانات) */}
-      <section className="space-y-6">
+      {/* 6. LATEST NEWS & POSTS */}
+      <section className="space-y-5">
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
-            <h2 className="text-xl font-extrabold text-slate-900">آخر أخبار وإعلانات المدرسة</h2>
-            <p className="text-xs text-slate-500">أحدث الأنشطة المدرسية والبرامج التعليمية والتعاميم المعتمدة</p>
+            <h2 className="text-lg sm:text-xl font-extrabold text-white">آخر أخبار المدرسة والأنشطة</h2>
+            <p className="text-xs text-slate-400">تغطيات حية للبرامج التعليمية والمسابقات والفعاليات</p>
           </div>
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => onOpenNewPostModal?.('news')}
-              className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-sm transition-all"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>إضافة خبر</span>
-            </button>
+            {hasPerm('createPosts') && (
+              <button
+                onClick={() => onOpenCreatePost('news')}
+                className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-sm transition-all"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>إضافة خبر</span>
+              </button>
+            )}
             <button
               onClick={() => onNavigate('news')}
-              className="text-xs font-bold text-emerald-800 hover:text-emerald-950 flex items-center gap-1 px-3 py-1.5 bg-emerald-50 rounded-xl"
+              className="text-xs font-bold text-emerald-400 hover:text-emerald-300 flex items-center gap-1 px-3 py-2 bg-slate-800 rounded-xl border border-slate-700"
             >
               <span>عرض كل الأخبار</span>
               <ChevronLeft className="w-4 h-4" />
@@ -619,77 +609,79 @@ export const HomePage: React.FC<HomePageProps> = ({
         </div>
       </section>
 
-      {/* 8. UPCOMING EVENTS & HONOR BOARD (الفعاليات القادمة وسجل الإنجازات) */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-        {/* Upcoming Events Section (7 cols) */}
-        <section className="lg:col-span-7 bg-white rounded-3xl p-6 sm:p-7 border border-slate-200 shadow-sm flex flex-col justify-between">
+      {/* 7. UPCOMING EVENTS & HONOR BOARD */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        {/* Upcoming Events (7 cols) */}
+        <section className="lg:col-span-7 bg-slate-900 rounded-3xl p-6 sm:p-7 border border-slate-800 shadow-md flex flex-col justify-between">
           <div>
-            <div className="flex items-center justify-between mb-6 flex-wrap gap-2">
+            <div className="flex items-center justify-between mb-5 flex-wrap gap-2">
               <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-800 flex items-center justify-center">
+                <div className="w-9 h-9 rounded-xl bg-teal-500/20 text-teal-400 flex items-center justify-center border border-teal-500/30">
                   <Calendar className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-slate-900">الفعاليات المدرسية القادمة</h3>
-                  <p className="text-xs text-slate-500">مواعيد المعارض، المهرجانات، والاختبارات</p>
+                  <h3 className="text-base font-bold text-white">الفعاليات المدرسية القادمة</h3>
+                  <p className="text-xs text-slate-400">مواعيد المعارض، المهرجانات، والأنشطة</p>
                 </div>
               </div>
 
               <div className="flex items-center gap-2">
-                <button
-                  onClick={() => onOpenAddEvent?.()}
-                  className="px-2.5 py-1 bg-emerald-100 hover:bg-emerald-200 text-emerald-800 text-xs font-bold rounded-lg flex items-center gap-1"
-                >
-                  <Plus className="w-3 h-3" />
-                  <span>إضافة فعالية</span>
-                </button>
+                {hasPerm('createEvents') && (
+                  <button
+                    onClick={onOpenAddEvent}
+                    className="px-2.5 py-1 bg-teal-600/30 hover:bg-teal-600/50 text-teal-200 border border-teal-500/30 text-xs font-bold rounded-lg flex items-center gap-1"
+                  >
+                    <Plus className="w-3 h-3" />
+                    <span>إضافة</span>
+                  </button>
+                )}
                 <button
                   onClick={() => onNavigate('events')}
-                  className="text-xs font-bold text-emerald-800 hover:underline"
+                  className="text-xs font-bold text-teal-400 hover:underline"
                 >
                   التقويم الكامل
                 </button>
               </div>
             </div>
 
-            <div className="space-y-3.5">
+            <div className="space-y-3">
               {upcomingEvents.map((ev) => (
                 <div
                   key={ev.id}
-                  className="p-4 rounded-2xl border border-slate-100 bg-slate-50/70 hover:bg-emerald-50/40 hover:border-emerald-200 transition-all flex items-start gap-3.5"
+                  className="p-3.5 rounded-2xl border border-slate-800 bg-slate-800/50 hover:border-teal-500/40 transition-all flex items-start gap-3.5"
                 >
-                  <div className="bg-emerald-800 text-white rounded-xl p-2 text-center min-w-[54px] shrink-0 shadow-sm">
-                    <span className="block text-[10px] text-emerald-200 font-medium">
-                      {new Date(ev.date).toLocaleDateString('ar-SA', { month: 'short' })}
+                  <div className="bg-teal-800 text-white rounded-xl p-2 text-center min-w-[50px] shrink-0 shadow-sm">
+                    <span className="block text-[10px] text-teal-200 font-medium">
+                      {formatArabicShortDate(ev.date)}
                     </span>
-                    <span className="block text-base font-extrabold">
-                      {new Date(ev.date).getDate()}
+                    <span className="block text-sm font-extrabold">
+                      {ev.date.split('-')[2] || ''}
                     </span>
                   </div>
 
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-2">
-                      <h4 className="text-xs sm:text-sm font-bold text-slate-900 truncate">
-                        {ev.title}
-                      </h4>
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
-                        {ev.category}
+                      <h4 className="text-xs sm:text-sm font-bold text-white truncate">{ev.title}</h4>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-teal-500/20 text-teal-300">
+                        {ev.category || 'عام'}
                       </span>
                     </div>
 
-                    <p className="text-xs text-slate-600 line-clamp-1 mt-1">{ev.description}</p>
+                    <p className="text-xs text-slate-400 line-clamp-1 mt-1">{ev.description}</p>
 
-                    <div className="flex items-center gap-3 text-[11px] text-slate-400 mt-2">
+                    <div className="flex items-center gap-3 text-[11px] text-slate-500 mt-2">
                       {ev.time && (
                         <div className="flex items-center gap-1">
-                          <Clock className="w-3 h-3 text-slate-400" />
+                          <Clock className="w-3 h-3" />
                           <span>{ev.time}</span>
                         </div>
                       )}
-                      <div className="flex items-center gap-1">
-                        <MapPin className="w-3 h-3 text-slate-400" />
-                        <span>{ev.location}</span>
-                      </div>
+                      {ev.location && (
+                        <div className="flex items-center gap-1">
+                          <MapPin className="w-3 h-3" />
+                          <span>{ev.location}</span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -699,7 +691,7 @@ export const HomePage: React.FC<HomePageProps> = ({
         </section>
 
         {/* Achievements Section (5 cols) */}
-        <section className="lg:col-span-5 bg-gradient-to-br from-purple-900 to-indigo-950 rounded-3xl p-6 sm:p-7 text-white shadow-xl flex flex-col justify-between">
+        <section className="lg:col-span-5 bg-gradient-to-br from-purple-950 to-slate-900 rounded-3xl p-6 sm:p-7 text-white shadow-xl border border-purple-800/40 flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between mb-5 flex-wrap gap-2">
               <div className="flex items-center gap-2.5">
@@ -707,19 +699,21 @@ export const HomePage: React.FC<HomePageProps> = ({
                   <Award className="w-5 h-5 text-amber-300" />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-white">سجل إنجازات وتفوق الطالبات</h3>
+                  <h3 className="text-base font-bold text-white">سجل إنجازات وتفوق المدرسة</h3>
                   <p className="text-xs text-purple-200">التكريم والشهادات والمراكز</p>
                 </div>
               </div>
 
               <div className="flex items-center gap-2">
-                <button
-                  onClick={() => onOpenNewPostModal?.('achievement')}
-                  className="px-2.5 py-1 bg-purple-500/30 hover:bg-purple-500/50 border border-purple-400/30 text-amber-300 text-xs font-bold rounded-lg flex items-center gap-1"
-                >
-                  <Plus className="w-3 h-3" />
-                  <span>إضافة</span>
-                </button>
+                {hasPerm('createAchievements') && (
+                  <button
+                    onClick={onOpenAddAchievement}
+                    className="px-2.5 py-1 bg-purple-500/30 hover:bg-purple-500/50 border border-purple-400/30 text-amber-300 text-xs font-bold rounded-lg flex items-center gap-1"
+                  >
+                    <Plus className="w-3 h-3" />
+                    <span>إضافة</span>
+                  </button>
+                )}
                 <button
                   onClick={() => onNavigate('achievements')}
                   className="text-xs font-bold text-amber-300 hover:underline"
@@ -729,123 +723,183 @@ export const HomePage: React.FC<HomePageProps> = ({
               </div>
             </div>
 
-            {achievements.length > 0 ? (
+            {latestAchievements.length > 0 ? (
               <div className="space-y-3">
-                {achievements.map((ach) => (
+                {latestAchievements.map((ach) => (
                   <div
                     key={ach.id}
-                    onClick={() => onSelectPost(ach)}
-                    className="p-3.5 bg-white/10 backdrop-blur-md rounded-2xl border border-white/10 hover:bg-white/15 transition-all cursor-pointer"
+                    className="p-3 bg-white/5 backdrop-blur-md rounded-2xl border border-white/10 hover:bg-white/10 transition-all cursor-pointer"
                   >
                     <span className="text-[10px] font-bold text-amber-300 bg-amber-950/60 px-2 py-0.5 rounded-md border border-amber-500/30">
-                      إنجاز متميز
+                      {ach.category || 'إنجاز متميز'}
                     </span>
-                    <h4 className="text-xs sm:text-sm font-bold text-white mt-1.5 mb-1">{ach.title}</h4>
-                    <p className="text-xs text-purple-100/80 line-clamp-2">{ach.content}</p>
+                    <h4 className="text-xs sm:text-sm font-bold text-white mt-1.5 mb-0.5">
+                      {ach.title}
+                    </h4>
+                    <p className="text-xs text-purple-200/80 line-clamp-1">{ach.description}</p>
                   </div>
                 ))}
               </div>
             ) : (
-              <div className="p-6 bg-white/5 rounded-2xl border border-dashed border-purple-400/30 text-center space-y-3">
+              <div className="p-6 bg-white/5 rounded-2xl border border-dashed border-purple-400/30 text-center space-y-2">
                 <p className="text-xs text-purple-200">
-                  يمكنكم توثيق إنجازات وجوائز الطالبات والمعلمات وإضافتها إلى هذا السجل في أي وقت.
+                  يمكن توثيق إنجازات وجوائز الطالبات والمعلمات وإضافتها إلى هذا السجل.
                 </p>
-                <button
-                  onClick={() => onOpenNewPostModal?.('achievement')}
-                  className="px-3.5 py-2 bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-bold rounded-xl inline-flex items-center gap-1.5 shadow-md"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>إضافة إنجاز أو شهادة تكريم</span>
-                </button>
+                {hasPerm('createAchievements') && (
+                  <button
+                    onClick={onOpenAddAchievement}
+                    className="px-3.5 py-2 bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-bold rounded-xl inline-flex items-center gap-1.5 shadow-md"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>إضافة إنجاز أو شهادة تكريم</span>
+                  </button>
+                )}
               </div>
             )}
           </div>
 
-          <div className="mt-6 pt-4 border-t border-white/10 text-center">
+          <div className="mt-4 pt-3 border-t border-white/10 text-center">
             <p className="text-xs text-purple-200 font-light">
-              فخورون بإنجازات طالباتنا ومعلماتنا المبدعات في كافة المحافل التعليمية
+              فخورون بإنجازات طالباتنا ومعلماتنا المبدعات
             </p>
           </div>
         </section>
       </div>
 
-      {/* 9. SCHOOL PHOTO GALLERY (معرض الصور والألبومات) */}
-      <section className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-sm space-y-6">
+      {/* 8. GALLERY & ALBUMS PREVIEW */}
+      <section className="bg-slate-900 rounded-3xl p-6 sm:p-8 border border-slate-800 shadow-md space-y-6">
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div className="flex items-center gap-2.5">
-            <div className="w-10 h-10 rounded-2xl bg-emerald-100 text-emerald-900 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-2xl bg-blue-500/20 text-blue-400 flex items-center justify-center border border-blue-500/30">
               <ImageIcon className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-lg font-extrabold text-slate-900">معرض المدرسة الفوتوغرافي</h2>
-              <p className="text-xs text-slate-500">توثيق مرئي لفعاليات وأنشطة مدرسة صفية بنت عمر</p>
+              <h2 className="text-lg font-extrabold text-white">معرض المدرسة الفوتوغرافي والألبومات</h2>
+              <p className="text-xs text-slate-400">توثيق مرئي لفعاليات وأنشطة وفصول مدرسة صفية بنت عمر</p>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => onOpenAddPhoto?.()}
-              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-sm transition-all"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>رفع صور جديدة</span>
-            </button>
+            {hasPerm('createPhotos') && (
+              <button
+                onClick={onOpenAddPhoto}
+                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-sm transition-all"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>رفع صورة</span>
+              </button>
+            )}
+            {hasPerm('createAlbums') && (
+              <button
+                onClick={onOpenCreateAlbum}
+                className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-sm transition-all"
+              >
+                <FolderPlus className="w-3.5 h-3.5" />
+                <span>إنشاء ألبوم</span>
+              </button>
+            )}
             <button
               onClick={() => onNavigate('gallery')}
-              className="text-xs font-bold text-emerald-800 hover:text-emerald-950 flex items-center gap-1 px-3 py-1.5 bg-emerald-50 rounded-xl"
+              className="text-xs font-bold text-blue-400 hover:underline px-2"
             >
-              <span>كل الألبومات</span>
-              <ChevronLeft className="w-4 h-4" />
+              عرض كل المعرض
             </button>
           </div>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          {gallery.slice(0, 4).map((pic) => (
-            <div
-              key={pic.id}
-              onClick={() => onNavigate('gallery')}
-              className="group relative h-44 rounded-2xl overflow-hidden shadow-sm border border-slate-200 cursor-pointer"
-            >
-              <img
-                src={pic.imageUrl}
-                alt={pic.title}
-                className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-                referrerPolicy="no-referrer"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-transparent opacity-80 group-hover:opacity-100 transition-opacity p-3 flex flex-col justify-end text-white">
-                <span className="text-[10px] text-amber-300 font-bold">{pic.album}</span>
-                <h4 className="text-xs font-bold truncate">{pic.title}</h4>
+        {photos.length > 0 ? (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            {photos.slice(0, 4).map((pic) => (
+              <div
+                key={pic.id}
+                onClick={() => onNavigate('gallery')}
+                className="group relative h-44 rounded-2xl overflow-hidden shadow-sm border border-slate-700 cursor-pointer"
+              >
+                <img
+                  src={pic.imageUrl}
+                  alt={pic.title || 'صورة مدرسية'}
+                  className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-transparent to-transparent p-3 flex flex-col justify-end text-white">
+                  {pic.albumName && (
+                    <span className="text-[10px] text-amber-300 font-bold">{pic.albumName}</span>
+                  )}
+                  <h4 className="text-xs font-bold truncate">{pic.title || 'صورة من فعاليات المدرسة'}</h4>
+                </div>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-8 bg-slate-800/40 rounded-2xl border border-dashed border-slate-700 text-slate-400 text-xs">
+            لم يتم رفع صور بالمعرض بعد. اضغطي على زر "رفع صورة" لإضافة صور للمنصة.
+          </div>
+        )}
+      </section>
+
+      {/* 9. SCHOOL STATISTICS */}
+      <section className="bg-gradient-to-r from-emerald-950 via-teal-950 to-slate-900 rounded-3xl p-8 text-white shadow-xl border border-emerald-800/40">
+        <div className="text-center max-w-xl mx-auto mb-8 space-y-1">
+          <span className="text-amber-400 text-xs font-bold uppercase tracking-wider">
+            أرقام وإحصائيات مباشرة
+          </span>
+          <h2 className="text-xl sm:text-2xl font-extrabold">إحصائيات مدرسة صفية بنت عمر</h2>
+        </div>
+
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+          {stats.map((item, idx) => {
+            const Icon = item.icon;
+            return (
+              <div
+                key={idx}
+                className="p-5 sm:p-6 rounded-2xl bg-white/5 border border-white/10 text-center flex flex-col items-center justify-center space-y-2 hover:bg-white/10 transition-all"
+              >
+                <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center mb-1">
+                  <Icon className="w-5 h-5 text-amber-300" />
+                </div>
+                <span className="text-2xl sm:text-3xl font-extrabold text-white font-serif">
+                  {item.number}
+                </span>
+                <span className="text-xs sm:text-sm font-bold text-emerald-300">{item.label}</span>
+                <span className="text-[11px] text-slate-400 font-light">{item.sub}</span>
+              </div>
+            );
+          })}
         </div>
       </section>
 
-      {/* 10. CALL TO ACTION / CONTACT CALLOUT (شريط التواصل) */}
-      <motion.section
-        initial={{ opacity: 0, y: 15 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true }}
-        className="bg-gradient-to-l from-emerald-900 via-teal-900 to-slate-900 rounded-3xl p-6 sm:p-8 text-white flex flex-col md:flex-row items-center justify-between gap-6 shadow-xl border border-emerald-700/40"
-      >
-        <div className="space-y-2 text-center md:text-right">
-          <h3 className="text-lg sm:text-xl font-bold font-serif">هل لديك استفسار أو ترغب في التواصل مع إدارة المدرسة؟</h3>
-          <p className="text-xs sm:text-sm text-emerald-100 max-w-xl font-light">
-            فريق الإدارة والتعليم بمدرسة صفية بنت عمر يسعد باستقبال استفساراتكم واقتراحاتكم في أي وقت.
-          </p>
-        </div>
+      {/* 10. FOOTER & CONTACT */}
+      <footer className="bg-slate-900 rounded-3xl p-8 border border-slate-800 text-slate-400 text-xs space-y-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 text-white font-bold text-sm">
+              <GraduationCap className="w-5 h-5 text-emerald-400" />
+              <span>مدرسة صفية بنت عمر</span>
+            </div>
+            <p className="text-slate-400 leading-relaxed text-[11px]">
+              صرح تعليمي وتربوي رائد يهدف إلى تقديم بيئة محفزة تصنع المعرفة وتوثق الإنجاز.
+            </p>
+          </div>
 
-        <div className="flex items-center gap-3 shrink-0">
-          <button
-            onClick={() => onNavigate('contact')}
-            className="px-6 py-3 bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs sm:text-sm font-bold rounded-xl shadow-md transition-transform hover:scale-102 flex items-center gap-2"
-          >
-            <MessageCircle className="w-4 h-4 text-slate-950" />
-            <span>صفحة التواصل والاستفسارات</span>
-          </button>
+          <div className="space-y-2">
+            <h4 className="text-white font-bold text-xs">أقسام المنصة</h4>
+            <div className="grid grid-cols-2 gap-1 text-[11px]">
+              <button onClick={() => onNavigate('announcements')} className="text-right hover:text-emerald-400">الإعلانات</button>
+              <button onClick={() => onNavigate('news')} className="text-right hover:text-emerald-400">الأخبار والمنشورات</button>
+              <button onClick={() => onNavigate('today')} className="text-right hover:text-emerald-400">ماذا حدث اليوم؟</button>
+              <button onClick={() => onNavigate('events')} className="text-right hover:text-emerald-400">الفعاليات</button>
+              <button onClick={() => onNavigate('achievements')} className="text-right hover:text-emerald-400">الإنجازات</button>
+              <button onClick={() => onNavigate('gallery')} className="text-right hover:text-emerald-400">معرض الصور</button>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <h4 className="text-white font-bold text-xs">الاعتماد والجودة</h4>
+            <p className="text-[11px] text-slate-400">
+              جميع الحقوق محفوظة © {new Date().getFullYear()} مدرسة صفية بنت عمر. المنصة المدرسية الرقمية المعتمدة.
+            </p>
+          </div>
         </div>
-      </motion.section>
+      </footer>
     </div>
   );
 };

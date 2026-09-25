@@ -1,10 +1,10 @@
 import React from 'react';
-import { SchoolSettings } from '../types';
+import { SiteSettings } from '../types';
 import { Info, Phone, Mail, MapPin, Award, CheckCircle2, ShieldCheck, Heart } from 'lucide-react';
 
 interface AboutAndContactViewProps {
   mode: 'about' | 'contact';
-  settings: SchoolSettings;
+  settings: SiteSettings;
 }
 
 export const AboutAndContactView: React.FC<AboutAndContactViewProps> = ({ mode, settings }) => {

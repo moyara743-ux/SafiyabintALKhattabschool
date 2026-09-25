@@ -56,18 +56,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       }
     } catch (err: any) {
       console.error(err);
-      let message = 'حدث خطأ غير متوقع. يرجى المحاولة مرة أخرى.';
-      if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
-        message = 'البريد الإلكتروني أو كلمة المرور غير صحيحة.';
-      } else if (err.code === 'auth/email-already-in-use') {
-        message = 'هذا البريد الإلكتروني مسجل مسبقاً.';
-      } else if (err.code === 'auth/invalid-email') {
-        message = 'صيغة البريد الإلكتروني غير صحيحة.';
-      } else if (err.code === 'auth/weak-password') {
-        message = 'كلمة المرور ضعيفة جداً.';
-      } else if (err.message) {
-        message = err.message;
-      }
+      // Display genuine error message directly from Supabase
+      const message =
+        err?.message ||
+        (typeof err === 'string' ? err : 'حدث خطأ غير متوقع. يرجى المحاولة مرة أخرى.');
       setError(message);
     } finally {
       setSubmitting(false);

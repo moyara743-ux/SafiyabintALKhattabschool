@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Post, PostType, PostStatus } from '../types';
-import { collection, addDoc, updateDoc, doc } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { Post, PostType } from '../types';
+import { dataStore } from '../lib/dataStore';
+import { getTodayDateString } from '../lib/dateUtils';
+import { logActivity } from '../lib/activityLogger';
 import {
   FileText,
   Image as ImageIcon,
@@ -11,17 +12,15 @@ import {
   CheckCircle2,
   AlertCircle,
   X,
-  Sparkles,
   Pin,
-  HelpCircle
 } from 'lucide-react';
-import { motion } from 'motion/react';
 
 interface CreatePostModalProps {
   isOpen: boolean;
   onClose: () => void;
   postToEdit?: Post | null;
   defaultType?: PostType;
+  onSuccess?: () => void;
 }
 
 export const CreatePostModal: React.FC<CreatePostModalProps> = ({
@@ -29,41 +28,37 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
   onClose,
   postToEdit,
   defaultType = 'news',
+  onSuccess,
 }) => {
-  const { user, profile, isOwner, isAdmin } = useAuth();
+  const { user, profile, hasPerm, isOwner } = useAuth();
 
-  const [title, setTitle] = useState(postToEdit?.title || '');
-  const [content, setContent] = useState(postToEdit?.content || '');
-  const [category, setCategory] = useState(
-    postToEdit?.category || (defaultType === 'achievement' ? 'الإنجازات والجوائز' : defaultType === 'today_summary' ? 'يوميات المدرسة' : 'أخبار المدرسة')
-  );
-  const [type, setType] = useState<PostType>(postToEdit?.type || defaultType);
-  const [images, setImages] = useState<string[]>(postToEdit?.images || []);
+  const [title, setTitle] = useState('');
+  const [content, setContent] = useState('');
+  const [category, setCategory] = useState('أخبار المدرسة');
+  const [type, setType] = useState<PostType>(defaultType);
+  const [date, setDate] = useState(getTodayDateString());
+  const [images, setImages] = useState<string[]>([]);
   const [newImageUrl, setNewImageUrl] = useState('');
-  const [isPinned, setIsPinned] = useState(postToEdit?.isPinned || false);
+  const [isPinned, setIsPinned] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (isOpen) {
       if (postToEdit) {
-        setTitle(postToEdit.title);
-        setContent(postToEdit.content);
-        setCategory(postToEdit.category);
-        setType(postToEdit.type);
+        setTitle(postToEdit.title || '');
+        setContent(postToEdit.content || '');
+        setCategory(postToEdit.category || 'أخبار المدرسة');
+        setType(postToEdit.type || defaultType);
+        setDate(postToEdit.date || getTodayDateString());
         setImages(postToEdit.images || []);
         setIsPinned(postToEdit.isPinned || false);
       } else {
         setTitle('');
         setContent('');
         setType(defaultType);
-        setCategory(
-          defaultType === 'achievement'
-            ? 'الإنجازات والجوائز'
-            : defaultType === 'today_summary'
-            ? 'يوميات المدرسة'
-            : 'أخبار المدرسة'
-        );
+        setCategory(defaultType === 'today_summary' ? 'يوميات المدرسة' : 'أخبار المدرسة');
+        setDate(getTodayDateString());
         setImages([]);
         setIsPinned(false);
       }
@@ -74,10 +69,43 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
 
   if (!isOpen) return null;
 
-  // Determine initial status based on permissions / moderation workflow
-  const isDirectPublisher = isOwner || isAdmin || !(profile?.permissions?.requiresReview);
+  const canEdit = postToEdit ? hasPerm('editPosts') : hasPerm('createPosts');
+  if (!canEdit) {
+    return (
+      <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4" dir="rtl">
+        <div className="bg-slate-900 border border-rose-800 rounded-3xl p-6 max-w-md w-full text-center space-y-4">
+          <AlertCircle className="w-12 h-12 text-rose-500 mx-auto" />
+          <h3 className="text-lg font-bold text-white">غير مصرح لك بهذه العملية</h3>
+          <p className="text-xs text-slate-400">حسابك لا يمتلك صلاحية إضافة أو تعديل الأخبار والمنشورات.</p>
+          <button onClick={onClose} className="px-4 py-2 bg-slate-800 text-white text-xs font-bold rounded-xl">
+            إغلاق
+          </button>
+        </div>
+      </div>
+    );
+  }
 
-  const handleAddImage = () => {
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      setError('يرجى اختيار ملف صورة صالح (PNG, JPG, WEBP)');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setError('حجم الصورة يجب ألا يتجاوز 5 ميجابايت');
+      return;
+    }
+    setError(null);
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const res = event.target?.result as string;
+      if (res) setImages((prev) => [...prev, res]);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleAddImageUrl = () => {
     if (newImageUrl.trim()) {
       setImages([...images, newImageUrl.trim()]);
       setNewImageUrl('');
@@ -90,113 +118,107 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user || !profile) return;
+    if (!title.trim() || !content.trim()) {
+      setError('يرجى كتابة عنوان وتفاصيل المنشور');
+      return;
+    }
+    if (!user || !profile) {
+      setError('يجب تسجيل الدخول أولاً');
+      return;
+    }
+
     setError(null);
     setSubmitting(true);
 
     try {
-      const status: PostStatus = isDirectPublisher ? 'published' : 'pending_review';
+      const now = new Date().toISOString();
 
       if (postToEdit) {
-        // Edit existing post
-        const postRef = doc(db, 'posts', postToEdit.id);
-        await updateDoc(postRef, {
+        await dataStore.updatePost(postToEdit.id, {
           title: title.trim(),
           content: content.trim(),
           category: category.trim(),
           type,
+          date,
           images,
           isPinned,
-          updatedAt: new Date().toISOString(),
+          updatedAt: now,
         });
 
-        // Log action
-        await addDoc(collection(db, 'activityLogs'), {
-          action: 'تعديل منشور',
-          details: `تم تعديل المنشور "${title}" بواسطة ${profile.displayName}`,
-          userId: user.uid,
-          userName: profile.displayName,
-          userEmail: user.email,
-          targetId: postToEdit.id,
-          targetType: 'post',
-          timestamp: new Date().toISOString(),
-        }).catch(() => {});
+        await logActivity({
+          actorId: user.id || user.uid,
+          actorName: profile.name,
+          actorEmail: user.email || '',
+          action: 'UPDATE',
+          entity: 'posts',
+          entityId: postToEdit.id,
+          oldValue: postToEdit.title,
+          newValue: title.trim(),
+          details: `تعديل منشور: ${title.trim()}`,
+        });
       } else {
-        // Create new post
-        const newPost: Omit<Post, 'id'> = {
+        const newPostPayload = {
           title: title.trim(),
           content: content.trim(),
           category: category.trim(),
           type,
+          date,
           images,
-          authorId: user.uid,
-          authorName: profile.displayName,
-          authorRole: profile.role,
-          authorEmail: user.email || undefined,
-          status,
+          authorId: user.id || user.uid,
+          authorName: profile.name,
+          authorRole: profile.school_role,
+          authorEmail: user.email || '',
+          status: 'published' as const,
           isPinned,
           likesCount: 0,
           likedBy: [],
-          createdAt: new Date().toISOString(),
+          createdAt: now,
+          updatedAt: now,
         };
 
-        const docRef = await addDoc(collection(db, 'posts'), newPost);
+        const docRef = await dataStore.addPost(newPostPayload);
 
-        // Audit log
-        await addDoc(collection(db, 'activityLogs'), {
-          action: 'إنشاء منشور جديد',
-          details: `تم نشر/إرسال منشور "${title}" بحالة (${status}) بواسطة ${profile.displayName}`,
-          userId: user.uid,
-          userName: profile.displayName,
-          userEmail: user.email,
-          targetId: docRef.id,
-          targetType: 'post',
-          timestamp: new Date().toISOString(),
-        }).catch(() => {});
+        await logActivity({
+          actorId: user.id || user.uid,
+          actorName: profile.name,
+          actorEmail: user.email || '',
+          action: 'CREATE',
+          entity: 'posts',
+          entityId: docRef.id,
+          newValue: title.trim(),
+          details: `نشر محتوى جديد (${type === 'today_summary' ? 'يومنا بالمدرسة' : 'خبر'}): ${title.trim()}`,
+        });
       }
 
+      onSuccess?.();
       onClose();
     } catch (err: any) {
-      console.error(err);
-      setError(err.message || 'حدث خطأ أثناء حفظ المنشور');
+      console.error('Error saving post:', err);
+      setError(err?.message || 'حدث خطأ أثناء حفظ المنشور');
     } finally {
       setSubmitting(false);
     }
   };
 
-  const sampleImages = [
-    'https://images.unsplash.com/photo-1577896851231-70ef18881754?auto=format&fit=crop&w=1000&q=80',
-    'https://images.unsplash.com/photo-1509062522246-3755977927d7?auto=format&fit=crop&w=1000&q=80',
-    'https://images.unsplash.com/photo-1523050854058-8df90110c9f1?auto=format&fit=crop&w=1000&q=80',
-    'https://images.unsplash.com/photo-1427504494785-3a9ca7044f45?auto=format&fit=crop&w=1000&q=80',
-  ];
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm overflow-y-auto" dir="rtl">
-      <motion.div
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        exit={{ opacity: 0, scale: 0.95 }}
-        className="w-full max-w-2xl bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden my-8"
-      >
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm overflow-y-auto" dir="rtl">
+      <div className="w-full max-w-2xl bg-slate-900 rounded-3xl shadow-2xl border border-slate-700 overflow-hidden my-8 text-white">
         {/* Header */}
-        <div className="bg-gradient-to-r from-emerald-800 to-teal-700 p-5 text-white flex items-center justify-between">
+        <div className="bg-gradient-to-r from-emerald-800 to-teal-800 p-5 text-white flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <FileText className="w-6 h-6 text-amber-300" />
             <div>
               <h3 className="text-base font-bold">
                 {postToEdit ? 'تعديل المنشور' : 'إضافة منشور / خبر جديد للمدرسة'}
               </h3>
-              <p className="text-xs text-emerald-100">
-                {isDirectPublisher
-                  ? 'سيتم نشر هذا المنشور مباشرة في المنصة'
-                  : 'سيتم إرسال المنشور لمراجعة واعتماد المديرة قبل النشر'}
+              <p className="text-xs text-emerald-200">
+                توثيق الأنشطة اليومية والأخبار والفعاليات المدرسية
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1 rounded-lg text-emerald-100 hover:text-white hover:bg-white/10"
+            className="p-1 rounded-xl text-emerald-100 hover:text-white hover:bg-white/10"
           >
             <X className="w-5 h-5" />
           </button>
@@ -205,35 +227,34 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
         {/* Body Form */}
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           {error && (
-            <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-800 text-xs flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+            <div className="p-3 bg-rose-500/20 border border-rose-500/40 rounded-xl text-rose-200 text-xs flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
               <span>{error}</span>
             </div>
           )}
 
           {/* Section Type Selector */}
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1.5">
+            <label className="block text-xs font-bold text-slate-300 mb-1.5">
               نوع المنشور / القسم المخصص
             </label>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <div className="grid grid-cols-2 gap-2">
               {[
-                { id: 'news', label: 'أخبار وفعاليات', color: 'border-emerald-500 text-emerald-800' },
-                { id: 'today_summary', label: 'يومنا بالمدرسة (ماذا حدث اليوم)', color: 'border-amber-500 text-amber-800' },
-                { id: 'achievement', label: 'إنجازات وجوائز', color: 'border-purple-500 text-purple-800' },
-                { id: 'announcement', label: 'إعلان وتنبيه هام', color: 'border-blue-500 text-blue-800' },
+                { id: 'news', label: 'أخبار وفعاليات المدرسة', desc: 'أخبار عامة وأنشطة' },
+                { id: 'today_summary', label: 'يومنا بالمدرسة (ماذا حدث اليوم؟)', desc: 'توثيق اليوم المدرسي الصباحي' },
               ].map((t) => (
                 <button
                   type="button"
                   key={t.id}
                   onClick={() => setType(t.id as PostType)}
-                  className={`p-2.5 rounded-xl border text-xs font-bold text-center transition-all ${
+                  className={`p-3 rounded-xl border text-right transition-all ${
                     type === t.id
-                      ? `bg-emerald-50 border-emerald-600 text-emerald-900 shadow-sm ring-1 ring-emerald-600`
-                      : 'border-slate-200 text-slate-600 hover:bg-slate-50'
+                      ? `bg-emerald-800/60 border-emerald-500 text-emerald-100 shadow-md`
+                      : 'bg-slate-800/60 border-slate-700 text-slate-400 hover:bg-slate-800'
                   }`}
                 >
-                  {t.label}
+                  <p className="text-xs font-bold">{t.label}</p>
+                  <p className="text-[10px] text-slate-400">{t.desc}</p>
                 </button>
               ))}
             </div>
@@ -241,7 +262,7 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
 
           {/* Title */}
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">
+            <label className="block text-xs font-bold text-slate-300 mb-1">
               عنوان المنشور *
             </label>
             <input
@@ -250,42 +271,53 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="مثال: تكريم الطالبات الفائزات في الأولمبياد الوطني"
-              className="w-full px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-emerald-600 focus:outline-none transition-all"
+              className="w-full px-3.5 py-2.5 text-xs bg-slate-800 border border-slate-700 rounded-xl text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-500"
             />
           </div>
 
-          {/* Category */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
+              <label className="block text-xs font-bold text-slate-300 mb-1">
+                تاريخ النشر *
+              </label>
+              <input
+                type="date"
+                required
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+                className="w-full px-3 py-2 text-xs bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:border-emerald-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-300 mb-1">
                 التصنيف
               </label>
               <select
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
-                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-emerald-600 focus:outline-none"
+                className="w-full px-3 py-2 text-xs bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:border-emerald-500"
               >
                 <option value="أخبار المدرسة">أخبار المدرسة العامة</option>
                 <option value="الأنشطة والابتكار">الأنشطة والموهبة</option>
-                <option value="الإنجازات والجوائز">الإنجازات والتفوق</option>
-                <option value="إعلانات وتنبيهات">إعلانات وتنبيهات</option>
                 <option value="يوميات المدرسة">يوميات المدرسة</option>
                 <option value="المسابقات المدرسية">المسابقات المدرسية</option>
+                <option value="برامج الإرشاد">برامج الإرشاد الطلابي</option>
               </select>
             </div>
 
             {/* Pin Option (Admins / Owner only) */}
-            {(isOwner || isAdmin) && (
-              <div className="flex items-center justify-between p-3 bg-amber-50/60 border border-amber-200/80 rounded-xl">
-                <div className="flex items-center gap-2 text-xs font-bold text-amber-900">
-                  <Pin className="w-4 h-4 text-amber-700" />
-                  <span>تثبيت في أعلى الصفحة الرئيسية</span>
+            {isOwner && (
+              <div className="flex items-center justify-between p-2.5 bg-amber-500/10 border border-amber-500/30 rounded-xl mt-4 sm:mt-0">
+                <div className="flex items-center gap-1.5 text-xs font-bold text-amber-300">
+                  <Pin className="w-3.5 h-3.5 text-amber-400" />
+                  <span>تثبيت بالأعلى</span>
                 </div>
                 <input
                   type="checkbox"
                   checked={isPinned}
                   onChange={(e) => setIsPinned(e.target.checked)}
-                  className="w-4 h-4 text-emerald-600 rounded focus:ring-emerald-500"
+                  className="w-4 h-4 text-emerald-600 rounded bg-slate-800 border-slate-700 focus:ring-emerald-500"
                 />
               </div>
             )}
@@ -293,7 +325,7 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
 
           {/* Content */}
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">
+            <label className="block text-xs font-bold text-slate-300 mb-1">
               تفاصيل المنشور والمحتوى *
             </label>
             <textarea
@@ -302,38 +334,22 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
               value={content}
               onChange={(e) => setContent(e.target.value)}
               placeholder="اكتب تفاصيل الخبر، الفعالية، التكريم، أو الإعلان بأسلوب واضح ومرتب..."
-              className="w-full p-3.5 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-emerald-600 focus:outline-none transition-all leading-relaxed"
+              className="w-full p-3.5 text-xs bg-slate-800 border border-slate-700 rounded-xl text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-500 leading-relaxed"
             />
           </div>
 
           {/* Images Section */}
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center justify-between">
-              <span>صور المنشور أو شهادة التكريم</span>
-              <span className="text-[11px] text-emerald-700 font-normal">اختر من جهازك أو ضع رابط الصورة</span>
+            <label className="block text-xs font-bold text-slate-300 mb-1.5 flex items-center justify-between">
+              <span>صور المنشور</span>
+              <span className="text-[11px] text-slate-400 font-normal">اختر من جهازك أو ضع رابط الصورة</span>
             </label>
 
-            {/* File Upload Button & URL Input */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-2">
-              <label className="flex items-center justify-center gap-2 p-2.5 bg-emerald-50 hover:bg-emerald-100/80 border border-dashed border-emerald-300 rounded-xl cursor-pointer transition-colors text-emerald-900 text-xs font-bold">
-                <ImageIcon className="w-4 h-4 text-emerald-700" />
-                <span>اختر صورة من جهازك / الجوال</span>
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) {
-                      const reader = new FileReader();
-                      reader.onload = (event) => {
-                        const res = event.target?.result as string;
-                        if (res) setImages([...images, res]);
-                      };
-                      reader.readAsDataURL(file);
-                    }
-                  }}
-                />
+              <label className="flex items-center justify-center gap-2 p-2.5 bg-slate-800 hover:bg-slate-700/80 border border-dashed border-slate-600 rounded-xl cursor-pointer text-slate-300 text-xs font-bold">
+                <ImageIcon className="w-4 h-4 text-emerald-400" />
+                <span>اختر صورة من جهازك</span>
+                <input type="file" accept="image/*" className="hidden" onChange={handleFileUpload} />
               </label>
 
               <div className="flex gap-1.5">
@@ -342,12 +358,12 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
                   value={newImageUrl}
                   onChange={(e) => setNewImageUrl(e.target.value)}
                   placeholder="أو الصق رابط صورة https://..."
-                  className="flex-1 px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-emerald-600 focus:outline-none"
+                  className="flex-1 px-3 py-2 text-xs bg-slate-800 border border-slate-700 rounded-xl text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-500"
                 />
                 <button
                   type="button"
-                  onClick={handleAddImage}
-                  className="px-3 py-2 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-xl flex items-center gap-1 transition-colors"
+                  onClick={handleAddImageUrl}
+                  className="px-3 py-2 bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-bold rounded-xl flex items-center gap-1"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   <span>إضافة</span>
@@ -355,16 +371,16 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
               </div>
             </div>
 
-            {/* Attached Images List */}
+            {/* Attached Images */}
             {images.length > 0 ? (
-              <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 pt-2 border-t border-slate-100">
+              <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 pt-2 border-t border-slate-800">
                 {images.map((url, index) => (
-                  <div key={index} className="relative group rounded-xl overflow-hidden border border-slate-200 h-24 bg-slate-100 shadow-sm">
-                    <img src={url} alt="مرفق" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                  <div key={index} className="relative group rounded-xl overflow-hidden border border-slate-700 h-24 bg-slate-800 shadow-sm">
+                    <img src={url} alt="مرفق" className="w-full h-full object-cover" />
                     <button
                       type="button"
                       onClick={() => handleRemoveImage(index)}
-                      className="absolute top-1 left-1 p-1.5 bg-rose-600/90 hover:bg-rose-700 text-white rounded-lg shadow-md transition-opacity"
+                      className="absolute top-1 left-1 p-1.5 bg-rose-600/90 hover:bg-rose-700 text-white rounded-lg shadow-md"
                       title="حذف الصورة"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
@@ -373,38 +389,39 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
                 ))}
               </div>
             ) : (
-              <div className="p-3 bg-slate-50 border border-dashed border-slate-200 rounded-xl text-center text-slate-400 text-[11px]">
-                لم يتم إرفاق صور بعد. يمكنك إضافة صور للخبر أو وثائق وتكريمات بكل سهولة.
+              <div className="p-3 bg-slate-800/40 border border-dashed border-slate-700 rounded-xl text-center text-slate-400 text-[11px]">
+                لم يتم إرفاق صور بعد. يمكنك إضافة صور للخبر لتوثيقه بوضوح.
               </div>
             )}
           </div>
 
           {/* Action Buttons */}
-          <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+          <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-800">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
+              disabled={submitting}
+              className="px-4 py-2.5 text-xs font-bold text-slate-400 hover:bg-slate-800 rounded-xl"
             >
               إلغاء
             </button>
             <button
               type="submit"
               disabled={submitting}
-              className="px-6 py-2.5 bg-emerald-800 hover:bg-emerald-900 text-white text-xs font-bold rounded-xl shadow-md transition-all flex items-center gap-2 disabled:opacity-50"
+              className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-emerald-950/40 flex items-center gap-2 disabled:opacity-50"
             >
               {submitting ? (
                 <div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
               ) : (
                 <>
-                  <CheckCircle2 className="w-4 h-4 text-emerald-300" />
-                  <span>{postToEdit ? 'حفظ التعديلات' : isDirectPublisher ? 'نشر الآن' : 'إرسال للمراجعة'}</span>
+                  <CheckCircle2 className="w-4 h-4 text-emerald-200" />
+                  <span>{postToEdit ? 'حفظ التعديلات' : 'نشر المنشور الآن'}</span>
                 </>
               )}
             </button>
           </div>
         </form>
-      </motion.div>
+      </div>
     </div>
   );
 };

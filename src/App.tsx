@@ -1,89 +1,121 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth, AuthProvider } from './context/AuthContext';
-import { PageView, Post, SchoolEvent, GalleryPhoto, SchoolSettings, PostType } from './types';
-import { DEFAULT_SETTINGS } from './data/initialData';
-import { collection, onSnapshot, doc } from 'firebase/firestore';
-import { db } from './lib/firebase';
+import {
+  PageView,
+  Post,
+  Announcement,
+  SchoolEvent,
+  Achievement,
+  SchoolPhoto,
+  SchoolAlbum,
+  DailyMessage,
+  SiteSettings,
+  PostType,
+} from './types';
+import { dataStore } from './lib/dataStore';
 
 import { Navbar } from './components/Navbar';
 import { AuthModal } from './components/AuthModal';
 import { CreatePostModal } from './components/CreatePostModal';
-import { QuickAddModal } from './components/QuickAddModal';
+import { CreateAnnouncementModal } from './components/CreateAnnouncementModal';
+import { CreateEventModal } from './components/CreateEventModal';
+import { CreateAchievementModal } from './components/CreateAchievementModal';
+import { UploadPhotoModal } from './components/UploadPhotoModal';
+import { CreateAlbumModal } from './components/CreateAlbumModal';
+import { DailyMessageModal } from './components/DailyMessageModal';
 import { PostDetailsModal } from './components/PostDetailsModal';
-import { AdminDashboard } from './components/AdminDashboard';
 import { FloatingAddButton } from './components/FloatingAddButton';
 
 import { HomePage } from './views/HomePage';
+import { AnnouncementsView } from './views/AnnouncementsView';
 import { NewsView } from './views/NewsView';
 import { TodayView } from './views/TodayView';
 import { EventsView } from './views/EventsView';
-import { GalleryView } from './views/GalleryView';
-import { ProfileView } from './views/ProfileView';
-import { AboutAndContactView } from './views/AboutAndContactView';
 import { AchievementsView } from './views/AchievementsView';
+import { GalleryView } from './views/GalleryView';
+import { DailyMessageView } from './views/DailyMessageView';
+import { AdminDashboard } from './views/AdminDashboard';
+import { UsersManagementView } from './views/UsersManagementView';
+import { ActivityLogView } from './views/ActivityLogView';
+import { SiteSettingsView } from './views/SiteSettingsView';
+import { ProfileView } from './views/ProfileView';
+import { LoginView } from './views/LoginView';
 
-import { GraduationCap, Heart, Shield, Sparkles, Phone, Mail, MapPin } from 'lucide-react';
+import { GraduationCap, Shield, Phone, Mail, MapPin, Sparkles } from 'lucide-react';
 
 function AppContent() {
-  const { user, profile, isOwner, isAdmin, isModerator, canPublish, canManageEvents, canUploadPhotos } = useAuth();
+  const { user, profile, hasPerm, isOwner, loading: authLoading } = useAuth();
 
   const [currentView, setCurrentView] = useState<PageView>('home');
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Collections state
+  // Real-time Firestore Collections
   const [posts, setPosts] = useState<Post[]>([]);
+  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [events, setEvents] = useState<SchoolEvent[]>([]);
-  const [gallery, setGallery] = useState<GalleryPhoto[]>([]);
-  const [settings, setSettings] = useState<SchoolSettings>(DEFAULT_SETTINGS);
+  const [achievements, setAchievements] = useState<Achievement[]>([]);
+  const [photos, setPhotos] = useState<SchoolPhoto[]>([]);
+  const [albums, setAlbums] = useState<SchoolAlbum[]>([]);
+  const [dailyMessages, setDailyMessages] = useState<DailyMessage[]>([]);
+  const [settings, setSettings] = useState<SiteSettings>({
+    schoolName: 'مدرسة صفية بنت عمر الابتدائية',
+    motto: 'صرح تعليمي رائد يصنع جيل المستقبل برؤية طموحة',
+    aboutText:
+      'مدرسة صفية بنت عمر صرح تعليمي رائد يهدف إلى تقديم تعليم نوعي وتنشئة أجيال واعدة متمكنة من مهارات المستقبل ومعتزة بهويتها الوطنية والقيم الإسلامية.',
+    phone: '011-2345678',
+    email: 'info@safiah-school.edu.sa',
+    address: 'المملكة العربية السعودية - الرياض',
+    principalName: 'أ. هدى الغامدي',
+  });
 
-  // Modals state
+  // Modal Open States
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [authModalMode, setAuthModalMode] = useState<'login' | 'register'>('login');
+
   const [createPostOpen, setCreatePostOpen] = useState(false);
   const [defaultPostType, setDefaultPostType] = useState<PostType | undefined>(undefined);
-  const [quickAddType, setQuickAddType] = useState<'event' | 'gallery' | null>(null);
-  const [selectedPostForDetails, setSelectedPostForDetails] = useState<Post | null>(null);
   const [postToEdit, setPostToEdit] = useState<Post | null>(null);
 
-  // Listen to Firestore real-time collections
+  const [createAnnouncementOpen, setCreateAnnouncementOpen] = useState(false);
+  const [announcementToEdit, setAnnouncementToEdit] = useState<Announcement | null>(null);
+
+  const [createEventOpen, setCreateEventOpen] = useState(false);
+  const [eventToEdit, setEventToEdit] = useState<SchoolEvent | null>(null);
+
+  const [createAchievementOpen, setCreateAchievementOpen] = useState(false);
+  const [achievementToEdit, setAchievementToEdit] = useState<Achievement | null>(null);
+
+  const [uploadPhotoOpen, setUploadPhotoOpen] = useState(false);
+  const [photoToEdit, setPhotoToEdit] = useState<SchoolPhoto | null>(null);
+
+  const [createAlbumOpen, setCreateAlbumOpen] = useState(false);
+  const [albumToEdit, setAlbumToEdit] = useState<SchoolAlbum | null>(null);
+
+  const [dailyMessageModalOpen, setDailyMessageModalOpen] = useState(false);
+  const [dailyMessageToEdit, setDailyMessageToEdit] = useState<DailyMessage | null>(null);
+
+  const [selectedPostForDetails, setSelectedPostForDetails] = useState<Post | null>(null);
+
+  // Data Synchronizers
   useEffect(() => {
-    const unsubPosts = onSnapshot(collection(db, 'posts'), (snap) => {
-      const list: Post[] = [];
-      snap.forEach((d) => {
-        list.push({ ...(d.data() as Post), id: d.id });
-      });
-      list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-      setPosts(list);
-    }, (err) => console.warn('Posts sync:', err));
-
-    const unsubEvents = onSnapshot(collection(db, 'events'), (snap) => {
-      const list: SchoolEvent[] = [];
-      snap.forEach((d) => {
-        list.push({ ...(d.data() as SchoolEvent), id: d.id });
-      });
-      list.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-      setEvents(list);
-    }, (err) => console.warn('Events sync:', err));
-
-    const unsubGallery = onSnapshot(collection(db, 'gallery'), (snap) => {
-      const list: GalleryPhoto[] = [];
-      snap.forEach((d) => {
-        list.push({ ...(d.data() as GalleryPhoto), id: d.id });
-      });
-      list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-      setGallery(list);
-    }, (err) => console.warn('Gallery sync:', err));
-
-    const unsubSettings = onSnapshot(doc(db, 'settings', 'general'), (snap) => {
-      if (snap.exists()) {
-        setSettings(snap.data() as SchoolSettings);
-      }
-    }, (err) => console.warn('Settings sync:', err));
+    const unsubPosts = dataStore.subscribe<Post[]>('posts', (items) => setPosts(items));
+    const unsubAnnouncements = dataStore.subscribe<Announcement[]>('announcements', (items) => setAnnouncements(items));
+    dataStore.getAnnouncements().then((items) => setAnnouncements(items));
+    const unsubEvents = dataStore.subscribe<SchoolEvent[]>('events', (items) => setEvents(items));
+    const unsubAchievements = dataStore.subscribe<Achievement[]>('achievements', (items) => setAchievements(items));
+    const unsubPhotos = dataStore.subscribe<SchoolPhoto[]>('photos', (items) => setPhotos(items));
+    const unsubAlbums = dataStore.subscribe<SchoolAlbum[]>('albums', (items) => setAlbums(items));
+    const unsubDailyMessages = dataStore.subscribe<DailyMessage[]>('dailyMessages', (items) => setDailyMessages(items));
+    const unsubSettings = dataStore.subscribe<SiteSettings>('settings', (st) => setSettings(st));
 
     return () => {
       unsubPosts();
+      unsubAnnouncements();
       unsubEvents();
-      unsubGallery();
+      unsubAchievements();
+      unsubPhotos();
+      unsubAlbums();
+      unsubDailyMessages();
       unsubSettings();
     };
   }, []);
@@ -99,7 +131,73 @@ function AppContent() {
     setCreatePostOpen(true);
   };
 
-  // Filter posts based on global search query if entered
+  const handleEditPost = (post: Post) => {
+    setPostToEdit(post);
+    setDefaultPostType(post.type);
+    setCreatePostOpen(true);
+  };
+
+  const handleOpenCreateAnnouncement = () => {
+    setAnnouncementToEdit(null);
+    setCreateAnnouncementOpen(true);
+  };
+
+  const handleEditAnnouncement = (ann: Announcement) => {
+    setAnnouncementToEdit(ann);
+    setCreateAnnouncementOpen(true);
+  };
+
+  const handleOpenAddEvent = () => {
+    setEventToEdit(null);
+    setCreateEventOpen(true);
+  };
+
+  const handleEditEvent = (ev: SchoolEvent) => {
+    setEventToEdit(ev);
+    setCreateEventOpen(true);
+  };
+
+  const handleOpenAddAchievement = () => {
+    setAchievementToEdit(null);
+    setCreateAchievementOpen(true);
+  };
+
+  const handleEditAchievement = (ach: Achievement) => {
+    setAchievementToEdit(ach);
+    setCreateAchievementOpen(true);
+  };
+
+  const handleOpenAddPhoto = () => {
+    setPhotoToEdit(null);
+    setUploadPhotoOpen(true);
+  };
+
+  const handleEditPhoto = (pic: SchoolPhoto) => {
+    setPhotoToEdit(pic);
+    setUploadPhotoOpen(true);
+  };
+
+  const handleOpenCreateAlbum = () => {
+    setAlbumToEdit(null);
+    setCreateAlbumOpen(true);
+  };
+
+  const handleEditAlbum = (album: SchoolAlbum) => {
+    setAlbumToEdit(album);
+    setCreateAlbumOpen(true);
+  };
+
+  const handleOpenDailyMessageModal = () => {
+    setDailyMessageToEdit(null);
+    setDailyMessageModalOpen(true);
+  };
+
+  const handleEditDailyMessage = (msg: DailyMessage) => {
+    setDailyMessageToEdit(msg);
+    setDailyMessageModalOpen(true);
+  };
+
+  // Filter posts based on global search query
   const searchedPosts = searchQuery.trim()
     ? posts.filter(
         (p) =>
@@ -109,9 +207,36 @@ function AppContent() {
       )
     : posts;
 
+  // Active daily message
+  const activeDailyMessage = dailyMessages.find((m) => m.isActive) || dailyMessages[0] || null;
+
+  // Session check loading screen
+  if (authLoading) {
+    return (
+      <div
+        className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4 text-white"
+        dir="rtl"
+      >
+        <div className="w-14 h-14 bg-gradient-to-tr from-emerald-600 to-teal-400 rounded-2xl flex items-center justify-center shadow-xl shadow-emerald-950/60 border border-emerald-400/30 animate-pulse mb-4">
+          <GraduationCap className="w-8 h-8 text-white" />
+        </div>
+        <h2 className="text-base font-extrabold text-white">مدرسة صفية بنت عمر الابتدائية</h2>
+        <p className="text-xs text-slate-400 mt-1">جارٍ التحقق من جلسة الدخول...</p>
+      </div>
+    );
+  }
+
+  // Mandatory Login Gate: When not authenticated, show LoginView immediately
+  if (!user) {
+    return <LoginView />;
+  }
+
   return (
-    <div className="min-h-screen bg-slate-100 text-slate-900 font-sans flex flex-col justify-between selection:bg-emerald-500 selection:text-white" dir="rtl">
-      {/* Navigation */}
+    <div
+      className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col justify-between selection:bg-emerald-500 selection:text-white"
+      dir="rtl"
+    >
+      {/* Top Navbar */}
       <Navbar
         currentView={currentView}
         onNavigate={setCurrentView}
@@ -125,13 +250,14 @@ function AppContent() {
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-6 sm:pt-8">
         {/* Global Search Results Alert if active */}
         {searchQuery.trim() && (
-          <div className="mb-6 p-4 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-center justify-between">
-            <span className="text-xs font-bold text-emerald-950">
-              نتائج البحث عن: <span className="underline font-black">"{searchQuery}"</span> ({searchedPosts.length} نتيجة)
+          <div className="mb-6 p-4 bg-emerald-950/60 border border-emerald-500/40 rounded-2xl flex items-center justify-between">
+            <span className="text-xs font-bold text-emerald-300">
+              نتائج البحث عن:{' '}
+              <span className="underline font-black text-white">"{searchQuery}"</span>
             </span>
             <button
               onClick={() => setSearchQuery('')}
-              className="text-xs text-emerald-700 hover:text-emerald-950 font-bold"
+              className="text-xs text-emerald-400 hover:text-white font-bold"
             >
               مسح البحث
             </button>
@@ -142,14 +268,30 @@ function AppContent() {
         {currentView === 'home' && (
           <HomePage
             posts={searchedPosts}
+            announcements={announcements}
             events={events}
-            gallery={gallery}
+            achievements={achievements}
+            photos={photos}
+            albums={albums}
+            dailyMessage={activeDailyMessage}
             onNavigate={setCurrentView}
             onSelectPost={setSelectedPostForDetails}
             onOpenAuth={() => handleOpenAuth('login')}
-            onOpenNewPostModal={handleOpenCreatePost}
-            onOpenAddEvent={() => setQuickAddType('event')}
-            onOpenAddPhoto={() => setQuickAddType('gallery')}
+            onOpenCreatePost={handleOpenCreatePost}
+            onOpenCreateAnnouncement={handleOpenCreateAnnouncement}
+            onOpenAddEvent={handleOpenAddEvent}
+            onOpenAddAchievement={handleOpenAddAchievement}
+            onOpenAddPhoto={handleOpenAddPhoto}
+            onOpenCreateAlbum={handleOpenCreateAlbum}
+            onOpenDailyMessageModal={handleOpenDailyMessageModal}
+          />
+        )}
+
+        {currentView === 'announcements' && (
+          <AnnouncementsView
+            announcements={announcements}
+            onOpenCreateModal={handleOpenCreateAnnouncement}
+            onEditAnnouncement={handleEditAnnouncement}
           />
         )}
 
@@ -164,6 +306,7 @@ function AppContent() {
         {currentView === 'today' && (
           <TodayView
             posts={searchedPosts}
+            events={events}
             onSelectPost={setSelectedPostForDetails}
             onOpenNewPostModal={() => handleOpenCreatePost('today_summary')}
           />
@@ -172,54 +315,58 @@ function AppContent() {
         {currentView === 'events' && (
           <EventsView
             events={events}
-            onOpenNewEventModal={() => setQuickAddType('event')}
-          />
-        )}
-
-        {currentView === 'gallery' && (
-          <GalleryView
-            gallery={gallery}
-            onOpenUploadModal={() => setQuickAddType('gallery')}
+            onOpenNewEventModal={handleOpenAddEvent}
+            onEditEvent={handleEditEvent}
           />
         )}
 
         {currentView === 'achievements' && (
           <AchievementsView
-            posts={searchedPosts}
-            onSelectPost={setSelectedPostForDetails}
-            onOpenNewPostModal={() => handleOpenCreatePost('achievement')}
+            achievements={achievements}
+            onOpenCreateModal={handleOpenAddAchievement}
+            onEditAchievement={handleEditAchievement}
           />
         )}
 
-        {currentView === 'about' && (
-          <AboutAndContactView mode="about" settings={settings} />
+        {currentView === 'gallery' && (
+          <GalleryView
+            photos={photos}
+            albums={albums}
+            onOpenUploadPhoto={handleOpenAddPhoto}
+            onOpenCreateAlbum={handleOpenCreateAlbum}
+            onEditPhoto={handleEditPhoto}
+            onEditAlbum={handleEditAlbum}
+          />
         )}
 
-        {currentView === 'contact' && (
-          <AboutAndContactView mode="contact" settings={settings} />
+        {currentView === 'daily_message' && (
+          <DailyMessageView
+            messages={dailyMessages}
+            onOpenCreateModal={handleOpenDailyMessageModal}
+            onEditMessage={handleEditDailyMessage}
+          />
         )}
-
-        {currentView === 'profile' && <ProfileView />}
 
         {currentView === 'admin_dashboard' && (
-          isModerator ? (
-            <AdminDashboard />
-          ) : (
-            <div className="text-center py-20 bg-white rounded-3xl border border-slate-200 p-8">
-              <Shield className="w-12 h-12 text-rose-500 mx-auto mb-3" />
-              <h2 className="text-lg font-bold text-slate-800">منطقة مخصصة للمديرة والمشرفين فقط</h2>
-              <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
-                يجب تسجيل الدخول بحساب مديرة أو مشرفة مصرح لها للوصول إلى لوحة التحكم.
-              </p>
-              <button
-                onClick={() => handleOpenAuth('login')}
-                className="mt-4 px-6 py-2.5 bg-emerald-800 hover:bg-emerald-900 text-white text-xs font-bold rounded-xl shadow-md"
-              >
-                تسجيل الدخول كمسؤول
-              </button>
-            </div>
-          )
+          <AdminDashboard
+            onNavigate={setCurrentView}
+            onOpenCreatePost={() => handleOpenCreatePost('news')}
+            onOpenCreateAnnouncement={handleOpenCreateAnnouncement}
+            onOpenAddEvent={handleOpenAddEvent}
+            onOpenAddAchievement={handleOpenAddAchievement}
+            onOpenAddPhoto={handleOpenAddPhoto}
+            onOpenCreateAlbum={handleOpenCreateAlbum}
+            onOpenDailyMessageModal={handleOpenDailyMessageModal}
+          />
         )}
+
+        {currentView === 'users_management' && <UsersManagementView />}
+
+        {currentView === 'activity_log' && <ActivityLogView />}
+
+        {currentView === 'site_settings' && <SiteSettingsView />}
+
+        {currentView === 'profile' && <ProfileView />}
       </main>
 
       {/* Global Modals */}
@@ -239,13 +386,59 @@ function AppContent() {
         defaultType={defaultPostType}
       />
 
-      {quickAddType && (
-        <QuickAddModal
-          isOpen={true}
-          onClose={() => setQuickAddType(null)}
-          type={quickAddType}
-        />
-      )}
+      <CreateAnnouncementModal
+        isOpen={createAnnouncementOpen}
+        onClose={() => {
+          setCreateAnnouncementOpen(false);
+          setAnnouncementToEdit(null);
+        }}
+        announcementToEdit={announcementToEdit}
+      />
+
+      <CreateEventModal
+        isOpen={createEventOpen}
+        onClose={() => {
+          setCreateEventOpen(false);
+          setEventToEdit(null);
+        }}
+        eventToEdit={eventToEdit}
+      />
+
+      <CreateAchievementModal
+        isOpen={createAchievementOpen}
+        onClose={() => {
+          setCreateAchievementOpen(false);
+          setAchievementToEdit(null);
+        }}
+        achievementToEdit={achievementToEdit}
+      />
+
+      <UploadPhotoModal
+        isOpen={uploadPhotoOpen}
+        onClose={() => {
+          setUploadPhotoOpen(false);
+          setPhotoToEdit(null);
+        }}
+        photoToEdit={photoToEdit}
+      />
+
+      <CreateAlbumModal
+        isOpen={createAlbumOpen}
+        onClose={() => {
+          setCreateAlbumOpen(false);
+          setAlbumToEdit(null);
+        }}
+        albumToEdit={albumToEdit}
+      />
+
+      <DailyMessageModal
+        isOpen={dailyMessageModalOpen}
+        onClose={() => {
+          setDailyMessageModalOpen(false);
+          setDailyMessageToEdit(null);
+        }}
+        messageToEdit={dailyMessageToEdit}
+      />
 
       <PostDetailsModal
         post={selectedPostForDetails}
@@ -255,8 +448,12 @@ function AppContent() {
       {/* Global Floating Quick Add Button */}
       <FloatingAddButton
         onOpenCreatePost={handleOpenCreatePost}
-        onOpenAddEvent={() => setQuickAddType('event')}
-        onOpenAddPhoto={() => setQuickAddType('gallery')}
+        onOpenCreateAnnouncement={handleOpenCreateAnnouncement}
+        onOpenAddEvent={handleOpenAddEvent}
+        onOpenAddAchievement={handleOpenAddAchievement}
+        onOpenAddPhoto={handleOpenAddPhoto}
+        onOpenCreateAlbum={handleOpenCreateAlbum}
+        onOpenDailyMessageModal={handleOpenDailyMessageModal}
       />
 
       {/* Footer */}
@@ -271,7 +468,7 @@ function AppContent() {
                 </div>
                 <div>
                   <h3 className="text-base font-extrabold font-serif">{settings.schoolName}</h3>
-                  <p className="text-xs text-emerald-400 font-medium">"نصنع المعرفة... ونوثق الإنجاز"</p>
+                  <p className="text-xs text-emerald-400 font-medium">{settings.motto}</p>
                 </div>
               </div>
               <p className="text-xs text-slate-400 leading-relaxed max-w-md font-light">
@@ -281,30 +478,63 @@ function AppContent() {
 
             {/* Quick Links */}
             <div className="space-y-2.5">
-              <h4 className="text-xs font-bold text-amber-300">أقسام المنصة</h4>
+              <h4 className="text-xs font-bold text-amber-300">أقسام المنصة الرئيسية</h4>
               <ul className="space-y-1.5 text-xs text-slate-300">
-                <li><button onClick={() => setCurrentView('news')} className="hover:text-white">أخبار المدرسة</button></li>
-                <li><button onClick={() => setCurrentView('today')} className="hover:text-white">يومنا بالمدرسة</button></li>
-                <li><button onClick={() => setCurrentView('events')} className="hover:text-white">جدول الفعاليات</button></li>
-                <li><button onClick={() => setCurrentView('gallery')} className="hover:text-white">معرض الصور</button></li>
-                <li><button onClick={() => setCurrentView('achievements')} className="hover:text-white">لوحة الإنجازات</button></li>
+                <li>
+                  <button onClick={() => setCurrentView('announcements')} className="hover:text-white">
+                    الإعلانات والتعاميم
+                  </button>
+                </li>
+                <li>
+                  <button onClick={() => setCurrentView('news')} className="hover:text-white">
+                    الأخبار والمنشورات
+                  </button>
+                </li>
+                <li>
+                  <button onClick={() => setCurrentView('today')} className="hover:text-white">
+                    ماذا حدث اليوم؟
+                  </button>
+                </li>
+                <li>
+                  <button onClick={() => setCurrentView('events')} className="hover:text-white">
+                    جدول الفعاليات
+                  </button>
+                </li>
+                <li>
+                  <button onClick={() => setCurrentView('achievements')} className="hover:text-white">
+                    لوحة الشرف والإنجازات
+                  </button>
+                </li>
+                <li>
+                  <button onClick={() => setCurrentView('gallery')} className="hover:text-white">
+                    معرض الصور والألبومات
+                  </button>
+                </li>
               </ul>
             </div>
 
             {/* Contact Details */}
             <div className="space-y-2.5 text-xs text-slate-300">
-              <h4 className="text-xs font-bold text-amber-300">التواصل الرسمي</h4>
+              <h4 className="text-xs font-bold text-amber-300">معلومات التواصل المعتمدة</h4>
               <div className="space-y-2 text-slate-400">
-                {settings.phone ? (
+                {settings.phone && (
                   <div className="flex items-center gap-2">
                     <Phone className="w-3.5 h-3.5 text-emerald-400" />
                     <span>{settings.phone}</span>
                   </div>
-                ) : null}
-                <div className="flex items-center gap-2">
-                  <MapPin className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>{settings.address}</span>
-                </div>
+                )}
+                {settings.email && (
+                  <div className="flex items-center gap-2">
+                    <Mail className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>{settings.email}</span>
+                  </div>
+                )}
+                {settings.address && (
+                  <div className="flex items-center gap-2">
+                    <MapPin className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>{settings.address}</span>
+                  </div>
+                )}
               </div>
             </div>
           </div>

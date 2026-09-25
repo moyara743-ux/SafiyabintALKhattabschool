@@ -1,40 +1,91 @@
 import React, { useState } from 'react';
-import { Plus, X, FileText, Image as ImageIcon, Calendar, Award, Sun, Sparkles } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
-import { PostType } from '../types';
+import { useAuth } from '../context/AuthContext';
+import { hasAnyCreatePermission } from '../lib/permissions';
+import {
+  Plus,
+  X,
+  FileText,
+  Calendar,
+  Image as ImageIcon,
+  Award,
+  Bell,
+  MessageSquare,
+  FolderPlus,
+} from 'lucide-react';
 
 interface FloatingAddButtonProps {
-  onOpenCreatePost: (defaultType?: PostType) => void;
+  onOpenCreatePost: (type?: 'news' | 'today_summary') => void;
+  onOpenCreateAnnouncement: () => void;
   onOpenAddEvent: () => void;
+  onOpenAddAchievement: () => void;
   onOpenAddPhoto: () => void;
+  onOpenCreateAlbum: () => void;
+  onOpenDailyMessageModal: () => void;
 }
 
 export const FloatingAddButton: React.FC<FloatingAddButtonProps> = ({
   onOpenCreatePost,
+  onOpenCreateAnnouncement,
   onOpenAddEvent,
+  onOpenAddAchievement,
   onOpenAddPhoto,
+  onOpenCreateAlbum,
+  onOpenDailyMessageModal,
 }) => {
+  const { user, profile, hasPerm } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
 
+  // Requirement 37:
+  // 1. If not logged in -> DO NOT SHOW
+  if (!user || !profile) return null;
+
+  // 2. If has NO create permissions -> DO NOT SHOW
+  if (!hasAnyCreatePermission(profile)) return null;
+
+  // 3. Filter only the actions the user is authorized to perform
   const actions = [
     {
+      id: 'announcement',
+      label: 'إضافة إعلان جديد',
+      icon: Bell,
+      color: 'bg-rose-600 hover:bg-rose-700 text-white',
+      allowed: hasPerm('createAnnouncements'),
+      onClick: () => {
+        setIsOpen(false);
+        onOpenCreateAnnouncement();
+      },
+    },
+    {
       id: 'news',
-      label: 'إضافة خبر أو إعلان',
+      label: 'إضافة خبر للمدرسة',
       icon: FileText,
       color: 'bg-emerald-600 hover:bg-emerald-700 text-white',
+      allowed: hasPerm('createPosts'),
       onClick: () => {
         setIsOpen(false);
         onOpenCreatePost('news');
       },
     },
     {
-      id: 'today',
-      label: 'إضافة يوميات اليوم',
-      icon: Sun,
+      id: 'today_summary',
+      label: 'توثيق: ماذا حدث اليوم؟',
+      icon: FileText,
       color: 'bg-amber-600 hover:bg-amber-700 text-white',
+      allowed: hasPerm('createPosts'),
       onClick: () => {
         setIsOpen(false);
         onOpenCreatePost('today_summary');
+      },
+    },
+    {
+      id: 'event',
+      label: 'إضافة فعالية بالتقويم',
+      icon: Calendar,
+      color: 'bg-teal-600 hover:bg-teal-700 text-white',
+      allowed: hasPerm('createEvents'),
+      onClick: () => {
+        setIsOpen(false);
+        onOpenAddEvent();
       },
     },
     {
@@ -42,76 +93,93 @@ export const FloatingAddButton: React.FC<FloatingAddButtonProps> = ({
       label: 'إضافة إنجاز أو تكريم',
       icon: Award,
       color: 'bg-purple-600 hover:bg-purple-700 text-white',
+      allowed: hasPerm('createAchievements'),
       onClick: () => {
         setIsOpen(false);
-        onOpenCreatePost('achievement');
-      },
-    },
-    {
-      id: 'event',
-      label: 'إضافة فعالية جديدة',
-      icon: Calendar,
-      color: 'bg-teal-600 hover:bg-teal-700 text-white',
-      onClick: () => {
-        setIsOpen(false);
-        onOpenAddEvent();
+        onOpenAddAchievement();
       },
     },
     {
       id: 'photo',
-      label: 'رفع صورة لمعرض المدرسة',
+      label: 'رفع صورة جديدة',
       icon: ImageIcon,
-      color: 'bg-indigo-600 hover:bg-indigo-700 text-white',
+      color: 'bg-blue-600 hover:bg-blue-700 text-white',
+      allowed: hasPerm('createPhotos'),
       onClick: () => {
         setIsOpen(false);
         onOpenAddPhoto();
       },
     },
-  ];
+    {
+      id: 'album',
+      label: 'إنشاء ألبوم صور',
+      icon: FolderPlus,
+      color: 'bg-indigo-600 hover:bg-indigo-700 text-white',
+      allowed: hasPerm('createAlbums'),
+      onClick: () => {
+        setIsOpen(false);
+        onOpenCreateAlbum();
+      },
+    },
+    {
+      id: 'daily_message',
+      label: 'إضافة رسالة اليوم',
+      icon: MessageSquare,
+      color: 'bg-orange-600 hover:bg-orange-700 text-white',
+      allowed: hasPerm('createDailyMessage'),
+      onClick: () => {
+        setIsOpen(false);
+        onOpenDailyMessageModal();
+      },
+    },
+  ].filter((a) => a.allowed);
+
+  // If no action matched
+  if (actions.length === 0) return null;
 
   return (
-    <div className="fixed bottom-6 left-6 z-40 flex flex-col items-start" dir="rtl">
-      {/* Action Options Popup */}
-      <AnimatePresence>
-        {isOpen && (
-          <motion.div
-            initial={{ opacity: 0, y: 15, scale: 0.9 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 15, scale: 0.9 }}
-            className="mb-3 flex flex-col space-y-2 bg-slate-900/95 backdrop-blur-md p-3 rounded-2xl border border-slate-700 shadow-2xl"
-          >
-            <div className="px-2 py-1 text-[11px] font-bold text-amber-300 border-b border-slate-800 flex items-center gap-1.5">
-              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-              <span>إضافة محتوى جديد للموقع</span>
-            </div>
-
-            {actions.map((action) => {
-              const Icon = action.icon;
+    <div className="fixed bottom-6 left-6 z-50 flex flex-col items-start" dir="rtl">
+      {/* Sub menu choices */}
+      {isOpen && (
+        <div className="mb-3 flex flex-col items-start gap-2 bg-slate-900/95 backdrop-blur-md p-3 rounded-2xl border border-slate-700 shadow-2xl animate-in fade-in slide-in-from-bottom-4 duration-200">
+          <p className="text-[11px] font-bold text-slate-400 px-2 pb-1 border-b border-slate-800 w-full text-right">
+            العمليات المتاحة لصلاحياتك:
+          </p>
+          <div className="flex flex-col gap-1.5 w-full">
+            {actions.map((act) => {
+              const Icon = act.icon;
               return (
                 <button
-                  key={action.id}
-                  onClick={action.onClick}
-                  className={`flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold transition-all shadow-sm ${action.color}`}
+                  key={act.id}
+                  onClick={act.onClick}
+                  className={`flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold transition-all shadow-sm ${act.color} text-right w-full`}
                 >
                   <Icon className="w-4 h-4 shrink-0" />
-                  <span className="whitespace-nowrap">{action.label}</span>
+                  <span>{act.label}</span>
                 </button>
               );
             })}
-          </motion.div>
-        )}
-      </AnimatePresence>
+          </div>
+        </div>
+      )}
 
-      {/* Main Trigger Button */}
+      {/* Main trigger button */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 px-4 py-3 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white rounded-2xl shadow-xl border border-emerald-400/40 transition-transform active:scale-95 group font-bold text-xs"
-        aria-label="إضافة سريعة للموقع"
+        className="flex items-center gap-2 px-4 py-3.5 bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white rounded-full shadow-xl shadow-emerald-950/40 border border-emerald-400/30 transition-all transform hover:scale-105 active:scale-95"
+        title="إضافة محتوى جديد"
       >
-        <motion.div animate={{ rotate: isOpen ? 45 : 0 }} transition={{ duration: 0.2 }}>
-          <Plus className="w-5 h-5" />
-        </motion.div>
-        <span className="hidden sm:inline">إضافة للموقع</span>
+        {isOpen ? (
+          <>
+            <X className="w-5 h-5" />
+            <span className="text-xs font-bold">إغلاق</span>
+          </>
+        ) : (
+          <>
+            <Plus className="w-5 h-5 stroke-[2.5]" />
+            <span className="text-xs font-bold">+ إضافة</span>
+          </>
+        )}
       </button>
     </div>
   );

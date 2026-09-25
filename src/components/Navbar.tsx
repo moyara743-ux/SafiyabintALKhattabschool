@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { PageView, UserRole } from '../types';
+import { PageView, SchoolRole } from '../types';
+import { ROLE_LABELS_AR } from '../lib/permissions';
 import {
   GraduationCap,
   Shield,
@@ -10,18 +11,19 @@ import {
   X,
   Search,
   ChevronDown,
-  Bell,
   Sparkles,
   BookOpen,
   Calendar,
   Image as ImageIcon,
   Award,
-  Info,
-  Phone,
   Home,
   Sun,
+  Bell,
+  MessageSquare,
+  Users,
+  Settings as SettingsIcon,
+  Activity,
   PlusCircle,
-  Lock
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -41,40 +43,47 @@ export const Navbar: React.FC<NavbarProps> = ({
   onSearchChange,
   onOpenNewPostModal,
 }) => {
-  const { user, profile, logout, isOwner, isAdmin, isModerator, canPublish } = useAuth();
+  const { user, profile, logout, isOwner, isDirector, roleLabel, hasPerm } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
-  const [searchOpen, setSearchOpen] = useState(false);
 
-  const getRoleBadge = (role?: UserRole) => {
+  const getRoleBadgeStyle = (role?: SchoolRole) => {
     switch (role) {
       case 'owner':
-        return <span className="px-2 py-0.5 text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-400/30 rounded-full">المديرة والمالكة</span>;
-      case 'admin':
-        return <span className="px-2 py-0.5 text-[10px] font-bold bg-purple-500/20 text-purple-200 border border-purple-400/30 rounded-full">مشرفة إدارية</span>;
+        return 'bg-amber-500/20 text-amber-300 border-amber-400/40';
+      case 'director':
+        return 'bg-purple-500/20 text-purple-200 border-purple-400/40';
+      case 'supervisor':
+        return 'bg-indigo-500/20 text-indigo-200 border-indigo-400/40';
+      case 'administrator':
+        return 'bg-blue-500/20 text-blue-200 border-blue-400/40';
+      case 'counselor':
+        return 'bg-teal-500/20 text-teal-200 border-teal-400/40';
       case 'teacher':
-        return <span className="px-2 py-0.5 text-[10px] font-bold bg-emerald-500/20 text-emerald-200 border border-emerald-400/30 rounded-full">معلمة</span>;
-      case 'editor':
-        return <span className="px-2 py-0.5 text-[10px] font-bold bg-sky-500/20 text-sky-200 border border-sky-400/30 rounded-full">محررة</span>;
+        return 'bg-emerald-500/20 text-emerald-200 border-emerald-400/40';
+      case 'student':
+        return 'bg-slate-500/20 text-slate-300 border-slate-600/40';
       default:
-        return <span className="px-2 py-0.5 text-[10px] font-medium bg-slate-500/20 text-slate-300 rounded-full">عضو</span>;
+        return 'bg-slate-500/20 text-slate-300 border-slate-600/40';
     }
   };
 
   const navLinks: { view: PageView; label: string; icon: any }[] = [
     { view: 'home', label: 'الرئيسية', icon: Home },
-    { view: 'news', label: 'أخبار المدرسة', icon: BookOpen },
-    { view: 'today', label: 'يومنا بالمدرسة', icon: Sun },
-    { view: 'events', label: 'الفعاليات والتقويم', icon: Calendar },
-    { view: 'gallery', label: 'معرض الصور', icon: ImageIcon },
+    { view: 'announcements', label: 'الإعلانات', icon: Bell },
+    { view: 'news', label: 'الأخبار والمنشورات', icon: BookOpen },
+    { view: 'today', label: 'ماذا حدث اليوم؟', icon: Sun },
+    { view: 'events', label: 'الفعاليات', icon: Calendar },
     { view: 'achievements', label: 'الإنجازات', icon: Award },
-    { view: 'about', label: 'عن المدرسة', icon: Info },
-    { view: 'contact', label: 'تواصل معنا', icon: Phone },
+    { view: 'gallery', label: 'الصور والألبومات', icon: ImageIcon },
+    { view: 'daily_message', label: 'الرسالة اليومية', icon: MessageSquare },
   ];
+
+  const canAccessAdmin = hasPerm('manageUsers') || isOwner || isDirector || hasPerm('viewActivityLog') || hasPerm('manageSiteSettings');
 
   return (
     <header className="sticky top-0 z-40 bg-slate-900/95 backdrop-blur-md text-white border-b border-slate-800 shadow-lg" dir="rtl">
-      {/* Top Banner with Motto & Direct Access */}
+      {/* Top Banner with Motto & School Identity */}
       <div className="bg-gradient-to-r from-emerald-950 via-teal-900 to-emerald-900 border-b border-emerald-800/40 text-[11px] py-1.5 px-4 sm:px-8 text-emerald-200">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -85,13 +94,12 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
 
           <div className="flex items-center gap-3 text-xs">
-            {isOwner && (
-              <span className="flex items-center gap-1 text-amber-300 font-bold bg-amber-950/60 border border-amber-500/30 px-2 py-0.5 rounded-md">
-                <Shield className="w-3 h-3" />
-                لوحة المديرة مفعلة
+            {profile && (
+              <span className={`px-2 py-0.5 text-[10px] font-bold rounded-md border ${getRoleBadgeStyle(profile.school_role)}`}>
+                {roleLabel}
               </span>
             )}
-            <span className="text-emerald-300/80">العام الدراسي 1447 - 1448هـ</span>
+            <span className="text-emerald-300/80 hidden md:inline">المنصة المدرسية الرسمية المعتمدة</span>
           </div>
         </div>
       </div>
@@ -109,10 +117,10 @@ export const Navbar: React.FC<NavbarProps> = ({
               <GraduationCap className="w-6 h-6 sm:w-7 sm:h-7 text-white" />
             </div>
             <div>
-              <h1 className="text-base sm:text-lg font-extrabold font-serif tracking-tight text-white group-hover:text-emerald-300 transition-colors">
+              <h1 className="text-base sm:text-lg font-extrabold tracking-tight text-white group-hover:text-emerald-300 transition-colors">
                 مدرسة صفية بنت عمر
               </h1>
-              <p className="text-[11px] text-slate-400 font-medium">المنصة المدرسية الرقمية المعتمدة</p>
+              <p className="text-[11px] text-slate-400 font-medium">بوابة الإعلام والتوثيق والأنشطة</p>
             </div>
           </div>
 
@@ -140,7 +148,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           {/* Right Action Section */}
           <div className="flex items-center gap-2 sm:gap-3">
-            {/* Quick Search Toggle / Input */}
+            {/* Quick Search */}
             <div className="relative hidden md:block">
               <div className="flex items-center bg-slate-800/80 border border-slate-700 rounded-xl px-3 py-1.5 focus-within:ring-2 focus-within:ring-emerald-500 focus-within:border-transparent transition-all">
                 <Search className="w-4 h-4 text-slate-400 ml-2" />
@@ -149,7 +157,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   placeholder="ابحث في الأخبار والفعاليات..."
                   value={searchQuery}
                   onChange={(e) => onSearchChange(e.target.value)}
-                  className="bg-transparent text-xs text-white placeholder:text-slate-500 focus:outline-none w-36 lg:w-48"
+                  className="bg-transparent text-xs text-white placeholder:text-slate-500 focus:outline-none w-32 lg:w-44"
                 />
                 {searchQuery && (
                   <button
@@ -162,19 +170,8 @@ export const Navbar: React.FC<NavbarProps> = ({
               </div>
             </div>
 
-            {/* Quick New Post Button for Authorized Staff */}
-            {canPublish && onOpenNewPostModal && (
-              <button
-                onClick={onOpenNewPostModal}
-                className="hidden sm:flex items-center gap-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold shadow-md shadow-emerald-950/40 transition-all hover:scale-102"
-              >
-                <PlusCircle className="w-4 h-4" />
-                <span>إضافة محتوى</span>
-              </button>
-            )}
-
-            {/* Admin / Owner Dashboard Link */}
-            {isModerator && (
+            {/* Admin Dashboard shortcut for authorized users */}
+            {canAccessAdmin && (
               <button
                 onClick={() => onNavigate('admin_dashboard')}
                 className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border ${
@@ -184,9 +181,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 }`}
               >
                 <Shield className="w-3.5 h-3.5 text-amber-400" />
-                <span className="hidden sm:inline">
-                  {isOwner ? 'لوحة تحكم المديرة' : 'لوحة المشرفين'}
-                </span>
+                <span className="hidden sm:inline">لوحة الإدارة</span>
                 <span className="sm:hidden">الإدارة</span>
               </button>
             )}
@@ -199,14 +194,14 @@ export const Navbar: React.FC<NavbarProps> = ({
                   className="flex items-center gap-2 p-1.5 sm:px-3 sm:py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700/80 border border-slate-700 transition-all"
                 >
                   <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-emerald-700 flex items-center justify-center text-white font-bold text-xs shadow-inner">
-                    {profile?.displayName?.[0] || user.email?.[0]?.toUpperCase() || 'U'}
+                    {profile?.name?.[0] || user.email?.[0]?.toUpperCase() || 'U'}
                   </div>
                   <div className="hidden md:flex flex-col text-right">
                     <span className="text-xs font-semibold text-white max-w-[100px] truncate">
-                      {profile?.displayName || user.email?.split('@')[0]}
+                      {profile?.name || user.email?.split('@')[0]}
                     </span>
-                    <span className="text-[10px] text-slate-400">
-                      {getRoleBadge(profile?.role)}
+                    <span className="text-[10px] text-amber-300 font-medium">
+                      {roleLabel}
                     </span>
                   </div>
                   <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
@@ -216,28 +211,19 @@ export const Navbar: React.FC<NavbarProps> = ({
                 {userDropdownOpen && (
                   <div
                     onMouseLeave={() => setUserDropdownOpen(false)}
-                    className="absolute left-0 mt-2 w-56 bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl py-2 z-50 overflow-hidden"
+                    className="absolute left-0 mt-2 w-60 bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl py-2 z-50 overflow-hidden"
                   >
                     <div className="px-4 py-2.5 border-b border-slate-800 bg-slate-800/40">
                       <p className="text-xs font-bold text-white truncate">
-                        {profile?.displayName || 'مستخدم'}
+                        {profile?.name || 'مستخدم'}
                       </p>
                       <p className="text-[11px] text-slate-400 truncate">{user.email}</p>
-                      <div className="mt-1.5">{getRoleBadge(profile?.role)}</div>
+                      <div className="mt-1.5">
+                        <span className={`px-2 py-0.5 text-[10px] font-bold rounded-md border ${getRoleBadgeStyle(profile?.school_role)}`}>
+                          {roleLabel}
+                        </span>
+                      </div>
                     </div>
-
-                    {isModerator && (
-                      <button
-                        onClick={() => {
-                          onNavigate('admin_dashboard');
-                          setUserDropdownOpen(false);
-                        }}
-                        className="w-full px-4 py-2 text-right text-xs text-amber-300 hover:bg-amber-500/10 flex items-center gap-2 font-bold"
-                      >
-                        <Shield className="w-3.5 h-3.5 text-amber-400" />
-                        <span>{isOwner ? 'لوحة تحكم المديرة' : 'لوحة المشرفين'}</span>
-                      </button>
-                    )}
 
                     <button
                       onClick={() => {
@@ -247,8 +233,60 @@ export const Navbar: React.FC<NavbarProps> = ({
                       className="w-full px-4 py-2 text-right text-xs text-slate-200 hover:bg-slate-800 flex items-center gap-2"
                     >
                       <User className="w-3.5 h-3.5 text-slate-400" />
-                      <span>إعدادات الحساب</span>
+                      <span>الملف الشخصي والصلاحيات</span>
                     </button>
+
+                    {canAccessAdmin && (
+                      <button
+                        onClick={() => {
+                          onNavigate('admin_dashboard');
+                          setUserDropdownOpen(false);
+                        }}
+                        className="w-full px-4 py-2 text-right text-xs text-amber-300 hover:bg-amber-500/10 flex items-center gap-2 font-bold"
+                      >
+                        <Shield className="w-3.5 h-3.5 text-amber-400" />
+                        <span>لوحة الإدارة والإحصائيات</span>
+                      </button>
+                    )}
+
+                    {hasPerm('manageUsers') && (
+                      <button
+                        onClick={() => {
+                          onNavigate('users_management');
+                          setUserDropdownOpen(false);
+                        }}
+                        className="w-full px-4 py-2 text-right text-xs text-emerald-300 hover:bg-emerald-500/10 flex items-center gap-2"
+                      >
+                        <Users className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>إدارة المستخدمين والألقاب والصلاحيات</span>
+                      </button>
+                    )}
+
+                    {hasPerm('viewActivityLog') && (
+                      <button
+                        onClick={() => {
+                          onNavigate('activity_log');
+                          setUserDropdownOpen(false);
+                        }}
+                        className="w-full px-4 py-2 text-right text-xs text-sky-300 hover:bg-sky-500/10 flex items-center gap-2"
+                      >
+                        <Activity className="w-3.5 h-3.5 text-sky-400" />
+                        <span>سجل النشاط والعمليات</span>
+                      </button>
+                    )}
+
+                    {hasPerm('manageSiteSettings') && (
+                      <button
+                        onClick={() => {
+                          onNavigate('site_settings');
+                          setUserDropdownOpen(false);
+                        }}
+                        className="w-full px-4 py-2 text-right text-xs text-slate-300 hover:bg-slate-800 flex items-center gap-2"
+                      >
+                        <SettingsIcon className="w-3.5 h-3.5 text-slate-400" />
+                        <span>إعدادات ومعلومات المدرسة</span>
+                      </button>
+                    )}
 
                     <div className="border-t border-slate-800 my-1" />
 
@@ -294,7 +332,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
         </div>
 
-        {/* Mobile Search Bar in Dropdown */}
+        {/* Mobile Search Bar in Header */}
         <div className="md:hidden pb-3 pt-1">
           <div className="flex items-center bg-slate-800/90 border border-slate-700 rounded-xl px-3 py-1.5">
             <Search className="w-4 h-4 text-slate-400 ml-2" />
@@ -338,19 +376,6 @@ export const Navbar: React.FC<NavbarProps> = ({
               </button>
             );
           })}
-
-          {canPublish && onOpenNewPostModal && (
-            <button
-              onClick={() => {
-                onOpenNewPostModal();
-                setMobileMenuOpen(false);
-              }}
-              className="w-full mt-2 px-3.5 py-2.5 bg-emerald-700 hover:bg-emerald-600 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2"
-            >
-              <PlusCircle className="w-4 h-4" />
-              <span>إضافة محتوى جديد</span>
-            </button>
-          )}
         </div>
       )}
     </header>

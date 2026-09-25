@@ -1,92 +1,213 @@
-export type UserRole = 'owner' | 'admin' | 'teacher' | 'editor' | 'user';
+// 1. Roles definition (7 exact school roles)
+export type SchoolRole =
+  | 'owner'
+  | 'director'
+  | 'supervisor'
+  | 'administrator'
+  | 'counselor'
+  | 'teacher'
+  | 'student';
 
-export type UserStatus = 'active' | 'suspended';
+export type UserStatus = 'active' | 'disabled';
 
-export interface UserPermissions {
-  canPublishNews: boolean;
-  canManageEvents: boolean;
-  canUploadPhotos: boolean;
-  canPostTodaySummary: boolean;
-  canManageAnnouncements: boolean;
-  requiresReview: boolean; // if true, posts go to 'pending_review' instead of 'published'
+// 2. Granular Permissions
+export type PermissionKey =
+  | 'viewAnnouncements'
+  | 'createAnnouncements'
+  | 'editAnnouncements'
+  | 'deleteAnnouncements'
+  | 'viewPosts'
+  | 'createPosts'
+  | 'editPosts'
+  | 'deletePosts'
+  | 'viewEvents'
+  | 'createEvents'
+  | 'editEvents'
+  | 'deleteEvents'
+  | 'viewAchievements'
+  | 'createAchievements'
+  | 'editAchievements'
+  | 'deleteAchievements'
+  | 'viewPhotos'
+  | 'createPhotos'
+  | 'editPhotos'
+  | 'deletePhotos'
+  | 'viewAlbums'
+  | 'createAlbums'
+  | 'editAlbums'
+  | 'deleteAlbums'
+  | 'viewDailyMessage'
+  | 'createDailyMessage'
+  | 'editDailyMessage'
+  | 'manageUsers'
+  | 'changeRoles'
+  | 'managePermissions'
+  | 'viewActivityLog'
+  | 'manageSiteSettings';
+
+// 3. Temporary Permissions
+export interface TemporaryPermission {
+  permission: PermissionKey;
+  startDate: string; // YYYY-MM-DD
+  endDate: string; // YYYY-MM-DD
 }
 
+// 4. User Profile
 export interface UserProfile {
-  id: string; // Firebase Auth UID
+  id: string; // Supabase Auth User ID
+  name: string;
   email: string;
-  displayName: string;
   photoURL?: string;
-  phoneNumber?: string;
-  role: UserRole;
+  school_role: SchoolRole;
+  customPermissions?: PermissionKey[];
+  temporaryPermissions?: TemporaryPermission[];
   status: UserStatus;
-  permissions: UserPermissions;
   createdAt: string;
+  updatedAt?: string;
   lastLoginAt?: string;
 }
 
-export type PostType = 'news' | 'today_summary' | 'announcement' | 'achievement';
-export type PostStatus = 'published' | 'draft' | 'pending_review';
+// 5. Announcements (الإعلانات)
+export interface Announcement {
+  id: string;
+  title: string;
+  content: string;
+  date: string; // YYYY-MM-DD
+  image?: string;
+  isImportant?: boolean;
+  authorId: string;
+  authorName: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+// 6. News & Posts (الأخبار والمنشورات)
+export type PostType = 'news' | 'today_summary';
+export type PostStatus = 'published' | 'draft';
 
 export interface Post {
   id: string;
   title: string;
   content: string;
+  date: string; // YYYY-MM-DD
   category: string;
   type: PostType;
   images: string[];
   authorId: string;
   authorName: string;
-  authorRole: UserRole;
+  authorRole: SchoolRole;
   authorEmail?: string;
   status: PostStatus;
-  isPinned: boolean;
-  likesCount: number;
-  likedBy: string[];
+  isPinned?: boolean;
+  likesCount?: number;
+  likedBy?: string[];
   createdAt: string;
   updatedAt?: string;
 }
 
+// 7. Events (الفعاليات)
 export type EventStatus = 'upcoming' | 'completed' | 'cancelled';
 
 export interface SchoolEvent {
   id: string;
   title: string;
-  date: string; // YYYY-MM-DD
-  time?: string; // e.g. "09:00 ص"
-  location: string;
   description: string;
+  date: string; // YYYY-MM-DD
+  time?: string;
+  location?: string;
   image?: string;
+  additionalInfo?: string;
   status: EventStatus;
-  category: string;
+  category?: string;
   authorId: string;
   authorName: string;
   createdAt: string;
+  updatedAt?: string;
 }
 
-export interface GalleryPhoto {
+// 8. Achievements (الإنجازات)
+export interface Achievement {
   id: string;
   title: string;
-  album: string;
-  imageUrl: string;
-  description?: string;
+  description: string;
+  date: string; // YYYY-MM-DD
+  image?: string;
+  category?: string;
   authorId: string;
   authorName: string;
   createdAt: string;
+  updatedAt?: string;
 }
+
+// 9. Photos (الصور)
+export interface SchoolPhoto {
+  id: string;
+  title?: string;
+  description?: string;
+  imageUrl: string;
+  albumId?: string;
+  albumName?: string;
+  date: string; // YYYY-MM-DD
+  authorId: string;
+  authorName: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+// 10. Albums (الألبومات)
+export interface SchoolAlbum {
+  id: string;
+  name: string;
+  description?: string;
+  coverImage: string;
+  photoUrls?: string[];
+  photosCount?: number;
+  date: string; // YYYY-MM-DD
+  authorId: string;
+  authorName: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+// 11. Daily Message (الرسالة اليومية)
+export interface DailyMessage {
+  id: string;
+  content: string;
+  date: string; // YYYY-MM-DD
+  authorName: string;
+  authorId: string;
+  createdAt: string;
+  updatedAt?: string;
+  isActive?: boolean;
+}
+
+// 12. Activity Log (سجل النشاط)
+export type ActivityAction =
+  | 'LOGIN'
+  | 'LOGOUT'
+  | 'CREATE'
+  | 'UPDATE'
+  | 'DELETE'
+  | 'UPDATE_ROLE'
+  | 'UPDATE_PERMISSIONS'
+  | 'SETTINGS_UPDATE';
 
 export interface ActivityLog {
   id: string;
-  action: string;
-  details: string;
-  userId: string;
-  userName: string;
-  userEmail: string;
-  targetId?: string;
-  targetType?: string;
+  actorId: string;
+  actorName: string;
+  actorEmail: string;
+  action: ActivityAction;
+  entity: string; // 'users', 'announcements', 'posts', 'events', 'achievements', 'photos', 'albums', 'dailyMessages', 'siteSettings'
+  entityId: string;
+  oldValue?: string;
+  newValue?: string;
+  details?: string;
   timestamp: string;
 }
 
-export interface SchoolSettings {
+// 13. Site Settings (إعدادات الموقع)
+export interface SiteSettings {
   schoolName: string;
   motto: string;
   aboutText: string;
@@ -94,19 +215,21 @@ export interface SchoolSettings {
   email: string;
   address: string;
   principalName: string;
-  enableModerationWorkflow: boolean;
   updatedAt?: string;
 }
 
+// Navigation Page Views
 export type PageView =
   | 'home'
+  | 'announcements'
   | 'news'
   | 'today'
   | 'events'
-  | 'gallery'
-  | 'announcements'
   | 'achievements'
-  | 'about'
-  | 'contact'
-  | 'profile'
-  | 'admin_dashboard';
+  | 'gallery'
+  | 'daily_message'
+  | 'admin_dashboard'
+  | 'users_management'
+  | 'activity_log'
+  | 'site_settings'
+  | 'profile';
