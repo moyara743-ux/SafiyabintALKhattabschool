@@ -272,8 +272,8 @@ function AppContent() {
         onOpenNewPostModal={() => handleOpenCreatePost('news')}
       />
 
-      {/* Main Content Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-6 sm:pt-8">
+      {/* Main Content Area with generous responsive padding */}
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 xl:px-10 pt-6 sm:pt-8 lg:pt-10 pb-16">
         {/* Global Search Results Alert if active */}
         {searchQuery.trim() && (
           <div className="mb-6 p-4 bg-emerald-950/60 border border-emerald-500/40 rounded-2xl flex items-center justify-between">
