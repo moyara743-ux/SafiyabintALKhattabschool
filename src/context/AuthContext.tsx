@@ -44,116 +44,179 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Helper to fetch user profile strictly from Supabase users table
+  // Create instant fallback profile from auth user metadata to avoid blocking on DB queries
+  const createFallbackProfile = (authUser: { id: string; email?: string; user_metadata?: any }): UserProfile => {
+    const isOwnerEmail = authUser.email?.toLowerCase() === OWNER_EMAIL.toLowerCase();
+    const initialRole: SchoolRole = isOwnerEmail ? 'owner' : 'student';
+    const initialName =
+      authUser.user_metadata?.name ||
+      (isOwnerEmail ? 'مالك النظام' : authUser.email?.split('@')[0] || 'مستخدم');
+
+    return {
+      id: authUser.id,
+      name: initialName,
+      email: authUser.email || '',
+      photoURL: authUser.user_metadata?.avatar_url || undefined,
+      school_role: initialRole,
+      customPermissions: [],
+      temporaryPermissions: [],
+      status: 'active',
+      createdAt: new Date().toISOString(),
+      lastLoginAt: new Date().toISOString(),
+    };
+  };
+
+  // Helper to fetch user profile strictly from Supabase users table with safe fallback
   const fetchUserProfileFromDB = async (authUser: { id: string; email?: string; user_metadata?: any }): Promise<UserProfile> => {
     const isOwnerEmail = authUser.email?.toLowerCase() === OWNER_EMAIL.toLowerCase();
 
-    // Query Supabase users table
-    const { data: dbUser, error } = await supabase
-      .from('users')
-      .select('*')
-      .eq('id', authUser.id)
-      .maybeSingle();
+    try {
+      // Query Supabase users table with 3s timeout
+      const queryPromise = supabase
+        .from('users')
+        .select('*')
+        .eq('id', authUser.id)
+        .maybeSingle();
+      const timeoutPromise = new Promise<{ data: null; error: Error }>((resolve) =>
+        setTimeout(() => resolve({ data: null, error: new Error('User DB query timed out') }), 3000)
+      );
 
-    if (error) {
-      console.warn('Error fetching user from Supabase users table:', error.message);
-    }
+      const { data: dbUser, error } = (await Promise.race([queryPromise, timeoutPromise])) as any;
 
-    if (dbUser) {
-      let currentSchoolRole: SchoolRole = (dbUser.school_role as SchoolRole) || 'student';
-
-      // Ensure Owner role is protected and locked to Owner email
-      if (isOwnerEmail && currentSchoolRole !== 'owner') {
-        currentSchoolRole = 'owner';
-        await supabase
-          .from('users')
-          .update({
-            school_role: 'owner',
-            status: 'active',
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', authUser.id);
+      if (error) {
+        console.warn('[AuthContext] Notice fetching user from Supabase users table:', error.message);
       }
 
-      const userProfile: UserProfile = {
-        id: authUser.id,
-        name: dbUser.name || (isOwnerEmail ? 'مالك النظام' : authUser.user_metadata?.name || authUser.email?.split('@')[0] || 'مستخدم'),
-        email: dbUser.email || authUser.email || '',
-        photoURL: authUser.user_metadata?.avatar_url || undefined,
-        school_role: currentSchoolRole,
-        customPermissions: dbUser.custom_permissions || [],
-        temporaryPermissions: [],
-        status: dbUser.status === 'disabled' ? 'disabled' : 'active',
-        createdAt: dbUser.created_at || new Date().toISOString(),
-        updatedAt: dbUser.updated_at || undefined,
-        lastLoginAt: new Date().toISOString(),
-      };
+      if (dbUser) {
+        let currentSchoolRole: SchoolRole = (dbUser.school_role as SchoolRole) || 'student';
 
-      return userProfile;
-    } else {
-      // First-time user profile creation in DB if row doesn't exist
-      const initialRole: SchoolRole = isOwnerEmail ? 'owner' : 'student';
-      const initialName =
-        authUser.user_metadata?.name ||
-        (isOwnerEmail ? 'مالك النظام' : authUser.email?.split('@')[0] || 'مستخدم');
+        // Ensure Owner role is protected and locked to Owner email
+        if (isOwnerEmail && currentSchoolRole !== 'owner') {
+          currentSchoolRole = 'owner';
+          supabase
+            .from('users')
+            .update({
+              school_role: 'owner',
+              status: 'active',
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', authUser.id)
+            .then(
+              () => {},
+              () => {}
+            );
+        }
 
-      const newRow = {
-        id: authUser.id,
-        name: initialName,
-        email: authUser.email || '',
-        school_role: initialRole,
-        status: 'active',
-      };
+        const userProfile: UserProfile = {
+          id: authUser.id,
+          name: dbUser.name || (isOwnerEmail ? 'مالك النظام' : authUser.user_metadata?.name || authUser.email?.split('@')[0] || 'مستخدم'),
+          email: dbUser.email || authUser.email || '',
+          photoURL: authUser.user_metadata?.avatar_url || undefined,
+          school_role: currentSchoolRole,
+          customPermissions: dbUser.custom_permissions || [],
+          temporaryPermissions: [],
+          status: dbUser.status === 'disabled' ? 'disabled' : 'active',
+          createdAt: dbUser.created_at || new Date().toISOString(),
+          updatedAt: dbUser.updated_at || undefined,
+          lastLoginAt: new Date().toISOString(),
+        };
 
-      const { error: insertErr } = await supabase.from('users').insert([newRow]);
-      if (insertErr) {
-        console.warn('Could not insert user profile in Supabase table:', insertErr.message);
+        return userProfile;
       }
-
-      const newProfile: UserProfile = {
-        id: authUser.id,
-        name: initialName,
-        email: authUser.email || '',
-        school_role: initialRole,
-        customPermissions: [],
-        temporaryPermissions: [],
-        status: 'active',
-        createdAt: new Date().toISOString(),
-        lastLoginAt: new Date().toISOString(),
-      };
-
-      return newProfile;
+    } catch (err) {
+      console.warn('[AuthContext] Exception in fetchUserProfileFromDB:', err);
     }
+
+    // Return instant fallback profile if row does not exist or query timed out
+    return createFallbackProfile(authUser);
   };
 
   useEffect(() => {
-    // 1. Check initial active session
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (session?.user) {
-        const u: AppUser = {
-          id: session.user.id,
-          uid: session.user.id,
-          email: session.user.email,
-          displayName: session.user.user_metadata?.name,
-          user_metadata: session.user.user_metadata,
-        };
-        setUser(u);
-        try {
-          const prof = await fetchUserProfileFromDB(session.user);
-          setProfile(prof);
-        } catch (err) {
-          console.error('Error fetching profile on session init:', err);
-        }
-      } else {
-        setUser(null);
-        setProfile(null);
+    let isMounted = true;
+    let authTimeoutId: any = null;
+
+    const stopLoading = () => {
+      if (isMounted) {
+        setLoading(false);
       }
-      setLoading(false);
-    });
+    };
+
+    // 1. HARD TIMEOUT: Maximum 5 seconds for session verification.
+    // If Supabase does not respond within 5s (due to network delay, cold start, or iframe sandbox restrictions),
+    // immediately stop loading and proceed so the user is NEVER trapped on the loading screen!
+    authTimeoutId = setTimeout(() => {
+      console.warn('[AuthContext] Auth session check reached 5s timeout. Releasing loading state.');
+      stopLoading();
+    }, 5000);
+
+    const initializeAuth = async () => {
+      try {
+        console.log('[AuthContext] Checking Supabase session...');
+        // Wrap getSession in a promise race with 4.5s internal limit
+        const sessionPromise = supabase.auth.getSession();
+        const timeoutPromise = new Promise<{ data: { session: null }; error: Error }>((resolve) =>
+          setTimeout(() => resolve({ data: { session: null }, error: new Error('getSession timed out') }), 4500)
+        );
+
+        const { data, error } = (await Promise.race([sessionPromise, timeoutPromise])) as any;
+
+        if (error) {
+          console.warn('[AuthContext] getSession result:', error.message);
+        }
+
+        const session = data?.session;
+        if (session?.user && isMounted) {
+          const u: AppUser = {
+            id: session.user.id,
+            uid: session.user.id,
+            email: session.user.email,
+            displayName: session.user.user_metadata?.name,
+            user_metadata: session.user.user_metadata,
+          };
+          setUser(u);
+
+          // Set fallback profile immediately so UI can render right away
+          const fallbackProf = createFallbackProfile(session.user);
+          setProfile(fallbackProf);
+
+          // Try to enrich from database in background without blocking
+          fetchUserProfileFromDB(session.user)
+            .then((prof) => {
+              if (isMounted && prof) {
+                setProfile(prof);
+              }
+            })
+            .catch((e) => {
+              console.warn('[AuthContext] Error enriching profile from DB:', e);
+            });
+        } else if (isMounted) {
+          setUser(null);
+          setProfile(null);
+        }
+      } catch (err) {
+        console.error('[AuthContext] Unexpected error checking session:', err);
+        if (isMounted) {
+          setUser(null);
+          setProfile(null);
+        }
+      } finally {
+        // GUARANTEED: loading becomes false in all circumstances
+        if (authTimeoutId) {
+          clearTimeout(authTimeoutId);
+        }
+        stopLoading();
+      }
+    };
+
+    initializeAuth();
 
     // 2. Listen to Supabase Auth state changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
+    let subscription: any = null;
+    try {
+      const { data } = supabase.auth.onAuthStateChange(async (event, session) => {
+        console.log('[AuthContext] onAuthStateChange event:', event);
+        if (!isMounted) return;
+
         if (session?.user) {
           const u: AppUser = {
             id: session.user.id,
@@ -163,22 +226,35 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             user_metadata: session.user.user_metadata,
           };
           setUser(u);
-          try {
-            const prof = await fetchUserProfileFromDB(session.user);
-            setProfile(prof);
-          } catch (err) {
-            console.error('Error fetching profile on auth change:', err);
-          }
+
+          // Use fallback profile immediately, then update from DB
+          setProfile((prev) => prev || createFallbackProfile(session.user));
+
+          fetchUserProfileFromDB(session.user)
+            .then((prof) => {
+              if (isMounted && prof) {
+                setProfile(prof);
+              }
+            })
+            .catch((e) => {
+              console.warn('[AuthContext] Profile update notice:', e);
+            });
         } else {
           setUser(null);
           setProfile(null);
         }
-        setLoading(false);
-      }
-    );
+        stopLoading();
+      });
+      subscription = data?.subscription;
+    } catch (listenerErr) {
+      console.warn('[AuthContext] Error attaching onAuthStateChange listener:', listenerErr);
+      stopLoading();
+    }
 
     return () => {
-      subscription?.unsubscribe();
+      isMounted = false;
+      if (authTimeoutId) clearTimeout(authTimeoutId);
+      subscription?.unsubscribe?.();
     };
   }, []);
 

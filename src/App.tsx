@@ -95,6 +95,22 @@ function AppContent() {
   const [dailyMessageToEdit, setDailyMessageToEdit] = useState<DailyMessage | null>(null);
 
   const [selectedPostForDetails, setSelectedPostForDetails] = useState<Post | null>(null);
+  const [showSkipButton, setShowSkipButton] = useState(false);
+  const [bypassAuthLoading, setBypassAuthLoading] = useState(false);
+
+  // Safety timer on authLoading screen
+  useEffect(() => {
+    if (authLoading) {
+      const skipTimer = setTimeout(() => setShowSkipButton(true), 2500);
+      const autoReleaseTimer = setTimeout(() => setBypassAuthLoading(true), 6000);
+      return () => {
+        clearTimeout(skipTimer);
+        clearTimeout(autoReleaseTimer);
+      };
+    } else {
+      setShowSkipButton(false);
+    }
+  }, [authLoading]);
 
   // Data Synchronizers
   useEffect(() => {
@@ -210,8 +226,8 @@ function AppContent() {
   // Active daily message
   const activeDailyMessage = dailyMessages.find((m) => m.isActive) || dailyMessages[0] || null;
 
-  // Session check loading screen
-  if (authLoading) {
+  // Session check loading screen with timeout and skip button
+  if (authLoading && !bypassAuthLoading) {
     return (
       <div
         className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4 text-white"
@@ -222,6 +238,16 @@ function AppContent() {
         </div>
         <h2 className="text-base font-extrabold text-white">مدرسة صفية بنت عمر الابتدائية</h2>
         <p className="text-xs text-slate-400 mt-1">جارٍ التحقق من جلسة الدخول...</p>
+
+        {showSkipButton && (
+          <button
+            type="button"
+            onClick={() => setBypassAuthLoading(true)}
+            className="mt-6 px-4 py-2 bg-slate-900 hover:bg-slate-800 border border-slate-700 hover:border-emerald-500/50 text-xs font-bold text-slate-300 hover:text-white rounded-xl transition-all shadow-md cursor-pointer animate-in fade-in duration-300"
+          >
+            المتابعة إلى صفحة الدخول ←
+          </button>
+        )}
       </div>
     );
   }

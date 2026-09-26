@@ -107,6 +107,19 @@ class LocalDataStore {
             isActive: true,
           },
         ]) as unknown as T;
+      case 'announcements':
+        return this.getStorage<Announcement[]>('announcements', [
+          {
+            id: 'ann_initial',
+            title: 'إعلان تجريبي',
+            content: 'هذا أول إعلان حقيقي بموقع مدرسة صفية بنت عمر.',
+            date: new Date().toISOString().split('T')[0],
+            isImportant: true,
+            authorId: 'system',
+            authorName: 'إدارة المدرسة',
+            createdAt: new Date().toISOString(),
+          },
+        ]) as unknown as T;
       case 'settings':
         return this.getStorage<SiteSettings>('settings', DEFAULT_SETTINGS) as unknown as T;
       default:
@@ -171,10 +184,15 @@ class LocalDataStore {
   // Announcements (Integrated with Supabase announcements table)
   public async getAnnouncements(): Promise<Announcement[]> {
     try {
-      const { data, error } = await supabase
+      const fetchPromise = supabase
         .from('announcements')
         .select('*')
         .order('created_at', { ascending: false });
+      const timeoutPromise = new Promise<{ data: null; error: Error }>((resolve) =>
+        setTimeout(() => resolve({ data: null, error: new Error('announcements query timeout') }), 3000)
+      );
+
+      const { data, error } = (await Promise.race([fetchPromise, timeoutPromise])) as any;
 
       if (!error && data && data.length > 0) {
         const mapped: Announcement[] = data.map((d: any) => ({
