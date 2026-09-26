@@ -182,6 +182,7 @@ class LocalDataStore {
           title: d.title,
           content: d.content,
           date: d.created_at ? d.created_at.split('T')[0] : new Date().toISOString().split('T')[0],
+          image: d.image_url || undefined,
           isImportant: true,
           authorId: d.owner_id || 'system',
           authorName: 'إدارة المدرسة',
@@ -224,7 +225,7 @@ class LocalDataStore {
           {
             title: ann.title,
             content: ann.content,
-            image_url: null,
+            image_url: ann.image || null,
             owner_id: ann.authorId || null,
           },
         ])
@@ -250,13 +251,18 @@ class LocalDataStore {
 
   public async updateAnnouncement(id: string, updates: Partial<Announcement>): Promise<void> {
     try {
+      const payload: any = {
+        title: updates.title,
+        content: updates.content,
+        updated_at: new Date().toISOString(),
+      };
+      if (updates.image !== undefined) {
+        payload.image_url = updates.image || null;
+      }
+
       await supabase
         .from('announcements')
-        .update({
-          title: updates.title,
-          content: updates.content,
-          updated_at: new Date().toISOString(),
-        })
+        .update(payload)
         .eq('id', id);
     } catch (e) {
       console.warn('Supabase announcement update failed:', e);
