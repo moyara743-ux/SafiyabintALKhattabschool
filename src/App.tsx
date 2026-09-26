@@ -273,17 +273,17 @@ function AppContent() {
       />
 
       {/* Main Content Area with generous responsive padding */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 xl:px-10 pt-6 sm:pt-8 lg:pt-10 pb-16">
+      <main className="flex-1 max-w-7xl 2xl:max-w-[1400px] w-full mx-auto px-4 sm:px-6 lg:px-8 xl:px-10 pt-6 sm:pt-8 lg:pt-10 pb-16">
         {/* Global Search Results Alert if active */}
         {searchQuery.trim() && (
-          <div className="mb-6 p-4 bg-emerald-950/60 border border-emerald-500/40 rounded-2xl flex items-center justify-between">
-            <span className="text-xs font-bold text-emerald-300">
+          <div className="mb-6 p-4 sm:p-5 bg-emerald-950/60 border border-emerald-500/40 rounded-2xl flex items-center justify-between">
+            <span className="text-xs sm:text-sm lg:text-base font-bold text-emerald-300">
               نتائج البحث عن:{' '}
               <span className="underline font-black text-white">"{searchQuery}"</span>
             </span>
             <button
               onClick={() => setSearchQuery('')}
-              className="text-xs text-emerald-400 hover:text-white font-bold"
+              className="text-xs sm:text-sm lg:text-base text-emerald-400 hover:text-white font-bold"
             >
               مسح البحث
             </button>

@@ -82,11 +82,11 @@ export const Navbar: React.FC<NavbarProps> = ({
   return (
     <header className="sticky top-0 z-40 bg-slate-900/95 backdrop-blur-md text-white border-b border-slate-800 shadow-xl" dir="rtl">
       {/* 1. Top Identity & Motto Banner */}
-      <div className="bg-gradient-to-r from-emerald-950 via-teal-900 to-emerald-900 border-b border-emerald-800/40 text-[11px] sm:text-xs py-2.5 px-4 sm:px-6 lg:px-8 xl:px-10 text-emerald-200">
+      <div className="bg-gradient-to-r from-emerald-950 via-teal-900 to-emerald-900 border-b border-emerald-800/40 text-[11px] sm:text-xs lg:text-sm py-2 sm:py-2.5 px-4 sm:px-6 lg:px-8 xl:px-10 text-emerald-200">
         <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
-          {/* Official Tagline (without duplicate school name to prevent vertical collision) */}
+          {/* Official Tagline */}
           <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
-            <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-400 shrink-0 animate-pulse" />
+            <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4 lg:w-4.5 lg:h-4.5 text-amber-400 shrink-0 animate-pulse" />
             <span className="font-bold text-emerald-100 truncate">المنصة المدرسية الرسمية المعتمدة</span>
             <span className="text-emerald-400/50 hidden md:inline">|</span>
             <span className="text-emerald-300/80 hidden md:inline italic">"نصنع المعرفة... ونوثق الإنجاز"</span>
@@ -95,41 +95,41 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* User Role Badge & Status */}
           <div className="flex items-center gap-3 shrink-0">
             {profile && (
-              <span className={`px-2.5 py-0.5 text-[11px] font-bold rounded-lg border ${getRoleBadgeStyle(profile.school_role)}`}>
+              <span className={`px-2.5 py-0.5 sm:px-3 sm:py-1 text-[11px] sm:text-xs lg:text-sm font-bold rounded-lg border ${getRoleBadgeStyle(profile.school_role)}`}>
                 {roleLabel}
               </span>
             )}
-            <span className="text-emerald-300/70 text-[10px] sm:text-[11px] hidden sm:inline">
+            <span className="text-emerald-300/70 text-[10px] sm:text-[11px] lg:text-xs hidden sm:inline">
               بوابة إلكترونية موحدة
             </span>
           </div>
         </div>
       </div>
 
-      {/* 2. Main Navigation Bar with Generous Spacing and Margins */}
+      {/* 2. Main Navigation Bar with Responsive Spacing and Sizing */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 xl:px-10">
-        <div className="flex items-center justify-between min-h-[4.75rem] sm:min-h-[5.25rem] py-3 sm:py-3.5 gap-4 lg:gap-6">
+        <div className="flex items-center justify-between min-h-[4.5rem] sm:min-h-[5rem] lg:min-h-[5.75rem] py-2.5 sm:py-3 lg:py-3.5 gap-4 lg:gap-6">
           
-          {/* Logo & School Name: Clear visual hierarchy, no vertical crowding */}
+          {/* Logo & School Name */}
           <div
             onClick={() => onNavigate('home')}
             className="flex items-center gap-3 sm:gap-4 cursor-pointer group select-none shrink-0"
           >
-            <div className="w-11 h-11 sm:w-12 sm:h-12 lg:w-13 lg:h-13 bg-gradient-to-tr from-emerald-600 to-teal-400 rounded-2xl flex items-center justify-center shadow-lg shadow-emerald-950/50 border border-emerald-400/40 group-hover:scale-105 transition-transform duration-200">
-              <GraduationCap className="w-6 h-6 sm:w-7 sm:h-7 text-white" />
+            <div className="w-11 h-11 sm:w-12 sm:h-12 lg:w-14 lg:h-14 bg-gradient-to-tr from-emerald-600 to-teal-400 rounded-2xl flex items-center justify-center shadow-lg shadow-emerald-950/50 border border-emerald-400/40 group-hover:scale-105 transition-transform duration-200">
+              <GraduationCap className="w-6 h-6 sm:w-7 sm:h-7 lg:w-8 lg:h-8 text-white" />
             </div>
             <div className="flex flex-col justify-center">
-              <h1 className="text-base sm:text-lg lg:text-xl font-extrabold tracking-tight text-white group-hover:text-emerald-300 transition-colors">
+              <h1 className="text-base sm:text-lg lg:text-2xl font-extrabold tracking-tight text-white group-hover:text-emerald-300 transition-colors">
                 مدرسة صفية بنت عمر
               </h1>
-              <p className="text-[11px] sm:text-xs text-slate-400 font-medium mt-0.5">
+              <p className="text-[11px] sm:text-xs lg:text-sm text-slate-400 font-medium mt-0.5">
                 بوابة الإعلام والتوثيق والأنشطة
               </p>
             </div>
           </div>
 
           {/* Desktop Navigation Links (> 1024px) */}
-          <nav className="hidden lg:flex items-center gap-1 xl:gap-1.5">
+          <nav className="hidden lg:flex items-center gap-1 xl:gap-2">
             {navLinks.map((link) => {
               const Icon = link.icon;
               const active = currentView === link.view;
@@ -137,13 +137,13 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <button
                   key={link.view}
                   onClick={() => onNavigate(link.view)}
-                  className={`px-2.5 xl:px-3 py-2 rounded-xl text-xs xl:text-sm font-semibold flex items-center gap-1.5 transition-all duration-150 ${
+                  className={`px-2.5 xl:px-3.5 py-2 lg:py-2.5 rounded-xl text-xs lg:text-sm xl:text-base font-bold flex items-center gap-1.5 xl:gap-2 transition-all duration-150 ${
                     active
                       ? 'bg-emerald-800/80 text-emerald-200 border border-emerald-600/40 shadow-inner'
                       : 'text-slate-300 hover:text-white hover:bg-slate-800/70'
                   }`}
                 >
-                  <Icon className={`w-3.5 h-3.5 ${active ? 'text-amber-400' : 'text-slate-400'}`} />
+                  <Icon className={`w-4 h-4 xl:w-4.5 xl:h-4.5 ${active ? 'text-amber-400' : 'text-slate-400'}`} />
                   <span>{link.label}</span>
                 </button>
               );
@@ -154,14 +154,14 @@ export const Navbar: React.FC<NavbarProps> = ({
           <div className="flex items-center gap-2.5 sm:gap-3.5 lg:gap-4 shrink-0">
             {/* Quick Search on Desktop / Tablet */}
             <div className="relative hidden md:block">
-              <div className="flex items-center bg-slate-800/90 border border-slate-700/80 rounded-xl px-3.5 py-1.5 focus-within:ring-2 focus-within:ring-emerald-500 focus-within:border-transparent transition-all">
+              <div className="flex items-center bg-slate-800/90 border border-slate-700/80 rounded-xl px-3.5 lg:px-4 py-1.5 lg:py-2 focus-within:ring-2 focus-within:ring-emerald-500 focus-within:border-transparent transition-all">
                 <Search className="w-4 h-4 text-slate-400 ml-2 shrink-0" />
                 <input
                   type="text"
                   placeholder="ابحث في الأخبار والفعاليات..."
                   value={searchQuery}
                   onChange={(e) => onSearchChange(e.target.value)}
-                  className="bg-transparent text-xs text-white placeholder:text-slate-500 focus:outline-none w-32 xl:w-48"
+                  className="bg-transparent text-xs lg:text-sm text-white placeholder:text-slate-500 focus:outline-none w-32 lg:w-44 xl:w-56"
                 />
                 {searchQuery && (
                   <button
@@ -178,13 +178,13 @@ export const Navbar: React.FC<NavbarProps> = ({
             {canAccessAdmin && (
               <button
                 onClick={() => onNavigate('admin_dashboard')}
-                className={`hidden sm:flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all border ${
+                className={`hidden sm:flex items-center gap-2 px-3.5 py-2 lg:px-4 lg:py-2.5 rounded-xl text-xs lg:text-sm font-bold transition-all border ${
                   currentView === 'admin_dashboard'
                     ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-lg shadow-amber-500/20'
                     : 'bg-amber-500/15 text-amber-300 border-amber-500/40 hover:bg-amber-500/25'
                 }`}
               >
-                <Shield className="w-4 h-4 text-amber-400" />
+                <Shield className="w-4 h-4 lg:w-4.5 lg:h-4.5 text-amber-400" />
                 <span>لوحة الإدارة</span>
               </button>
             )}
@@ -194,21 +194,21 @@ export const Navbar: React.FC<NavbarProps> = ({
               <div className="relative">
                 <button
                   onClick={() => setUserDropdownOpen(!userDropdownOpen)}
-                  className="flex items-center gap-2.5 p-1.5 sm:px-3.5 sm:py-2 rounded-xl bg-slate-800 hover:bg-slate-700/90 border border-slate-700 transition-all shadow-sm"
+                  className="flex items-center gap-2.5 p-1.5 sm:px-3.5 sm:py-2 lg:px-4 lg:py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700/90 border border-slate-700 transition-all shadow-sm"
                   aria-label="قائمة المستخدم"
                 >
-                  <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-emerald-700 flex items-center justify-center text-white font-bold text-xs shadow-inner shrink-0">
+                  <div className="w-7 h-7 sm:w-8 sm:h-8 lg:w-10 lg:h-10 rounded-lg lg:rounded-xl bg-emerald-700 flex items-center justify-center text-white font-bold text-xs sm:text-sm lg:text-base shadow-inner shrink-0">
                     {profile?.name?.[0] || user.email?.[0]?.toUpperCase() || 'U'}
                   </div>
                   <div className="hidden sm:flex flex-col text-right">
-                    <span className="text-xs font-bold text-white max-w-[110px] truncate leading-tight">
+                    <span className="text-xs sm:text-sm lg:text-base font-bold text-white max-w-[110px] lg:max-w-[140px] truncate leading-tight">
                       {profile?.name || user.email?.split('@')[0]}
                     </span>
-                    <span className="text-[10px] text-amber-300 font-medium leading-tight mt-0.5">
+                    <span className="text-[10px] sm:text-xs lg:text-sm text-amber-300 font-medium leading-tight mt-0.5">
                       {roleLabel}
                     </span>
                   </div>
-                  <ChevronDown className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                  <ChevronDown className="w-3.5 h-3.5 lg:w-4 lg:h-4 text-slate-400 shrink-0" />
                 </button>
 
                 {/* Dropdown Menu with Generous Spacing */}
