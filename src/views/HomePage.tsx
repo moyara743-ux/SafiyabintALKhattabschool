@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   Post,
   SchoolEvent,
@@ -33,6 +33,8 @@ import {
   CheckCircle2,
   Bell,
   ChevronLeft,
+  ChevronDown,
+  X,
   Users,
   Laptop,
   HeartHandshake,
@@ -140,39 +142,110 @@ export const HomePage: React.FC<HomePageProps> = ({
     },
   ];
 
+  // Official Education Platforms
+  const [platformsDropdownOpen, setPlatformsDropdownOpen] = useState(false);
+  const [showPlatformsModal, setShowPlatformsModal] = useState(false);
+  const platformsDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown on click outside or Escape
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        platformsDropdownRef.current &&
+        !platformsDropdownRef.current.contains(event.target as Node)
+      ) {
+        setPlatformsDropdownOpen(false);
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setPlatformsDropdownOpen(false);
+        setShowPlatformsModal(false);
+      }
+    };
+
+    if (platformsDropdownOpen || showPlatformsModal) {
+      document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener('keydown', handleKeyDown);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [platformsDropdownOpen, showPlatformsModal]);
+
+  const officialPlatforms = [
+    {
+      name: 'نظام نور',
+      shortName: 'نور',
+      url: 'https://noor.moe.gov.sa/',
+      domain: 'noor.moe.gov.sa',
+      description: 'النتائج، تسجيل الطلاب، والتقارير والخدمات المدرسية',
+      color: 'border-blue-500/40 hover:border-blue-400 bg-blue-500/10 hover:bg-blue-500/20 text-blue-300',
+      badgeColor: 'bg-blue-500/20 text-blue-300 border-blue-400/30',
+    },
+    {
+      name: 'منصة مدرستي',
+      shortName: 'مدرستي',
+      url: 'https://schools.madrasati.sa/',
+      domain: 'schools.madrasati.sa',
+      description: 'التعليم الإلكتروني، الفصول الافتراضية، والجداول والواجبات',
+      color: 'border-emerald-500/40 hover:border-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300',
+      badgeColor: 'bg-emerald-500/20 text-emerald-300 border-emerald-400/30',
+    },
+    {
+      name: 'بوابة عين',
+      shortName: 'عين',
+      url: 'https://www.ien.edu.sa/Home/Dashbord',
+      domain: 'ien.edu.sa',
+      description: 'بوابة التعليم الوطنية — المناهج الرقمية والدروس الإثرائية',
+      color: 'border-amber-500/40 hover:border-amber-400 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300',
+      badgeColor: 'bg-amber-500/20 text-amber-300 border-amber-400/30',
+    },
+  ];
+
   // Quick Portals
   const quickPortals = [
     {
+      id: 'student_portal',
       title: 'بوابة الطالبات',
       subtitle: 'الأنشطة والمسابقات وسجل الشرف',
       icon: GraduationCap,
       action: () => onNavigate('achievements'),
       tag: 'إنجازات ومسابقات',
       accent: 'hover:border-emerald-500 hover:bg-emerald-900/30',
+      isDropdown: false,
     },
     {
+      id: 'staff_portal',
       title: 'بوابة المعلمات والإدارة',
       subtitle: 'لوحة التحكم والتوثيق اليومي',
       icon: Laptop,
       action: () => (user ? onNavigate('admin_dashboard') : onOpenAuth()),
       tag: user ? 'لوحة التحكم' : 'تسجيل الدخول',
       accent: 'hover:border-teal-500 hover:bg-teal-900/30',
+      isDropdown: false,
     },
     {
+      id: 'announcements_portal',
       title: 'الإعلانات والتعاميم',
       subtitle: 'التنبيهات المهمة ومواعيد الاختبارات',
       icon: Bell,
       action: () => onNavigate('announcements'),
       tag: 'إعلانات رسمية',
       accent: 'hover:border-rose-500 hover:bg-rose-900/30',
+      isDropdown: false,
     },
     {
+      id: 'official_platforms',
       title: 'المنصات التعليمية الرسمية',
-      subtitle: 'منصة مدرستي، نظام نور، وعين',
+      subtitle: 'نظام نور، منصة مدرستي، وبوابة عين',
       icon: ExternalLink,
-      action: () => window.open('https://schools.madrasati.sa', '_blank'),
+      action: () => setPlatformsDropdownOpen(!platformsDropdownOpen),
       tag: 'خدمات وزارية',
       accent: 'hover:border-blue-500 hover:bg-blue-900/30',
+      isDropdown: true,
     },
   ];
 
@@ -382,9 +455,118 @@ export const HomePage: React.FC<HomePageProps> = ({
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 lg:gap-6">
           {quickPortals.map((portal, idx) => {
             const Icon = portal.icon;
+
+            if (portal.isDropdown) {
+              return (
+                <div key={portal.id || idx} ref={platformsDropdownRef} className="relative">
+                  <div
+                    onClick={portal.action}
+                    className={`bg-slate-900 p-6 lg:p-8 rounded-2xl lg:rounded-3xl border ${
+                      platformsDropdownOpen
+                        ? 'border-blue-500 bg-blue-950/20 shadow-blue-900/20'
+                        : 'border-slate-800'
+                    } shadow-md cursor-pointer transition-all flex flex-col justify-between group min-h-[200px] lg:min-h-[230px] ${portal.accent}`}
+                  >
+                    <div>
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="w-11 h-11 lg:w-13 lg:h-13 rounded-xl lg:rounded-2xl bg-slate-800 text-blue-400 group-hover:bg-blue-600/30 flex items-center justify-center transition-colors">
+                          <Icon className="w-5 h-5 lg:w-6 lg:h-6" />
+                        </div>
+                        <span className="text-[10px] sm:text-xs font-bold text-slate-400 bg-slate-800 px-2.5 py-1 rounded-md group-hover:text-blue-300 transition-colors">
+                          {portal.tag}
+                        </span>
+                      </div>
+
+                      <h3 className="text-base sm:text-lg lg:text-xl font-extrabold text-white group-hover:text-blue-300 transition-colors">
+                        {portal.title}
+                      </h3>
+                      <p className="text-xs sm:text-sm lg:text-base text-slate-400 mt-2 line-clamp-2 leading-relaxed">
+                        {portal.subtitle}
+                      </p>
+                    </div>
+
+                    <div className="mt-5 pt-3.5 border-t border-slate-800 flex items-center justify-between text-xs sm:text-sm lg:text-base text-blue-400 font-bold">
+                      <span>اختيار المنصة (3 منصات)</span>
+                      <ChevronDown
+                        className={`w-4 h-4 lg:w-5 lg:h-5 transition-transform duration-200 ${
+                          platformsDropdownOpen ? 'rotate-180 text-blue-300' : ''
+                        }`}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Dropdown Menu for Official Platforms */}
+                  {platformsDropdownOpen && (
+                    <div
+                      className="absolute top-[calc(100%+8px)] right-0 left-0 z-50 bg-slate-900/98 backdrop-blur-md border border-blue-500/50 rounded-2xl shadow-2xl p-3 space-y-2 animate-in fade-in slide-in-from-top-2"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <div className="flex items-center justify-between px-2 pb-2 border-b border-slate-800">
+                        <div className="flex items-center gap-1.5 text-xs font-bold text-blue-400">
+                          <ExternalLink className="w-3.5 h-3.5" />
+                          <span>منصات وزارة التعليم المعتمدة</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setPlatformsDropdownOpen(false)}
+                          className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
+                          title="إغلاق"
+                          aria-label="إغلاق"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        {officialPlatforms.map((plat) => (
+                          <a
+                            key={plat.name}
+                            href={plat.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={() => setPlatformsDropdownOpen(false)}
+                            className={`flex items-center justify-between p-2.5 rounded-xl border transition-all text-white group/item ${plat.color}`}
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <span className={`px-2 py-1 rounded-lg text-xs font-bold border shrink-0 ${plat.badgeColor}`}>
+                                {plat.shortName}
+                              </span>
+                              <div className="truncate">
+                                <div className="text-xs sm:text-sm font-bold text-white group-hover/item:text-blue-200">
+                                  {plat.name}
+                                </div>
+                                <div className="text-[10px] sm:text-[11px] text-slate-400 font-mono truncate">
+                                  {plat.domain}
+                                </div>
+                              </div>
+                            </div>
+                            <ExternalLink className="w-4 h-4 text-slate-400 group-hover/item:text-white transition-colors shrink-0 mr-1.5" />
+                          </a>
+                        ))}
+                      </div>
+
+                      <div className="pt-2 border-t border-slate-800 flex items-center justify-between text-[11px] text-slate-400 px-1">
+                        <span>تفتح في تبويب جديد</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPlatformsDropdownOpen(false);
+                            setShowPlatformsModal(true);
+                          }}
+                          className="text-blue-400 hover:text-blue-300 font-bold hover:underline cursor-pointer flex items-center gap-1"
+                        >
+                          عرض بالتفصيل
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            }
+
             return (
               <div
-                key={idx}
+                key={portal.id || idx}
                 onClick={portal.action}
                 className={`bg-slate-900 p-6 lg:p-8 rounded-2xl lg:rounded-3xl border border-slate-800 shadow-md cursor-pointer transition-all flex flex-col justify-between group min-h-[200px] lg:min-h-[230px] ${portal.accent}`}
               >
@@ -902,6 +1084,96 @@ export const HomePage: React.FC<HomePageProps> = ({
           </div>
         </div>
       </footer>
+
+      {/* OFFICIAL EDUCATION PLATFORMS MODAL */}
+      {showPlatformsModal && (
+        <div
+          className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in"
+          onClick={() => setShowPlatformsModal(false)}
+          dir="rtl"
+        >
+          <div
+            className="bg-slate-900 border border-slate-700/80 rounded-3xl max-w-lg w-full p-6 sm:p-8 shadow-2xl space-y-6 relative animate-in zoom-in-95"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-start justify-between pb-4 border-b border-slate-800">
+              <div className="flex items-center gap-3.5">
+                <div className="w-12 h-12 rounded-2xl bg-blue-500/20 text-blue-400 border border-blue-500/30 flex items-center justify-center">
+                  <ExternalLink className="w-6 h-6" />
+                </div>
+                <div>
+                  <span className="text-xs font-bold text-blue-400 uppercase tracking-wider block">
+                    وزارة التعليم بالمملكة
+                  </span>
+                  <h3 className="text-lg sm:text-xl font-extrabold text-white">
+                    المنصات التعليمية الرسمية
+                  </h3>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowPlatformsModal(false)}
+                className="text-slate-400 hover:text-white p-2 rounded-xl hover:bg-slate-800 transition-colors cursor-pointer"
+                title="إغلاق"
+                aria-label="إغلاق"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+              روابط البوابات الإلكترونية الرسمية المعتمدة لمنظومة التعليم. اختر المنصة للانتقال المباشر إليها بأمان في تبويب جديد:
+            </p>
+
+            {/* Platforms List */}
+            <div className="space-y-3">
+              {officialPlatforms.map((plat) => (
+                <a
+                  key={plat.name}
+                  href={plat.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-between p-4 rounded-2xl bg-slate-800/70 border border-slate-700 hover:border-blue-500 hover:bg-blue-950/30 transition-all group"
+                >
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-extrabold text-sm sm:text-base text-white group-hover:text-blue-300 transition-colors">
+                        {plat.name}
+                      </span>
+                      <span className="text-[10px] font-mono font-bold text-slate-400 bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
+                        {plat.domain}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-400 leading-relaxed">
+                      {plat.description}
+                    </p>
+                  </div>
+
+                  <div className="mr-3 w-9 h-9 rounded-xl bg-slate-800 group-hover:bg-blue-600 text-slate-400 group-hover:text-white flex items-center justify-center shrink-0 transition-all">
+                    <ExternalLink className="w-4 h-4" />
+                  </div>
+                </a>
+              ))}
+            </div>
+
+            {/* Footer */}
+            <div className="pt-4 border-t border-slate-800 flex items-center justify-between">
+              <span className="text-xs text-slate-400">
+                تفتح جميع الروابط مباشرة في تبويب جديد
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowPlatformsModal(false)}
+                className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer"
+              >
+                إغلاق
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
