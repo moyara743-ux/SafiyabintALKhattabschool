@@ -259,7 +259,7 @@ function AppContent() {
 
   return (
     <div
-      className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col justify-between selection:bg-emerald-500 selection:text-white"
+      className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col justify-between selection:bg-emerald-500 selection:text-white overflow-x-hidden w-full max-w-full"
       dir="rtl"
     >
       {/* Top Navbar */}
@@ -273,7 +273,7 @@ function AppContent() {
       />
 
       {/* Main Content Area with generous responsive padding */}
-      <main className="flex-1 max-w-7xl 2xl:max-w-[1400px] w-full mx-auto px-4 sm:px-6 lg:px-8 xl:px-10 pt-6 sm:pt-8 lg:pt-10 pb-16">
+      <main className="flex-1 max-w-7xl 2xl:max-w-[1400px] w-full mx-auto px-4 sm:px-6 lg:px-8 xl:px-10 pt-6 sm:pt-8 lg:pt-10 pb-16 overflow-x-hidden">
         {/* Global Search Results Alert if active */}
         {searchQuery.trim() && (
           <div className="mb-6 p-4 sm:p-5 bg-emerald-950/60 border border-emerald-500/40 rounded-2xl flex items-center justify-between">
