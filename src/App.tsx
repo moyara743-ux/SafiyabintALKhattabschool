@@ -317,6 +317,7 @@ function AppContent() {
             events={events}
             onOpenNewEventModal={handleOpenAddEvent}
             onEditEvent={handleEditEvent}
+            onDeleteEvent={(id) => setEvents((prev) => prev.filter((e) => e.id !== id))}
           />
         )}
 

@@ -286,11 +286,40 @@ class LocalDataStore {
 
   public async addEvent(event: Omit<SchoolEvent, 'id'>): Promise<SchoolEvent> {
     const list = this.getEvents();
-    const newEvent: SchoolEvent = {
+    let newEvent: SchoolEvent = {
       ...event,
       id: 'event_' + Date.now(),
       createdAt: event.createdAt || new Date().toISOString(),
     };
+
+    try {
+      const { data, error } = await supabase
+        .from('events')
+        .insert([
+          {
+            title: event.title,
+            description: event.description,
+            date: event.date,
+            time: event.time || null,
+            location: event.location || null,
+            image: event.image || null,
+            category: event.category || null,
+            status: event.status || 'upcoming',
+            author_id: event.authorId || null,
+            author_name: event.authorName || null,
+          },
+        ])
+        .select()
+        .single();
+
+      if (!error && data) {
+        newEvent.id = data.id;
+        newEvent.createdAt = data.created_at || newEvent.createdAt;
+      }
+    } catch (e) {
+      console.warn('Supabase event insert notice:', e);
+    }
+
     const updated = [...list, newEvent].sort(
       (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
     );
@@ -299,15 +328,48 @@ class LocalDataStore {
   }
 
   public async updateEvent(id: string, updates: Partial<SchoolEvent>): Promise<void> {
+    try {
+      await supabase
+        .from('events')
+        .update({
+          title: updates.title,
+          description: updates.description,
+          date: updates.date,
+          time: updates.time,
+          location: updates.location,
+          image: updates.image,
+          category: updates.category,
+          status: updates.status,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', id);
+    } catch (e) {
+      console.warn('Supabase event update notice:', e);
+    }
+
     const list = this.getEvents();
     const updated = list.map((e) => (e.id === id ? { ...e, ...updates } : e));
     this.setStorage('events', updated);
   }
 
-  public async deleteEvent(id: string): Promise<void> {
+  public async deleteEvent(id: string): Promise<{ success: boolean; error?: any }> {
+    let supabaseErr: any = null;
+    try {
+      const { error } = await supabase.from('events').delete().eq('id', id);
+      if (error) {
+        supabaseErr = error;
+        console.warn('Supabase event delete notice:', error);
+      }
+    } catch (e) {
+      supabaseErr = e;
+      console.warn('Supabase event delete exception:', e);
+    }
+
     const list = this.getEvents();
     const updated = list.filter((e) => e.id !== id);
     this.setStorage('events', updated);
+
+    return { success: !supabaseErr, error: supabaseErr };
   }
 
   // Achievements

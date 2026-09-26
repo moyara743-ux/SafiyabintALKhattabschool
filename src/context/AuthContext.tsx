@@ -355,6 +355,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [profile]);
 
   const hasPerm = (permission: PermissionKey): boolean => {
+    if (isOwner) return true;
     return checkPermission(profile, permission);
   };
 
