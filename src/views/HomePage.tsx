@@ -199,45 +199,45 @@ export const HomePage: React.FC<HomePageProps> = ({
               </span>
             </div>
 
-            <div className="space-y-3.5 pt-2">
-              <h1 className="text-2xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight leading-tight sm:leading-snug lg:leading-normal text-white">
-                مدرسة صفية بنت عمر <br />
-                <span className="bg-gradient-to-r from-emerald-300 via-teal-200 to-amber-200 bg-clip-text text-transparent">
+            <div className="space-y-2.5 pt-1">
+              <h1 className="text-lg sm:text-xl lg:text-2xl font-extrabold tracking-tight leading-snug text-white">
+                مدرسة صفية بنت عمر
+                <span className="block text-base sm:text-lg lg:text-xl font-bold bg-gradient-to-r from-emerald-300 via-teal-200 to-amber-200 bg-clip-text text-transparent mt-1">
                   نصنع المعرفة... ونوثق الإنجاز
                 </span>
               </h1>
 
-              <p className="text-emerald-100/90 text-sm sm:text-base lg:text-lg leading-relaxed max-w-2xl font-light pt-1">
+              <p className="text-emerald-100/90 text-xs sm:text-sm leading-relaxed max-w-2xl font-normal pt-1">
                 مرحباً بكم في البوابة الرقمية الرسمية لمدرسة صفية بنت عمر. صرح تربوي وتعليمي رائد
                 يجمع بين التميز الأكاديمي، وتنمية المهارات القيادية، ورعاية الموهوبات، وتوثيق يوميات
                 المدرسة أولاً بأول.
               </p>
             </div>
 
-            <div className="flex flex-wrap items-center gap-3.5 pt-3">
+            <div className="flex flex-wrap items-center gap-3 pt-2">
               <button
                 onClick={() => onNavigate('news')}
-                className="px-4.5 sm:px-5 lg:px-6 py-2.5 sm:py-3 lg:py-3.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs sm:text-sm lg:text-base font-bold rounded-xl lg:rounded-2xl shadow-lg transition-transform hover:scale-105 flex items-center gap-2"
+                className="px-4 py-2.5 sm:px-5 sm:py-3 bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs sm:text-sm font-bold rounded-xl shadow-lg transition-transform hover:scale-105 flex items-center gap-2 cursor-pointer"
               >
                 <span>استكشاف الأخبار والأنشطة</span>
-                <ArrowLeft className="w-4 h-4 lg:w-5 lg:h-5" />
+                <ArrowLeft className="w-4 h-4" />
               </button>
 
               <button
                 onClick={() => onNavigate('today')}
-                className="px-4.5 sm:px-5 lg:px-6 py-2.5 sm:py-3 lg:py-3.5 bg-slate-800/80 hover:bg-slate-700 text-white text-xs sm:text-sm lg:text-base font-bold rounded-xl lg:rounded-2xl border border-slate-700 transition-all flex items-center gap-2"
+                className="px-4 py-2.5 sm:px-5 sm:py-3 bg-slate-800/80 hover:bg-slate-700 text-white text-xs sm:text-sm font-bold rounded-xl border border-slate-700 transition-all flex items-center gap-2 cursor-pointer"
               >
-                <Sun className="w-4 h-4 lg:w-5 lg:h-5 text-amber-300" />
+                <Sun className="w-4 h-4 text-amber-300" />
                 <span>ماذا حدث اليوم بالمدرسة؟</span>
               </button>
 
               <button
                 onClick={() => onNavigate('events')}
-                className="px-4 sm:px-5 py-2.5 sm:py-3 text-emerald-200 hover:text-white text-xs sm:text-sm lg:text-base font-bold transition-colors flex items-center gap-1.5"
+                className="px-3.5 py-2 sm:px-4 sm:py-2.5 text-emerald-200 hover:text-white text-xs sm:text-sm font-bold transition-colors flex items-center gap-1.5 cursor-pointer"
               >
-                <Calendar className="w-4 h-4 lg:w-5 lg:h-5 text-emerald-400" />
+                <Calendar className="w-4 h-4 text-emerald-400" />
                 <span>جدول الفعاليات</span>
-                <ChevronLeft className="w-4 h-4 lg:w-5 lg:h-5" />
+                <ChevronLeft className="w-4 h-4" />
               </button>
             </div>
           </div>
