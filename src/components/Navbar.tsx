@@ -85,11 +85,16 @@ export const Navbar: React.FC<NavbarProps> = ({
   // All links for mobile drawer
   const allNavLinks = [...primaryNavLinks, ...secondaryNavLinks];
 
-  const isSecondaryActive = secondaryNavLinks.some((link) => link.view === currentView);
-  const activeSecondaryItem = secondaryNavLinks.find((link) => link.view === currentView);
-
   const canAccessAdmin =
     hasPerm('manageUsers') || isOwner || isDirector || hasPerm('viewActivityLog') || hasPerm('manageSiteSettings');
+
+  const isSecondaryActive =
+    secondaryNavLinks.some((link) => link.view === currentView) ||
+    (canAccessAdmin && currentView === 'admin_dashboard');
+
+  const activeSecondaryItem =
+    secondaryNavLinks.find((link) => link.view === currentView) ||
+    (canAccessAdmin && currentView === 'admin_dashboard' ? { label: 'لوحة الإدارة' } : null);
 
   return (
     <header className="sticky top-0 z-40 bg-slate-900/95 backdrop-blur-md text-white border-b border-slate-800 shadow-xl w-full max-w-full" dir="rtl">
@@ -120,28 +125,28 @@ export const Navbar: React.FC<NavbarProps> = ({
 
       {/* 2. Main Navigation Bar with Responsive Spacing and Sizing */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full">
-        <div className="flex items-center justify-between min-h-[4.25rem] sm:min-h-[4.75rem] lg:min-h-[5.25rem] py-2 sm:py-2.5 gap-2 lg:gap-3 xl:gap-4 w-full">
+        <div className="flex items-center justify-between min-h-[4.5rem] sm:min-h-[4.75rem] lg:min-h-[5.25rem] py-2 sm:py-2.5 gap-3 lg:gap-6 xl:gap-8 w-full">
           
-          {/* Logo & School Name */}
+          {/* Logo & School Name: Clear visual space on the right */}
           <div
             onClick={() => onNavigate('home')}
-            className="flex items-center gap-2.5 sm:gap-3 cursor-pointer group select-none shrink-0"
+            className="flex items-center gap-3 sm:gap-3.5 cursor-pointer group select-none shrink-0"
           >
-            <div className="w-10 h-10 sm:w-11 sm:h-11 lg:w-12 lg:h-12 bg-gradient-to-tr from-emerald-600 to-teal-400 rounded-2xl flex items-center justify-center shadow-lg shadow-emerald-950/50 border border-emerald-400/40 group-hover:scale-105 transition-transform duration-200">
-              <GraduationCap className="w-5 h-5 sm:w-6 sm:h-6 lg:w-7 lg:h-7 text-white" />
+            <div className="w-11 h-11 sm:w-12 sm:h-12 lg:w-13 lg:h-13 bg-gradient-to-tr from-emerald-600 to-teal-400 rounded-2xl flex items-center justify-center shadow-lg shadow-emerald-950/50 border border-emerald-400/40 group-hover:scale-105 transition-transform duration-200">
+              <GraduationCap className="w-6 h-6 sm:w-6.5 sm:h-6.5 lg:w-7 lg:h-7 text-white" />
             </div>
             <div className="flex flex-col justify-center">
-              <h1 className="text-sm sm:text-base lg:text-lg xl:text-xl font-extrabold tracking-tight text-white group-hover:text-emerald-300 transition-colors whitespace-nowrap">
+              <h1 className="text-base sm:text-lg lg:text-xl font-extrabold tracking-tight text-white group-hover:text-emerald-300 transition-colors whitespace-nowrap">
                 مدرسة صفية بنت عمر
               </h1>
-              <p className="text-[10px] sm:text-xs text-slate-400 font-medium hidden sm:block whitespace-nowrap">
+              <p className="text-[11px] sm:text-xs text-slate-400 font-medium hidden sm:block whitespace-nowrap mt-0.5">
                 بوابة الإعلام والتوثيق والأنشطة
               </p>
             </div>
           </div>
 
-          {/* Desktop Navigation Links (> 1024px) */}
-          <nav className="hidden lg:flex items-center gap-1 xl:gap-1.5 shrink min-w-0">
+          {/* Desktop Navigation Links (> 1024px) with generous spacing */}
+          <nav className="hidden lg:flex items-center gap-1.5 xl:gap-2.5 shrink min-w-0">
             {primaryNavLinks.map((link) => {
               const Icon = link.icon;
               const active = currentView === link.view;
@@ -149,13 +154,13 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <button
                   key={link.view}
                   onClick={() => onNavigate(link.view)}
-                  className={`px-2 xl:px-2.5 py-1.5 lg:py-2 rounded-xl text-xs xl:text-sm font-bold flex items-center gap-1.5 whitespace-nowrap transition-all duration-150 ${
+                  className={`px-2.5 xl:px-3.5 py-2 rounded-xl text-xs xl:text-sm font-bold flex items-center gap-2 whitespace-nowrap transition-all duration-150 ${
                     active
                       ? 'bg-emerald-800/80 text-emerald-200 border border-emerald-600/40 shadow-inner'
                       : 'text-slate-300 hover:text-white hover:bg-slate-800/70'
                   }`}
                 >
-                  <Icon className={`w-3.5 h-3.5 xl:w-4 xl:h-4 ${active ? 'text-amber-400' : 'text-slate-400'}`} />
+                  <Icon className={`w-4 h-4 ${active ? 'text-amber-400' : 'text-slate-400'}`} />
                   <span>{link.label}</span>
                 </button>
               );
@@ -165,7 +170,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <div className="relative" onMouseLeave={() => setMoreDropdownOpen(false)}>
               <button
                 onClick={() => setMoreDropdownOpen(!moreDropdownOpen)}
-                className={`px-2.5 xl:px-3 py-1.5 lg:py-2 rounded-xl text-xs xl:text-sm font-bold flex items-center gap-1.5 whitespace-nowrap transition-all duration-150 ${
+                className={`px-3 xl:px-4 py-2 rounded-xl text-xs xl:text-sm font-bold flex items-center gap-2 whitespace-nowrap transition-all duration-150 ${
                   isSecondaryActive
                     ? 'bg-emerald-800/80 text-emerald-200 border border-emerald-600/40 shadow-inner'
                     : 'text-slate-300 hover:text-white hover:bg-slate-800/70'
@@ -176,7 +181,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               </button>
 
               {moreDropdownOpen && (
-                <div className="absolute right-0 mt-2 w-48 bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl py-1.5 z-50 animate-in fade-in duration-150">
+                <div className="absolute right-0 mt-2 w-52 bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl py-2 z-50 animate-in fade-in duration-150">
                   {secondaryNavLinks.map((link) => {
                     const Icon = link.icon;
                     const active = currentView === link.view;
@@ -187,7 +192,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                           onNavigate(link.view);
                           setMoreDropdownOpen(false);
                         }}
-                        className={`w-full px-3.5 py-2 text-right text-xs xl:text-sm font-bold flex items-center gap-2.5 transition-colors ${
+                        className={`w-full px-4 py-2 text-right text-xs xl:text-sm font-bold flex items-center gap-2.5 transition-colors ${
                           active
                             ? 'bg-emerald-900/60 text-emerald-300'
                             : 'text-slate-200 hover:bg-slate-800 hover:text-white'
@@ -198,16 +203,37 @@ export const Navbar: React.FC<NavbarProps> = ({
                       </button>
                     );
                   })}
+
+                  {/* Admin Dashboard inside dropdown for authorized users only */}
+                  {canAccessAdmin && (
+                    <>
+                      <div className="border-t border-slate-800 my-1.5" />
+                      <button
+                        onClick={() => {
+                          onNavigate('admin_dashboard');
+                          setMoreDropdownOpen(false);
+                        }}
+                        className={`w-full px-4 py-2.5 text-right text-xs xl:text-sm font-bold flex items-center gap-2.5 transition-colors ${
+                          currentView === 'admin_dashboard'
+                            ? 'bg-amber-500/25 text-amber-300'
+                            : 'text-amber-400 hover:bg-amber-500/10'
+                        }`}
+                      >
+                        <Shield className="w-4 h-4 text-amber-400" />
+                        <span>لوحة الإدارة</span>
+                      </button>
+                    </>
+                  )}
                 </div>
               )}
             </div>
           </nav>
 
-          {/* Right Action Section: User Info, Admin Button, Search, Hamburger */}
-          <div className="flex items-center gap-2 sm:gap-2.5 lg:gap-3 shrink-0">
+          {/* Right Action Section: User Info, Search, Hamburger */}
+          <div className="flex items-center gap-2.5 sm:gap-3 lg:gap-3.5 shrink-0">
             {/* Quick Search on Desktop / Tablet */}
             <div className="relative hidden xl:block">
-              <div className="flex items-center bg-slate-800/90 border border-slate-700/80 rounded-xl px-2.5 py-1.5 focus-within:ring-2 focus-within:ring-emerald-500 focus-within:border-transparent transition-all">
+              <div className="flex items-center bg-slate-800/90 border border-slate-700/80 rounded-xl px-3 py-1.5 focus-within:ring-2 focus-within:ring-emerald-500 focus-within:border-transparent transition-all">
                 <Search className="w-3.5 h-3.5 text-slate-400 ml-1.5 shrink-0" />
                 <input
                   type="text"
@@ -227,27 +253,12 @@ export const Navbar: React.FC<NavbarProps> = ({
               </div>
             </div>
 
-            {/* Admin Dashboard shortcut for authorized users */}
-            {canAccessAdmin && (
-              <button
-                onClick={() => onNavigate('admin_dashboard')}
-                className={`hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all border shrink-0 ${
-                  currentView === 'admin_dashboard'
-                    ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-lg shadow-amber-500/20'
-                    : 'bg-amber-500/15 text-amber-300 border-amber-500/40 hover:bg-amber-500/25'
-                }`}
-              >
-                <Shield className="w-3.5 h-3.5 text-amber-400" />
-                <span>لوحة الإدارة</span>
-              </button>
-            )}
-
             {/* User Profile / Auth State with Guaranteed Edge Padding */}
             {user ? (
               <div className="relative shrink-0">
                 <button
                   onClick={() => setUserDropdownOpen(!userDropdownOpen)}
-                  className="flex items-center gap-2 p-1 sm:px-2.5 sm:py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700/90 border border-slate-700 transition-all shadow-sm"
+                  className="flex items-center gap-2.5 p-1 sm:px-3 sm:py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700/90 border border-slate-700 transition-all shadow-sm"
                   aria-label="قائمة المستخدم"
                 >
                   <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-emerald-700 flex items-center justify-center text-white font-bold text-xs shadow-inner shrink-0">
