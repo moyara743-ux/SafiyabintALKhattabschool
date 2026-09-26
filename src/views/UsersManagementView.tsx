@@ -73,6 +73,26 @@ export const UsersManagementView: React.FC = () => {
 
   useEffect(() => {
     loadUsers();
+
+    // Subscribe to real-time updates from dataStore for instant reflection of new users
+    const unsub = dataStore.subscribe<UserProfile[]>('users', (updatedList) => {
+      if (updatedList && Array.isArray(updatedList) && updatedList.length > 0) {
+        const sorted = [...updatedList].sort(
+          (a, b) => (ROLE_LEVELS[b.school_role] || 0) - (ROLE_LEVELS[a.school_role] || 0)
+        );
+        setUsers(sorted);
+      }
+    });
+
+    const handleFocus = () => {
+      loadUsers();
+    };
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      unsub();
+      window.removeEventListener('focus', handleFocus);
+    };
   }, []);
 
   const showToast = (msg: string) => {

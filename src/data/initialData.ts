@@ -1,6 +1,20 @@
-import { SiteSettings, Post, SchoolEvent, SchoolPhoto } from '../types';
+import { SiteSettings, Post, SchoolEvent, SchoolPhoto, UserProfile } from '../types';
 
 export const OWNER_EMAIL = 'moyara743@gmail.com';
+
+export const INITIAL_USERS: UserProfile[] = [
+  {
+    id: 'owner_user_main',
+    name: 'بارا محمد راشد - مالك النظام',
+    email: OWNER_EMAIL,
+    school_role: 'owner',
+    status: 'active',
+    customPermissions: [],
+    temporaryPermissions: [],
+    createdAt: '2026-09-01T08:00:00.000Z',
+    lastLoginAt: new Date().toISOString(),
+  },
+];
 
 export const DEFAULT_SETTINGS: SiteSettings = {
   schoolName: 'مدرسة صفية بنت عمر الابتدائية',

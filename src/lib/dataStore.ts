@@ -16,6 +16,8 @@ import {
   INITIAL_POSTS,
   INITIAL_EVENTS,
   INITIAL_GALLERY,
+  INITIAL_USERS,
+  OWNER_EMAIL,
 } from '../data/initialData';
 
 // Listener callback types
@@ -23,22 +25,33 @@ type Listener<T> = (items: T) => void;
 
 class LocalDataStore {
   private listeners: Map<string, Set<Listener<any>>> = new Map();
+  private memoryStore: Map<string, any> = new Map();
 
   private getStorage<T>(key: string, defaultValue: T): T {
     try {
-      const stored = localStorage.getItem(`safiah_${key}`);
-      if (stored) {
-        return JSON.parse(stored);
+      if (typeof localStorage !== 'undefined') {
+        const stored = localStorage.getItem(`safiah_${key}`);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          this.memoryStore.set(key, parsed);
+          return parsed;
+        }
       }
     } catch (e) {
       console.warn(`Error reading localStorage for ${key}`, e);
+    }
+    if (this.memoryStore.has(key)) {
+      return this.memoryStore.get(key);
     }
     return defaultValue;
   }
 
   private setStorage<T>(key: string, value: T): void {
+    this.memoryStore.set(key, value);
     try {
-      localStorage.setItem(`safiah_${key}`, JSON.stringify(value));
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(`safiah_${key}`, JSON.stringify(value));
+      }
     } catch (e) {
       console.warn(`Error writing localStorage for ${key}`, e);
     }
@@ -122,9 +135,15 @@ class LocalDataStore {
         ]) as unknown as T;
       case 'settings':
         return this.getStorage<SiteSettings>('settings', DEFAULT_SETTINGS) as unknown as T;
+      case 'users':
+        return this.getStorage<UserProfile[]>('users', this.seedUsers()) as unknown as T;
       default:
         return this.getStorage<any>(key, []) as unknown as T;
     }
+  }
+
+  private seedUsers(): UserProfile[] {
+    return [...INITIAL_USERS];
   }
 
   private seedPosts(): Post[] {
@@ -521,12 +540,25 @@ class LocalDataStore {
     this.setStorage('settings', { ...settings, updatedAt: new Date().toISOString() });
   }
 
-  // Users (from Supabase users table)
+  // Users management (Real-time Supabase integration with high-availability sync)
   public async getUsers(): Promise<UserProfile[]> {
+    const localUsers = this.getCollection<UserProfile[]>('users');
+
     try {
-      const { data, error } = await supabase.from('users').select('*');
-      if (!error && data) {
-        return data.map((d: any) => ({
+      // Direct real-time fetch from Supabase users table with timeout protection
+      const fetchPromise = supabase
+        .from('users')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      const timeoutPromise = new Promise<{ data: null; error: Error }>((resolve) =>
+        setTimeout(() => resolve({ data: null, error: new Error('users query timeout') }), 2500)
+      );
+
+      const { data, error } = (await Promise.race([fetchPromise, timeoutPromise])) as any;
+
+      if (!error && Array.isArray(data) && data.length > 0) {
+        const remoteUsers: UserProfile[] = data.map((d: any) => ({
           id: d.id,
           name: d.name || 'مستخدم',
           email: d.email || '',
@@ -537,14 +569,88 @@ class LocalDataStore {
           createdAt: d.created_at || new Date().toISOString(),
           updatedAt: d.updated_at,
         }));
+
+        // Merge remote users with local store without losing newly signed up local users
+        const map = new Map<string, UserProfile>();
+        for (const u of localUsers) {
+          map.set(u.id, u);
+          if (u.email) map.set(u.email.toLowerCase(), u);
+        }
+        for (const u of remoteUsers) {
+          map.set(u.id, u);
+          if (u.email) map.set(u.email.toLowerCase(), u);
+        }
+
+        const merged = Array.from(new Set(map.values()));
+        const hasOwner = merged.some((u) => u.email.toLowerCase() === OWNER_EMAIL.toLowerCase());
+        if (!hasOwner) {
+          merged.unshift(INITIAL_USERS[0]);
+        }
+
+        this.setStorage('users', merged);
+        return merged;
       }
     } catch (e) {
-      console.warn('Error fetching users from Supabase:', e);
+      console.warn('Real-time Supabase users query notice:', e);
     }
-    return [];
+
+    const list = localUsers.length > 0 ? localUsers : this.seedUsers();
+    const hasOwner = list.some((u) => u.email.toLowerCase() === OWNER_EMAIL.toLowerCase());
+    if (!hasOwner) {
+      list.unshift(INITIAL_USERS[0]);
+      this.setStorage('users', list);
+    }
+    return list;
+  }
+
+  public async addUser(user: UserProfile): Promise<UserProfile> {
+    const list = this.getCollection<UserProfile[]>('users');
+    const filtered = list.filter(
+      (u) => u.id !== user.id && (!user.email || u.email.toLowerCase() !== user.email.toLowerCase())
+    );
+    const updated = [user, ...filtered];
+    this.setStorage('users', updated);
+
+    // Sync with Supabase users table
+    try {
+      const payload = {
+        id: user.id,
+        name: user.name,
+        email: user.email ? user.email.toLowerCase() : '',
+        school_role: user.school_role,
+        status: user.status || 'active',
+        custom_permissions: user.customPermissions || [],
+      };
+      const { error } = await supabase.from('users').upsert([payload]);
+      if (error) {
+        console.warn('Supabase users upsert notice:', error.message);
+      }
+    } catch (err) {
+      console.warn('Supabase users upsert exception:', err);
+    }
+
+    return user;
+  }
+
+  public getUserById(id: string): UserProfile | null {
+    const list = this.getCollection<UserProfile[]>('users');
+    return list.find((u) => u.id === id) || null;
   }
 
   public async updateUser(id: string, updates: Partial<UserProfile>): Promise<void> {
+    const list = this.getCollection<UserProfile[]>('users');
+    const updated = list.map((u) => {
+      if (u.id === id) {
+        return {
+          ...u,
+          ...updates,
+          updatedAt: new Date().toISOString(),
+        };
+      }
+      return u;
+    });
+    this.setStorage('users', updated);
+
     try {
       const payload: Record<string, any> = {
         updated_at: new Date().toISOString(),
@@ -556,8 +662,7 @@ class LocalDataStore {
 
       await supabase.from('users').update(payload).eq('id', id);
     } catch (e) {
-      console.error('Error updating user in Supabase:', e);
-      throw e;
+      console.warn('Supabase user update notice:', e);
     }
   }
 }

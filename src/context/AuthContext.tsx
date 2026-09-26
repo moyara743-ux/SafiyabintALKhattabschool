@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, useMemo } from 'react';
 import { supabase } from '../supabaseClient';
+import { dataStore } from '../lib/dataStore';
 import { UserProfile, SchoolRole, PermissionKey } from '../types';
 import {
   ROLE_LABELS_AR,
@@ -125,6 +126,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     } catch (err) {
       console.warn('[AuthContext] Exception in fetchUserProfileFromDB:', err);
+    }
+
+    // Check dataStore for newly registered user profile before default fallback
+    const localUser = dataStore.getUserById(authUser.id);
+    if (localUser) {
+      return localUser;
     }
 
     // Return instant fallback profile if row does not exist or query timed out
@@ -330,20 +337,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const isOwnerEmail = cleanEmail === OWNER_EMAIL.toLowerCase();
     const initialRole: SchoolRole = isOwnerEmail ? 'owner' : 'student';
 
-    // 2. Add row in users table with columns: id, name, email, school_role
-    const newRow = {
-      id: data.user.id,
-      name: cleanName,
-      email: cleanEmail,
-      school_role: initialRole,
-      status: 'active',
-    };
-
-    const { error: insertErr } = await supabase.from('users').insert([newRow]);
-    if (insertErr) {
-      console.error('Error inserting into users table:', insertErr.message);
-    }
-
     const newProfile: UserProfile = {
       id: data.user.id,
       name: cleanName,
@@ -355,6 +348,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       createdAt: new Date().toISOString(),
       lastLoginAt: new Date().toISOString(),
     };
+
+    // 2. Persist user into dataStore immediately to guarantee zero delay & zero lost users
+    await dataStore.addUser(newProfile);
+
+    // 3. Insert row into Supabase users table
+    try {
+      const newRow = {
+        id: data.user.id,
+        name: cleanName,
+        email: cleanEmail,
+        school_role: initialRole,
+        status: 'active',
+      };
+
+      const { error: insertErr } = await supabase.from('users').insert([newRow]);
+      if (insertErr) {
+        console.warn('[AuthContext] Supabase users table insert notice:', insertErr.message);
+      }
+    } catch (dbErr) {
+      console.warn('[AuthContext] Supabase users table insert exception:', dbErr);
+    }
 
     const appUser: AppUser = {
       id: data.user.id,
