@@ -14,6 +14,17 @@ export const INITIAL_USERS: UserProfile[] = [
     createdAt: '2026-09-01T08:00:00.000Z',
     lastLoginAt: new Date().toISOString(),
   },
+  {
+    id: 'user_yaradrashed',
+    name: 'منال علي',
+    email: 'yaradrashed@gmail.com',
+    school_role: 'student',
+    status: 'active',
+    customPermissions: [],
+    temporaryPermissions: [],
+    createdAt: '2026-09-26T12:00:00.000Z',
+    lastLoginAt: new Date().toISOString(),
+  },
 ];
 
 export const DEFAULT_SETTINGS: SiteSettings = {

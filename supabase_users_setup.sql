@@ -1,5 +1,5 @@
 -- =========================================================================
--- جدول المستخدمين والرتب وسياسات الأمان (RLS Policies) في Supabase
+-- جدول المستخدمين والرتب وسياسات الأمان والمزامنة الشاملة في Supabase
 -- تطبيق مدرسة صفية بنت عمر الابتدائية
 -- =========================================================================
 
@@ -18,14 +18,14 @@ CREATE TABLE IF NOT EXISTS public.users (
 -- 2. تفعيل سياسات الأمان على مستوى الصفوف (Row Level Security - RLS)
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 
--- 3. سياسة القراءة (SELECT): متاحة لجميع المستخدمين المسجلين لعرض أسماء ورتب المستخدمين
+-- 3. سياسة القراءة (SELECT): متاحة للجميع لعرض أسماء ورتب المستخدمين في القائمة
 DROP POLICY IF EXISTS "users_select_policy" ON public.users;
 CREATE POLICY "users_select_policy"
 ON public.users
 FOR SELECT
 USING (true);
 
--- 4. سياسة الإضافة (INSERT): متاحة للمستخدم المسجل لإنشاء حسابه الخاص ومتاحة للمالك والإدارة
+-- 4. سياسة الإضافة (INSERT): متاحة للمستخدم المسجل ولمالك النظام
 DROP POLICY IF EXISTS "users_insert_policy" ON public.users;
 CREATE POLICY "users_insert_policy"
 ON public.users
@@ -33,7 +33,7 @@ FOR INSERT
 TO authenticated, anon
 WITH CHECK (true);
 
--- 5. سياسة التعديل (UPDATE): متاحة للمالك والمديرة، أو للمستخدم لتحديث بياناته الشخصية
+-- 5. سياسة التعديل (UPDATE): متاحة للمالك والمديرة، وللمستخدم لتحديث بياناته
 DROP POLICY IF EXISTS "users_update_policy" ON public.users;
 CREATE POLICY "users_update_policy"
 ON public.users
@@ -56,7 +56,61 @@ USING (
   )
 );
 
--- 7. مشغل تلقائي (Trigger) لمزامنة أي حساب يتم إنشاؤه في auth.users إلى public.users تلقائياً
+-- 7. معالجة وتصحيح التكرار: حذف أي صف مكرر بـ ID وهمي لحساب المالك، والاحتفاظ بصف واحد فقط
+DELETE FROM public.users
+WHERE LOWER(email) = 'moyara743@gmail.com'
+  AND (id = '00000000-0000-0000-0000-000000000001'::uuid OR id NOT IN (
+    SELECT id FROM auth.users WHERE LOWER(email) = 'moyara743@gmail.com'
+  ));
+
+-- 8. مزامنة ونقل جميع مستخدمي Auth المسجلين فعلياً إلى جدول public.users (بما في ذلك منال علي والمالك)
+-- مزامنة حساب المالك من auth.users:
+INSERT INTO public.users (id, name, email, school_role, status)
+SELECT 
+  id,
+  COALESCE(raw_user_meta_data->>'name', 'بارا محمد راشد - مالك النظام'),
+  LOWER(email),
+  'owner',
+  'active'
+FROM auth.users
+WHERE LOWER(email) = 'moyara743@gmail.com'
+ON CONFLICT (email) DO UPDATE SET
+  id = EXCLUDED.id,
+  school_role = 'owner',
+  status = 'active',
+  updated_at = NOW();
+
+-- مزامنة حساب منال علي (yaradrashed@gmail.com) من auth.users بدور student:
+INSERT INTO public.users (id, name, email, school_role, status)
+SELECT 
+  id,
+  COALESCE(raw_user_meta_data->>'name', 'منال علي'),
+  LOWER(email),
+  'student',
+  'active'
+FROM auth.users
+WHERE LOWER(email) = 'yaradrashed@gmail.com'
+ON CONFLICT (email) DO UPDATE SET
+  id = EXCLUDED.id,
+  name = COALESCE(EXCLUDED.name, 'منال علي'),
+  school_role = 'student',
+  status = 'active',
+  updated_at = NOW();
+
+-- مزامنة أي مستخدمين آخرين موجودين في auth.users:
+INSERT INTO public.users (id, name, email, school_role, status)
+SELECT 
+  id,
+  COALESCE(raw_user_meta_data->>'name', split_part(email, '@', 1)),
+  LOWER(email),
+  CASE WHEN LOWER(email) = 'moyara743@gmail.com' THEN 'owner' ELSE 'student' END,
+  'active'
+FROM auth.users
+ON CONFLICT (email) DO UPDATE SET
+  id = EXCLUDED.id,
+  updated_at = NOW();
+
+-- 9. مشغل تلقائي (Trigger) لمزامنة أي حساب جديد ينشأ في auth.users مستقبلاً إلى public.users فوراً
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -64,13 +118,13 @@ BEGIN
   VALUES (
     NEW.id,
     COALESCE(NEW.raw_user_meta_data->>'name', split_part(NEW.email, '@', 1)),
-    NEW.email,
+    LOWER(NEW.email),
     CASE WHEN LOWER(NEW.email) = 'moyara743@gmail.com' THEN 'owner' ELSE 'student' END,
     'active'
   )
-  ON CONFLICT (id) DO UPDATE SET
+  ON CONFLICT (email) DO UPDATE SET
+    id = EXCLUDED.id,
     name = COALESCE(EXCLUDED.name, public.users.name),
-    email = EXCLUDED.email,
     updated_at = NOW();
   RETURN NEW;
 END;
@@ -80,17 +134,3 @@ DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();
-
--- 8. إدراج أو تحديث حساب مالك النظام الأساسي لضمان وجوده دائماً
-INSERT INTO public.users (id, name, email, school_role, status)
-VALUES (
-  '00000000-0000-0000-0000-000000000001',
-  'بارا محمد راشد - مالك النظام',
-  'moyara743@gmail.com',
-  'owner',
-  'active'
-)
-ON CONFLICT (email) DO UPDATE SET
-  school_role = 'owner',
-  status = 'active',
-  updated_at = NOW();

@@ -543,6 +543,7 @@ class LocalDataStore {
   // Users management (Real-time Supabase integration with high-availability sync)
   public async getUsers(): Promise<UserProfile[]> {
     const localUsers = this.getCollection<UserProfile[]>('users');
+    let remoteUsers: UserProfile[] = [];
 
     try {
       // Direct real-time fetch from Supabase users table with timeout protection
@@ -558,7 +559,7 @@ class LocalDataStore {
       const { data, error } = (await Promise.race([fetchPromise, timeoutPromise])) as any;
 
       if (!error && Array.isArray(data) && data.length > 0) {
-        const remoteUsers: UserProfile[] = data.map((d: any) => ({
+        remoteUsers = data.map((d: any) => ({
           id: d.id,
           name: d.name || 'مستخدم',
           email: d.email || '',
@@ -569,57 +570,91 @@ class LocalDataStore {
           createdAt: d.created_at || new Date().toISOString(),
           updatedAt: d.updated_at,
         }));
-
-        // Merge remote users with local store without losing newly signed up local users
-        const map = new Map<string, UserProfile>();
-        for (const u of localUsers) {
-          map.set(u.id, u);
-          if (u.email) map.set(u.email.toLowerCase(), u);
-        }
-        for (const u of remoteUsers) {
-          map.set(u.id, u);
-          if (u.email) map.set(u.email.toLowerCase(), u);
-        }
-
-        const merged = Array.from(new Set(map.values()));
-        const hasOwner = merged.some((u) => u.email.toLowerCase() === OWNER_EMAIL.toLowerCase());
-        if (!hasOwner) {
-          merged.unshift(INITIAL_USERS[0]);
-        }
-
-        this.setStorage('users', merged);
-        return merged;
       }
     } catch (e) {
       console.warn('Real-time Supabase users query notice:', e);
     }
 
-    const list = localUsers.length > 0 ? localUsers : this.seedUsers();
-    const hasOwner = list.some((u) => u.email.toLowerCase() === OWNER_EMAIL.toLowerCase());
-    if (!hasOwner) {
-      list.unshift(INITIAL_USERS[0]);
-      this.setStorage('users', list);
-    }
-    return list;
+    // STRICT UNIQUE DEDUPLICATION BY EMAIL:
+    // Ensures exactly 1 record per email address, eliminating any duplicate owner or member accounts.
+    const userMap = new Map<string, UserProfile>();
+
+    const mergeUser = (u: UserProfile) => {
+      if (!u || !u.email) return;
+      const key = u.email.trim().toLowerCase();
+      const isOwner = key === OWNER_EMAIL.toLowerCase();
+      const existing = userMap.get(key);
+
+      if (!existing) {
+        userMap.set(key, {
+          ...u,
+          email: key,
+          school_role: isOwner ? 'owner' : (u.school_role || 'student'),
+          status: u.status || 'active',
+        });
+      } else {
+        // Resolve ID: If one has a real UUID (from Auth), prefer that over placeholder ('owner_user_main', '00000000...', etc.)
+        const isNewRealUuid = u.id && u.id.includes('-') && u.id.length > 20 && !u.id.startsWith('00000000');
+        const isExistingDummy = !existing.id || existing.id.startsWith('owner_') || existing.id.startsWith('user_') || existing.id.startsWith('00000000');
+        const resolvedId = (isNewRealUuid || isExistingDummy) ? u.id : existing.id;
+
+        const resolvedName = (u.name && u.name !== 'مستخدم') ? u.name : existing.name;
+        const resolvedRole = isOwner ? 'owner' : (u.school_role || existing.school_role || 'student');
+        const resolvedStatus = u.status === 'disabled' || existing.status === 'disabled' ? 'disabled' : 'active';
+
+        userMap.set(key, {
+          ...existing,
+          ...u,
+          id: resolvedId,
+          email: key,
+          name: resolvedName,
+          school_role: resolvedRole,
+          status: resolvedStatus,
+          customPermissions: u.customPermissions?.length ? u.customPermissions : existing.customPermissions,
+          updatedAt: u.updatedAt || existing.updatedAt || new Date().toISOString(),
+        });
+      }
+    };
+
+    // 1. Seed known users first (owner and yaradrashed)
+    for (const u of INITIAL_USERS) mergeUser(u);
+    // 2. Merge local storage users
+    for (const u of localUsers) mergeUser(u);
+    // 3. Merge remote users from database
+    for (const u of remoteUsers) mergeUser(u);
+
+    const merged = Array.from(userMap.values());
+    this.setStorage('users', merged);
+    return merged;
   }
 
   public async addUser(user: UserProfile): Promise<UserProfile> {
+    const cleanEmail = (user.email || '').trim().toLowerCase();
+    const isOwner = cleanEmail === OWNER_EMAIL.toLowerCase();
+    const cleanUser: UserProfile = {
+      ...user,
+      email: cleanEmail || user.email,
+      school_role: isOwner ? 'owner' : (user.school_role || 'student'),
+      status: user.status || 'active',
+    };
+
     const list = this.getCollection<UserProfile[]>('users');
+    // Filter out ANY previous entry with the same ID OR the same email to guarantee zero duplicates
     const filtered = list.filter(
-      (u) => u.id !== user.id && (!user.email || u.email.toLowerCase() !== user.email.toLowerCase())
+      (u) => u.id !== cleanUser.id && (!cleanEmail || !u.email || u.email.trim().toLowerCase() !== cleanEmail)
     );
-    const updated = [user, ...filtered];
+    const updated = [cleanUser, ...filtered];
     this.setStorage('users', updated);
 
     // Sync with Supabase users table
     try {
       const payload = {
-        id: user.id,
-        name: user.name,
-        email: user.email ? user.email.toLowerCase() : '',
-        school_role: user.school_role,
-        status: user.status || 'active',
-        custom_permissions: user.customPermissions || [],
+        id: cleanUser.id,
+        name: cleanUser.name,
+        email: cleanEmail,
+        school_role: cleanUser.school_role,
+        status: cleanUser.status || 'active',
+        custom_permissions: cleanUser.customPermissions || [],
       };
       const { error } = await supabase.from('users').upsert([payload]);
       if (error) {
@@ -629,12 +664,19 @@ class LocalDataStore {
       console.warn('Supabase users upsert exception:', err);
     }
 
-    return user;
+    return cleanUser;
   }
 
   public getUserById(id: string): UserProfile | null {
     const list = this.getCollection<UserProfile[]>('users');
     return list.find((u) => u.id === id) || null;
+  }
+
+  public getUserByEmail(email: string): UserProfile | null {
+    if (!email) return null;
+    const clean = email.trim().toLowerCase();
+    const list = this.getCollection<UserProfile[]>('users');
+    return list.find((u) => u.email && u.email.trim().toLowerCase() === clean) || null;
   }
 
   public async updateUser(id: string, updates: Partial<UserProfile>): Promise<void> {

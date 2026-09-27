@@ -67,75 +67,80 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   };
 
-  // Helper to fetch user profile strictly from Supabase users table with safe fallback
-  const fetchUserProfileFromDB = async (authUser: { id: string; email?: string; user_metadata?: any }): Promise<UserProfile> => {
-    const isOwnerEmail = authUser.email?.toLowerCase() === OWNER_EMAIL.toLowerCase();
+  // Helper to ensure current session user exists in dataStore & sync with Supabase
+  const ensureUserSynced = async (authUser: { id: string; email?: string; user_metadata?: any }): Promise<UserProfile> => {
+    const currentId = authUser.id;
+    const currentEmail = (authUser.email || '').trim().toLowerCase();
+    const isOwner = currentEmail === OWNER_EMAIL.toLowerCase();
+    const currentName =
+      authUser.user_metadata?.name ||
+      (isOwner ? 'بارا محمد راشد - مالك النظام' : currentEmail.split('@')[0] || 'مستخدم');
+    const currentRole: SchoolRole = isOwner ? 'owner' : 'student';
 
+    // 1. Try to find user in dataStore by email first (strict primary identity) or by ID
+    let existingProfile = dataStore.getUserByEmail(currentEmail) || dataStore.getUserById(currentId);
+
+    let activeProfile: UserProfile;
+    if (!existingProfile) {
+      // Auto-create missing user using ACTUAL SESSION DATA (strictly preventing stale or cached owner data)
+      activeProfile = {
+        id: currentId,
+        name: currentName,
+        email: currentEmail,
+        school_role: currentRole,
+        customPermissions: [],
+        temporaryPermissions: [],
+        status: 'active',
+        createdAt: new Date().toISOString(),
+        lastLoginAt: new Date().toISOString(),
+      };
+      await dataStore.addUser(activeProfile);
+    } else {
+      // Existing profile found: ensure real session UUID and role are properly updated
+      activeProfile = {
+        ...existingProfile,
+        id: currentId,
+        email: currentEmail,
+        name: (currentName && currentName !== 'مستخدم') ? currentName : existingProfile.name,
+        school_role: isOwner ? 'owner' : (existingProfile.school_role || 'student'),
+        lastLoginAt: new Date().toISOString(),
+      };
+      await dataStore.addUser(activeProfile);
+    }
+
+    // 2. Also try background fetch/upsert with Supabase users table
     try {
-      // Query Supabase users table with 3s timeout
-      const queryPromise = supabase
+      const { data: dbUser } = await supabase
         .from('users')
         .select('*')
-        .eq('id', authUser.id)
+        .eq('id', currentId)
         .maybeSingle();
-      const timeoutPromise = new Promise<{ data: null; error: Error }>((resolve) =>
-        setTimeout(() => resolve({ data: null, error: new Error('User DB query timed out') }), 3000)
-      );
-
-      const { data: dbUser, error } = (await Promise.race([queryPromise, timeoutPromise])) as any;
-
-      if (error) {
-        console.warn('[AuthContext] Notice fetching user from Supabase users table:', error.message);
-      }
 
       if (dbUser) {
-        let currentSchoolRole: SchoolRole = (dbUser.school_role as SchoolRole) || 'student';
-
-        // Ensure Owner role is protected and locked to Owner email
-        if (isOwnerEmail && currentSchoolRole !== 'owner') {
-          currentSchoolRole = 'owner';
-          supabase
-            .from('users')
-            .update({
-              school_role: 'owner',
-              status: 'active',
-              updated_at: new Date().toISOString(),
-            })
-            .eq('id', authUser.id)
-            .then(
-              () => {},
-              () => {}
-            );
-        }
-
-        const userProfile: UserProfile = {
-          id: authUser.id,
-          name: dbUser.name || (isOwnerEmail ? 'مالك النظام' : authUser.user_metadata?.name || authUser.email?.split('@')[0] || 'مستخدم'),
-          email: dbUser.email || authUser.email || '',
-          photoURL: authUser.user_metadata?.avatar_url || undefined,
-          school_role: currentSchoolRole,
-          customPermissions: dbUser.custom_permissions || [],
-          temporaryPermissions: [],
+        activeProfile = {
+          ...activeProfile,
+          name: dbUser.name || activeProfile.name,
+          school_role: isOwner ? 'owner' : ((dbUser.school_role as SchoolRole) || activeProfile.school_role),
           status: dbUser.status === 'disabled' ? 'disabled' : 'active',
-          createdAt: dbUser.created_at || new Date().toISOString(),
-          updatedAt: dbUser.updated_at || undefined,
-          lastLoginAt: new Date().toISOString(),
+          customPermissions: dbUser.custom_permissions || activeProfile.customPermissions,
         };
-
-        return userProfile;
+        await dataStore.addUser(activeProfile);
+      } else {
+        // Attempt to insert missing row in Supabase users table
+        await supabase.from('users').upsert({
+          id: currentId,
+          name: activeProfile.name,
+          email: currentEmail,
+          school_role: activeProfile.school_role,
+          status: activeProfile.status,
+          custom_permissions: activeProfile.customPermissions,
+        });
       }
-    } catch (err) {
-      console.warn('[AuthContext] Exception in fetchUserProfileFromDB:', err);
+    } catch (e) {
+      console.warn('[AuthContext] Notice in DB sync:', e);
     }
 
-    // Check dataStore for newly registered user profile before default fallback
-    const localUser = dataStore.getUserById(authUser.id);
-    if (localUser) {
-      return localUser;
-    }
-
-    // Return instant fallback profile if row does not exist or query timed out
-    return createFallbackProfile(authUser);
+    return activeProfile;
   };
 
   useEffect(() => {
@@ -149,8 +154,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     // 1. HARD TIMEOUT: Maximum 5 seconds for session verification.
-    // If Supabase does not respond within 5s (due to network delay, cold start, or iframe sandbox restrictions),
-    // immediately stop loading and proceed so the user is NEVER trapped on the loading screen!
     authTimeoutId = setTimeout(() => {
       console.warn('[AuthContext] Auth session check reached 5s timeout. Releasing loading state.');
       stopLoading();
@@ -173,28 +176,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         const session = data?.session;
         if (session?.user && isMounted) {
+          const authUser = session.user;
           const u: AppUser = {
-            id: session.user.id,
-            uid: session.user.id,
-            email: session.user.email,
-            displayName: session.user.user_metadata?.name,
-            user_metadata: session.user.user_metadata,
+            id: authUser.id,
+            uid: authUser.id,
+            email: authUser.email,
+            displayName: authUser.user_metadata?.name,
+            user_metadata: authUser.user_metadata,
           };
           setUser(u);
 
-          // Set fallback profile immediately so UI can render right away
-          const fallbackProf = createFallbackProfile(session.user);
-          setProfile(fallbackProf);
+          // Fast initial profile display to unblock UI without delay
+          const fastProfile = dataStore.getUserByEmail(authUser.email || '') || createFallbackProfile(authUser);
+          setProfile(fastProfile);
 
-          // Try to enrich from database in background without blocking
-          fetchUserProfileFromDB(session.user)
+          // Ensure user exists in dataStore & sync with server using actual session data
+          ensureUserSynced(authUser)
             .then((prof) => {
               if (isMounted && prof) {
                 setProfile(prof);
               }
             })
             .catch((e) => {
-              console.warn('[AuthContext] Error enriching profile from DB:', e);
+              console.warn('[AuthContext] Error in ensureUserSynced:', e);
             });
         } else if (isMounted) {
           setUser(null);
@@ -207,7 +211,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setProfile(null);
         }
       } finally {
-        // GUARANTEED: loading becomes false in all circumstances
         if (authTimeoutId) {
           clearTimeout(authTimeoutId);
         }
@@ -225,26 +228,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (!isMounted) return;
 
         if (session?.user) {
+          const authUser = session.user;
           const u: AppUser = {
-            id: session.user.id,
-            uid: session.user.id,
-            email: session.user.email,
-            displayName: session.user.user_metadata?.name,
-            user_metadata: session.user.user_metadata,
+            id: authUser.id,
+            uid: authUser.id,
+            email: authUser.email,
+            displayName: authUser.user_metadata?.name,
+            user_metadata: authUser.user_metadata,
           };
           setUser(u);
 
-          // Use fallback profile immediately, then update from DB
-          setProfile((prev) => prev || createFallbackProfile(session.user));
+          // Fast profile
+          const fastProfile = dataStore.getUserByEmail(authUser.email || '') || createFallbackProfile(authUser);
+          setProfile(fastProfile);
 
-          fetchUserProfileFromDB(session.user)
+          ensureUserSynced(authUser)
             .then((prof) => {
               if (isMounted && prof) {
                 setProfile(prof);
               }
             })
             .catch((e) => {
-              console.warn('[AuthContext] Profile update notice:', e);
+              console.warn('[AuthContext] Profile sync notice:', e);
             });
         } else {
           setUser(null);
@@ -288,7 +293,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
     setUser(appUser);
 
-    const userProf = await fetchUserProfileFromDB(data.user);
+    const userProf = await ensureUserSynced(data.user);
 
     if (userProf.status === 'disabled') {
       await supabase.auth.signOut();
@@ -435,7 +440,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const refreshProfile = async (): Promise<UserProfile | null> => {
     if (!user) return null;
-    const userProf = await fetchUserProfileFromDB(user);
+    const userProf = await ensureUserSynced(user);
     setProfile(userProf);
     return userProf;
   };
