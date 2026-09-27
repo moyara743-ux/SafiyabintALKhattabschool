@@ -4,7 +4,7 @@ export const OWNER_EMAIL = 'moyara743@gmail.com';
 
 export const INITIAL_USERS: UserProfile[] = [
   {
-    id: 'owner_user_main',
+    id: '00000000-0000-4000-8000-000000000001',
     name: 'بارا محمد راشد - مالك النظام',
     email: OWNER_EMAIL,
     school_role: 'owner',
@@ -15,7 +15,7 @@ export const INITIAL_USERS: UserProfile[] = [
     lastLoginAt: new Date().toISOString(),
   },
   {
-    id: 'user_yaradrashed',
+    id: '00000000-0000-4000-8000-000000000002',
     name: 'منال علي',
     email: 'yaradrashed@gmail.com',
     school_role: 'student',

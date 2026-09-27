@@ -33,14 +33,43 @@ FOR INSERT
 TO authenticated, anon
 WITH CHECK (true);
 
--- 5. سياسة التعديل (UPDATE): متاحة للمالك والمديرة، وللمستخدم لتحديث بياناته
+-- 5. وظيفة مساعدة وسياسة التعديل (UPDATE):
+-- تتيح لـ owner و director تعديل أي مستخدم آخر، وتتيح للمستخدم العادي تعديل حسابه الخاص
+CREATE OR REPLACE FUNCTION public.is_admin_or_owner()
+RETURNS BOOLEAN
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM public.users
+    WHERE id = auth.uid()
+    AND (school_role IN ('owner', 'director') OR LOWER(email) = 'moyara743@gmail.com')
+  );
+$$;
+
 DROP POLICY IF EXISTS "users_update_policy" ON public.users;
+DROP POLICY IF EXISTS "Users can update own profile" ON public.users;
+DROP POLICY IF EXISTS "Enable update for users based on email" ON public.users;
+DROP POLICY IF EXISTS "Enable update for users" ON public.users;
+
 CREATE POLICY "users_update_policy"
 ON public.users
 FOR UPDATE
 TO authenticated, anon
-USING (true)
-WITH CHECK (true);
+USING (
+  -- 1) المستخدم يعدل حسابه الشخصي
+  auth.uid() = id
+  -- 2) مالك النظام عبر مطابقة البريد المعتمد في الـ JWT مباشرة
+  OR LOWER(COALESCE(auth.jwt() ->> 'email', '')) = 'moyara743@gmail.com'
+  -- 3) مالك النظام (owner) أو مديرة المدرسة (director)
+  OR public.is_admin_or_owner()
+)
+WITH CHECK (
+  auth.uid() = id
+  OR LOWER(COALESCE(auth.jwt() ->> 'email', '')) = 'moyara743@gmail.com'
+  OR public.is_admin_or_owner()
+);
 
 -- 6. سياسة الحذف (DELETE): مخصصة حصرياً لمالك النظام (owner)
 DROP POLICY IF EXISTS "users_delete_policy" ON public.users;

@@ -679,13 +679,128 @@ class LocalDataStore {
     return list.find((u) => u.email && u.email.trim().toLowerCase() === clean) || null;
   }
 
-  public async updateUser(id: string, updates: Partial<UserProfile>): Promise<void> {
+  public async updateUser(id: string, updates: Partial<UserProfile>): Promise<UserProfile> {
     const list = this.getCollection<UserProfile[]>('users');
+    const existing =
+      list.find((u) => u.id === id) ||
+      (updates.email ? list.find((u) => u.email?.trim().toLowerCase() === updates.email?.trim().toLowerCase()) : null);
+
+    const targetEmail = (updates.email || existing?.email || '').trim().toLowerCase();
+    const isOwner = targetEmail === OWNER_EMAIL.toLowerCase();
+
+    // Prepare payload for Supabase public.users table
+    const payload: Record<string, any> = {
+      updated_at: new Date().toISOString(),
+    };
+    if (updates.school_role) payload.school_role = isOwner ? 'owner' : updates.school_role;
+    if (updates.status) payload.status = updates.status;
+    if (updates.name) payload.name = updates.name;
+    if (updates.customPermissions) payload.custom_permissions = updates.customPermissions;
+
+    // Check if id is a valid PostgreSQL UUID
+    const isValidUuid = Boolean(
+      id &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id) &&
+      !id.startsWith('00000000')
+    );
+
+    let dbSuccess = false;
+    let dbErrorMsg: string | null = null;
+    let finalId = id;
+
+    console.log(`[dataStore.updateUser] Initiating Supabase update for ID: "${id}", Email: "${targetEmail}"`, payload);
+
+    try {
+      let updateRes: any = null;
+
+      // 1. Try update by UUID if valid
+      if (isValidUuid) {
+        console.log(`[dataStore.updateUser] Executing update by ID: ${id}`);
+        updateRes = await supabase.from('users').update(payload).eq('id', id).select();
+      }
+
+      // 2. If update by ID was not possible or updated 0 rows, try update by UNIQUE email
+      if ((!updateRes || (Array.isArray(updateRes.data) && updateRes.data.length === 0)) && targetEmail) {
+        console.log(`[dataStore.updateUser] Executing update by email: ${targetEmail}`);
+        updateRes = await supabase.from('users').update(payload).eq('email', targetEmail).select();
+      }
+
+      // Inspect response from Supabase
+      if (updateRes?.error) {
+        const err = updateRes.error;
+        console.error('[dataStore.updateUser] Supabase UPDATE returned error:', err);
+        if (err.code === '42501') {
+          dbErrorMsg = `رفضت قاعدة البيانات التحديث بسبب سياسة الأمان (RLS Error 42501). يرجى التأكد من صلاحية المالك أو تنفيذ ملف SQL في Supabase.`;
+        } else if (err.code === '22P02') {
+          dbErrorMsg = `صيغة المعرف غير متوافقة مع قاعدة البيانات (UUID Syntax 22P02).`;
+        } else {
+          dbErrorMsg = `خطأ أثناء تحديث قاعدة البيانات (${err.code || 'Error'}): ${err.message}`;
+        }
+      } else if (updateRes && Array.isArray(updateRes.data) && updateRes.data.length > 0) {
+        dbSuccess = true;
+        const updatedRow = updateRes.data[0];
+        console.log('[dataStore.updateUser] Supabase UPDATE succeeded! Updated row:', updatedRow);
+        if (updatedRow.id) {
+          finalId = updatedRow.id;
+        }
+      } else {
+        // 0 rows updated and no error. Row does not exist in public.users yet -> attempt UPSERT
+        console.warn('[dataStore.updateUser] 0 rows matched for UPDATE. Attempting UPSERT in public.users...');
+        if (targetEmail) {
+          const upsertPayload: Record<string, any> = {
+            name: updates.name || existing?.name || targetEmail.split('@')[0],
+            email: targetEmail,
+            school_role: payload.school_role || existing?.school_role || 'student',
+            status: payload.status || existing?.status || 'active',
+            custom_permissions: payload.custom_permissions || existing?.customPermissions || [],
+            updated_at: new Date().toISOString(),
+          };
+          if (isValidUuid) {
+            upsertPayload.id = id;
+          }
+
+          const upsertRes = await supabase.from('users').upsert(upsertPayload, { onConflict: 'email' }).select();
+          if (upsertRes.error) {
+            console.error('[dataStore.updateUser] Supabase UPSERT returned error:', upsertRes.error);
+            if (upsertRes.error.code === '42501') {
+              dbErrorMsg = `رفضت قاعدة البيانات إدراج المستخدم بسبب سياسة الأمان (RLS Error 42501).`;
+            } else {
+              dbErrorMsg = `فشل إدراج المستخدم في قاعدة البيانات: ${upsertRes.error.message}`;
+            }
+          } else if (upsertRes.data && Array.isArray(upsertRes.data) && upsertRes.data.length > 0) {
+            dbSuccess = true;
+            console.log('[dataStore.updateUser] Supabase UPSERT succeeded! Row:', upsertRes.data[0]);
+            if (upsertRes.data[0].id) {
+              finalId = upsertRes.data[0].id;
+            }
+          } else {
+            dbErrorMsg = 'لم يتم حفظ السجل في قاعدة بيانات Supabase (يرجى فحص سياسات RLS للجدول public.users).';
+          }
+        } else {
+          dbErrorMsg = 'لم يتم العثور على المستخدم في قاعدة البيانات ولا يتوفر بريد إلكتروني لإنشائه.';
+        }
+      }
+    } catch (e: any) {
+      console.error('[dataStore.updateUser] Network or unexpected exception during Supabase update:', e);
+      dbErrorMsg = e?.message || 'تعذر الاتصال بقاعدة البيانات';
+    }
+
+    // CRITICAL: If the database operation did not succeed, THROW so the UI catches it!
+    if (!dbSuccess && dbErrorMsg) {
+      throw new Error(dbErrorMsg);
+    }
+
+    // Update local storage only after successful DB confirmation
     const updated = list.map((u) => {
-      if (u.id === id) {
+      if (u.id === id || (targetEmail && u.email?.trim().toLowerCase() === targetEmail)) {
         return {
           ...u,
           ...updates,
+          id: finalId,
+          school_role: payload.school_role || u.school_role,
+          status: payload.status || u.status,
+          name: payload.name || u.name,
+          customPermissions: payload.custom_permissions || u.customPermissions,
           updatedAt: new Date().toISOString(),
         };
       }
@@ -693,19 +808,8 @@ class LocalDataStore {
     });
     this.setStorage('users', updated);
 
-    try {
-      const payload: Record<string, any> = {
-        updated_at: new Date().toISOString(),
-      };
-      if (updates.school_role) payload.school_role = updates.school_role;
-      if (updates.status) payload.status = updates.status;
-      if (updates.name) payload.name = updates.name;
-      if (updates.customPermissions) payload.custom_permissions = updates.customPermissions;
-
-      await supabase.from('users').update(payload).eq('id', id);
-    } catch (e) {
-      console.warn('Supabase user update notice:', e);
-    }
+    const savedUser = updated.find((u) => u.id === finalId || (targetEmail && u.email?.trim().toLowerCase() === targetEmail));
+    return savedUser || existing!;
   }
 }
 

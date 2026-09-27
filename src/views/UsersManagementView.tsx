@@ -154,7 +154,11 @@ export const UsersManagementView: React.FC = () => {
     setErrorMessage(null);
 
     try {
+      console.log(`[UsersManagementView] Saving role update for ${editingUser.name} (${editingUser.email}) to role: ${editRole}`);
+
       await dataStore.updateUser(editingUser.id, {
+        name: editingUser.name,
+        email: editingUser.email,
         school_role: editRole,
         status: editStatus,
         customPermissions: editCustomPerms,
@@ -170,15 +174,15 @@ export const UsersManagementView: React.FC = () => {
         entityId: editingUser.id,
         oldValue: `${ROLE_LABELS_AR[editingUser.school_role]} (${editingUser.status})`,
         newValue: `${ROLE_LABELS_AR[editRole]} (${editStatus})`,
-        details: `تحديث صلاحيات ورتبة المستخدم (${editingUser.name})`,
+        details: `تحديث صلاحيات ورتبة المستخدم (${editingUser.name}) إلى (${ROLE_LABELS_AR[editRole]})`,
       });
 
-      showToast(`تم حفظ وتحديث صلاحيات ${editingUser.name} بنجاح`);
+      showToast(`تم حفظ وتحديث صلاحيات ${editingUser.name} في قاعدة البيانات بنجاح`);
       setEditingUser(null);
       await loadUsers();
     } catch (err: any) {
-      console.error('Error saving user permissions:', err);
-      setErrorMessage(err?.message || 'حدث خطأ أثناء حفظ التعديلات');
+      console.error('[UsersManagementView] Error saving user permissions:', err);
+      setErrorMessage(err?.message || 'حدث خطأ أثناء حفظ التعديلات في قاعدة البيانات');
     } finally {
       setSaving(false);
     }

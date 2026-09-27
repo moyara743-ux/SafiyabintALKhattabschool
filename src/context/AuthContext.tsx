@@ -110,15 +110,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     // 2. Also try background fetch/upsert with Supabase users table
     try {
-      const { data: dbUser } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', currentId)
-        .maybeSingle();
+      let dbUser: any = null;
+      const isValidUuid = Boolean(currentId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(currentId));
+
+      if (isValidUuid) {
+        const { data } = await supabase.from('users').select('*').eq('id', currentId).maybeSingle();
+        dbUser = data;
+      }
+
+      if (!dbUser && currentEmail) {
+        const { data } = await supabase.from('users').select('*').eq('email', currentEmail).maybeSingle();
+        dbUser = data;
+      }
 
       if (dbUser) {
+        console.log('[AuthContext] Synced authoritative user profile from Supabase:', dbUser);
         activeProfile = {
           ...activeProfile,
+          id: dbUser.id || activeProfile.id,
           name: dbUser.name || activeProfile.name,
           school_role: isOwner ? 'owner' : ((dbUser.school_role as SchoolRole) || activeProfile.school_role),
           status: dbUser.status === 'disabled' ? 'disabled' : 'active',
@@ -127,14 +136,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         await dataStore.addUser(activeProfile);
       } else {
         // Attempt to insert missing row in Supabase users table
-        await supabase.from('users').upsert({
-          id: currentId,
+        const upsertPayload: Record<string, any> = {
           name: activeProfile.name,
           email: currentEmail,
           school_role: activeProfile.school_role,
           status: activeProfile.status,
           custom_permissions: activeProfile.customPermissions,
-        });
+        };
+        if (isValidUuid) {
+          upsertPayload.id = currentId;
+        }
+        await supabase.from('users').upsert(upsertPayload, { onConflict: 'email' });
       }
     } catch (e) {
       console.warn('[AuthContext] Notice in DB sync:', e);

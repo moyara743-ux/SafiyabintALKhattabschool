@@ -59,10 +59,13 @@ export const ProfileView: React.FC = () => {
           <div className="mt-2 flex items-center gap-2">
             <span className="px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
               {profile?.school_role === 'owner' ? 'المديرة العامة (مالك النظام)' :
-               profile?.school_role === 'admin' ? 'إدارية ومسؤولة نظام' :
-               profile?.school_role === 'teacher' ? 'معلمة' :
-               profile?.school_role === 'student' ? 'طالبة' :
-               profile?.school_role === 'parent' ? 'ولي أمر' : 'زائر'}
+               profile?.school_role === 'director' ? 'المديرة' :
+               profile?.school_role === 'supervisor' ? 'المشرفة' :
+               profile?.school_role === 'administrator' ? 'الإدارية ومسؤولة النظام' :
+               profile?.school_role === 'counselor' ? 'المرشدة الطلابية' :
+               profile?.school_role === 'teacher' ? 'المعلمة' :
+               profile?.school_role === 'student' ? 'الطالبة' :
+               profile?.school_role === 'parent' ? 'ولي أمر' : 'مستخدم'}
             </span>
             <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-slate-800 text-slate-300 border border-slate-700">
               الحالة: {profile?.status === 'disabled' ? 'معطل' : 'نشط ومفعل'}
