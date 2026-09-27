@@ -9,6 +9,7 @@ export const ROLE_LEVELS: Record<SchoolRole, number> = {
   administrator: 60,
   counselor: 50,
   teacher: 40,
+  parent: 20,
   student: 10,
 };
 
@@ -20,6 +21,7 @@ export const ROLE_LABELS_AR: Record<SchoolRole, string> = {
   administrator: 'الإدارية',
   counselor: 'المرشدة الطلابية',
   teacher: 'المعلمة',
+  parent: 'ولي أمر',
   student: 'الطالبة',
 };
 
@@ -126,6 +128,16 @@ export const ROLE_PERMISSIONS: Record<SchoolRole, PermissionKey[]> = {
     'viewDailyMessage',
   ],
 
+  parent: [
+    'viewAnnouncements',
+    'viewPosts',
+    'viewEvents',
+    'viewAchievements',
+    'viewPhotos',
+    'viewAlbums',
+    'viewDailyMessage',
+  ],
+
   student: [
     'viewAnnouncements',
     'viewPosts',
@@ -221,15 +233,15 @@ export function canUserManageTarget(actor: UserProfile, target: UserProfile): bo
 // Check if actor is allowed to assign a specific role to someone
 export function canAssignRole(actor: UserProfile, newRole: SchoolRole): boolean {
   if (!actor || actor.status === 'disabled') return false;
+  const isOwnerActor = actor.school_role === 'owner' || actor.email?.toLowerCase() === 'moyara743@gmail.com';
+  if (isOwnerActor) return true;
+
   if (!hasPermission(actor, 'changeRoles')) return false;
 
   // Only the Owner can assign the 'owner' role
   if (newRole === 'owner') {
-    return actor.school_role === 'owner';
+    return false;
   }
-
-  // Owner can assign any role
-  if (actor.school_role === 'owner') return true;
 
   // Actor can only assign roles STRICTLY LOWER than their own role level
   const actorLevel = ROLE_LEVELS[actor.school_role] || 0;

@@ -1,4 +1,4 @@
-// 1. Roles definition (7 exact school roles)
+// 1. Roles definition (8 school roles)
 export type SchoolRole =
   | 'owner'
   | 'director'
@@ -6,6 +6,7 @@ export type SchoolRole =
   | 'administrator'
   | 'counselor'
   | 'teacher'
+  | 'parent'
   | 'student';
 
 export type UserStatus = 'active' | 'disabled';

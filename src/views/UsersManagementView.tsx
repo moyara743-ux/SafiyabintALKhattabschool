@@ -237,6 +237,12 @@ export const UsersManagementView: React.FC = () => {
             {label}
           </span>
         );
+      case 'parent':
+        return (
+          <span className="px-2.5 py-1 bg-amber-500/20 text-amber-300 border border-amber-500/40 rounded-full text-xs font-bold">
+            {label}
+          </span>
+        );
       case 'student':
         return (
           <span className="px-2.5 py-1 bg-slate-800 text-slate-300 border border-slate-700 rounded-full text-xs font-bold">
@@ -323,6 +329,7 @@ export const UsersManagementView: React.FC = () => {
             <option value="administrator">الإدارية</option>
             <option value="counselor">المرشدة الطلابية</option>
             <option value="teacher">المعلمة</option>
+            <option value="parent">ولي أمر</option>
             <option value="student">الطالبة</option>
           </select>
         </div>
@@ -481,18 +488,28 @@ export const UsersManagementView: React.FC = () => {
                   الرتبة المدرسية الرسمية
                 </label>
                 <select
+                  id="user-edit-role-select"
                   value={editRole}
-                  onChange={(e) => setEditRole(e.target.value as SchoolRole)}
-                  disabled={!isOwner && editRole === 'owner'}
-                  className="w-full px-3.5 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:border-emerald-500"
+                  onChange={(e) => {
+                    const selected = e.target.value as SchoolRole;
+                    console.log('[UsersManagementView] Role selected:', selected);
+                    setEditRole(selected);
+                  }}
+                  disabled={saving}
+                  className="w-full px-3.5 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:border-emerald-500 cursor-pointer"
                 >
-                  {isOwner && <option value="owner">مالك النظام (المديرة العامة)</option>}
-                  <option value="director">المديرة</option>
-                  <option value="supervisor">المشرفة</option>
-                  <option value="administrator">الإدارية</option>
-                  <option value="counselor">المرشدة الطلابية</option>
-                  <option value="teacher">المعلمة</option>
-                  <option value="student">الطالبة</option>
+                  {isOwner && (
+                    <option value="owner" className="bg-slate-800 text-white">
+                      مالك النظام (المديرة العامة)
+                    </option>
+                  )}
+                  <option value="director" className="bg-slate-800 text-white">المديرة</option>
+                  <option value="supervisor" className="bg-slate-800 text-white">المشرفة</option>
+                  <option value="administrator" className="bg-slate-800 text-white">الإدارية</option>
+                  <option value="counselor" className="bg-slate-800 text-white">المرشدة الطلابية</option>
+                  <option value="teacher" className="bg-slate-800 text-white">المعلمة</option>
+                  <option value="parent" className="bg-slate-800 text-white">ولي أمر</option>
+                  <option value="student" className="bg-slate-800 text-white">الطالبة</option>
                 </select>
                 <p className="text-[11px] text-slate-400 mt-1">
                   تحدد الصلاحيات التلقائية وفق مصفوفة أدوار مدرسة صفية بنت عمر المعتمدة.

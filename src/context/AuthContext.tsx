@@ -75,67 +75,69 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const currentName =
       authUser.user_metadata?.name ||
       (isOwner ? 'بارا محمد راشد - مالك النظام' : currentEmail.split('@')[0] || 'مستخدم');
-    const currentRole: SchoolRole = isOwner ? 'owner' : 'student';
+    const defaultRole: SchoolRole = isOwner ? 'owner' : 'student';
 
-    // 1. Try to find user in dataStore by email first (strict primary identity) or by ID
-    let existingProfile = dataStore.getUserByEmail(currentEmail) || dataStore.getUserById(currentId);
-
-    let activeProfile: UserProfile;
-    if (!existingProfile) {
-      // Auto-create missing user using ACTUAL SESSION DATA (strictly preventing stale or cached owner data)
-      activeProfile = {
-        id: currentId,
-        name: currentName,
-        email: currentEmail,
-        school_role: currentRole,
-        customPermissions: [],
-        temporaryPermissions: [],
-        status: 'active',
-        createdAt: new Date().toISOString(),
-        lastLoginAt: new Date().toISOString(),
-      };
-      await dataStore.addUser(activeProfile);
-    } else {
-      // Existing profile found: ensure real session UUID and role are properly updated
-      activeProfile = {
-        ...existingProfile,
-        id: currentId,
-        email: currentEmail,
-        name: (currentName && currentName !== 'مستخدم') ? currentName : existingProfile.name,
-        school_role: isOwner ? 'owner' : (existingProfile.school_role || 'student'),
-        lastLoginAt: new Date().toISOString(),
-      };
-      await dataStore.addUser(activeProfile);
-    }
-
-    // 2. Also try background fetch/upsert with Supabase users table
+    // 1. FRESH FETCH DIRECTLY FROM SUPABASE public.users TABLE (PRIMARY SOURCE OF TRUTH)
+    let dbUser: any = null;
     try {
-      let dbUser: any = null;
       const isValidUuid = Boolean(currentId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(currentId));
 
+      // Attempt 1: Fetch by Auth UUID
       if (isValidUuid) {
-        const { data } = await supabase.from('users').select('*').eq('id', currentId).maybeSingle();
-        dbUser = data;
+        const { data, error } = await supabase.from('users').select('*').eq('id', currentId).maybeSingle();
+        if (!error && data) {
+          dbUser = data;
+        }
       }
 
+      // Attempt 2: Fetch by exact lowercase email if not found by UUID
       if (!dbUser && currentEmail) {
-        const { data } = await supabase.from('users').select('*').eq('email', currentEmail).maybeSingle();
-        dbUser = data;
+        const { data, error } = await supabase.from('users').select('*').eq('email', currentEmail).maybeSingle();
+        if (!error && data) {
+          dbUser = data;
+        }
       }
+    } catch (e) {
+      console.warn('[AuthContext] Fresh fetch from Supabase users error:', e);
+    }
 
-      if (dbUser) {
-        console.log('[AuthContext] Synced authoritative user profile from Supabase:', dbUser);
-        activeProfile = {
-          ...activeProfile,
-          id: dbUser.id || activeProfile.id,
-          name: dbUser.name || activeProfile.name,
-          school_role: isOwner ? 'owner' : ((dbUser.school_role as SchoolRole) || activeProfile.school_role),
-          status: dbUser.status === 'disabled' ? 'disabled' : 'active',
-          customPermissions: dbUser.custom_permissions || activeProfile.customPermissions,
-        };
-        await dataStore.addUser(activeProfile);
-      } else {
-        // Attempt to insert missing row in Supabase users table
+    let activeProfile: UserProfile;
+
+    if (dbUser) {
+      // The row exists in Supabase: USE EXACT DATABASE VALUES AS SOLE SOURCE OF TRUTH
+      console.log('[AuthContext] Synced fresh authoritative user profile from Supabase:', dbUser);
+      activeProfile = {
+        id: dbUser.id || currentId,
+        name: dbUser.name || currentName,
+        email: (dbUser.email || currentEmail).toLowerCase(),
+        school_role: isOwner ? 'owner' : ((dbUser.school_role as SchoolRole) || defaultRole),
+        status: dbUser.status === 'disabled' ? 'disabled' : 'active',
+        customPermissions: Array.isArray(dbUser.custom_permissions) ? dbUser.custom_permissions : [],
+        temporaryPermissions: [],
+        createdAt: dbUser.created_at || new Date().toISOString(),
+        lastLoginAt: new Date().toISOString(),
+      };
+      
+      // Update local storage to match the database (WITHOUT overwriting Supabase!)
+      dataStore.syncUserProfileFromRemote(activeProfile);
+    } else {
+      // User row not found in Supabase yet -> Use local store or defaults, then insert into Supabase
+      const localExisting = dataStore.getUserByEmail(currentEmail) || dataStore.getUserById(currentId);
+      activeProfile = {
+        id: currentId,
+        name: localExisting?.name || currentName,
+        email: currentEmail,
+        school_role: isOwner ? 'owner' : (localExisting?.school_role || defaultRole),
+        customPermissions: localExisting?.customPermissions || [],
+        temporaryPermissions: localExisting?.temporaryPermissions || [],
+        status: localExisting?.status || 'active',
+        createdAt: localExisting?.createdAt || new Date().toISOString(),
+        lastLoginAt: new Date().toISOString(),
+      };
+
+      // Attempt to insert/upsert new row in Supabase users table
+      try {
+        const isValidUuid = Boolean(currentId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(currentId));
         const upsertPayload: Record<string, any> = {
           name: activeProfile.name,
           email: currentEmail,
@@ -146,10 +148,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (isValidUuid) {
           upsertPayload.id = currentId;
         }
-        await supabase.from('users').upsert(upsertPayload, { onConflict: 'email' });
+        const insRes = await supabase.from('users').upsert(upsertPayload, { onConflict: 'email' }).select();
+        if (insRes.data && insRes.data[0]) {
+          const row = insRes.data[0];
+          activeProfile.id = row.id || activeProfile.id;
+          activeProfile.school_role = isOwner ? 'owner' : ((row.school_role as SchoolRole) || activeProfile.school_role);
+        }
+      } catch (upsertErr) {
+        console.warn('[AuthContext] Notice in DB upsert for new user:', upsertErr);
       }
-    } catch (e) {
-      console.warn('[AuthContext] Notice in DB sync:', e);
+
+      dataStore.syncUserProfileFromRemote(activeProfile);
     }
 
     return activeProfile;
@@ -202,16 +211,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const fastProfile = dataStore.getUserByEmail(authUser.email || '') || createFallbackProfile(authUser);
           setProfile(fastProfile);
 
-          // Ensure user exists in dataStore & sync with server using actual session data
-          ensureUserSynced(authUser)
-            .then((prof) => {
-              if (isMounted && prof) {
-                setProfile(prof);
-              }
-            })
-            .catch((e) => {
-              console.warn('[AuthContext] Error in ensureUserSynced:', e);
-            });
+          // Fetch fresh authoritative profile from Supabase
+          try {
+            const prof = await ensureUserSynced(authUser);
+            if (isMounted && prof) {
+              setProfile(prof);
+            }
+          } catch (e) {
+            console.warn('[AuthContext] Error in ensureUserSynced:', e);
+          }
         } else if (isMounted) {
           setUser(null);
           setProfile(null);
@@ -254,15 +262,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const fastProfile = dataStore.getUserByEmail(authUser.email || '') || createFallbackProfile(authUser);
           setProfile(fastProfile);
 
-          ensureUserSynced(authUser)
-            .then((prof) => {
-              if (isMounted && prof) {
-                setProfile(prof);
-              }
-            })
-            .catch((e) => {
-              console.warn('[AuthContext] Profile sync notice:', e);
-            });
+          try {
+            const prof = await ensureUserSynced(authUser);
+            if (isMounted && prof) {
+              setProfile(prof);
+            }
+          } catch (e) {
+            console.warn('[AuthContext] Profile sync notice:', e);
+          }
         } else {
           setUser(null);
           setProfile(null);

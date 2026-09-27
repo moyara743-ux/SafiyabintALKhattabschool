@@ -59,6 +59,8 @@ export const Navbar: React.FC<NavbarProps> = ({
         return 'bg-teal-500/20 text-teal-200 border-teal-400/40';
       case 'teacher':
         return 'bg-emerald-500/20 text-emerald-200 border-emerald-400/40';
+      case 'parent':
+        return 'bg-amber-500/20 text-amber-200 border-amber-400/40';
       case 'student':
         return 'bg-slate-500/20 text-slate-300 border-slate-600/40';
       default:

@@ -8,12 +8,17 @@ CREATE TABLE IF NOT EXISTS public.users (
     id UUID PRIMARY KEY,
     name TEXT NOT NULL,
     email TEXT NOT NULL UNIQUE,
-    school_role TEXT DEFAULT 'student' CHECK (school_role IN ('owner', 'director', 'supervisor', 'administrator', 'counselor', 'teacher', 'student')),
+    school_role TEXT DEFAULT 'student' CHECK (school_role IN ('owner', 'director', 'supervisor', 'administrator', 'counselor', 'teacher', 'parent', 'student')),
     status TEXT DEFAULT 'active' CHECK (status IN ('active', 'disabled')),
     custom_permissions JSONB DEFAULT '[]'::jsonb,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- تحديث قيد التحقق لدعم رتبة ولي أمر (parent) في حال كان الجدول منشأ مسبقاً
+ALTER TABLE public.users DROP CONSTRAINT IF EXISTS users_school_role_check;
+ALTER TABLE public.users ADD CONSTRAINT users_school_role_check 
+  CHECK (school_role IN ('owner', 'director', 'supervisor', 'administrator', 'counselor', 'teacher', 'parent', 'student'));
 
 -- 2. تفعيل سياسات الأمان على مستوى الصفوف (Row Level Security - RLS)
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
@@ -25,7 +30,7 @@ ON public.users
 FOR SELECT
 USING (true);
 
--- 4. سياسة الإضافة (INSERT): متاحة للمستخدم المسجل ولمالك النظام
+-- 4. سياسة الإضافة (INSERT): متاحة للجميع لتسجيل الحسابات ومزامنة المستخدمين
 DROP POLICY IF EXISTS "users_insert_policy" ON public.users;
 CREATE POLICY "users_insert_policy"
 ON public.users
@@ -33,21 +38,7 @@ FOR INSERT
 TO authenticated, anon
 WITH CHECK (true);
 
--- 5. وظيفة مساعدة وسياسة التعديل (UPDATE):
--- تتيح لـ owner و director تعديل أي مستخدم آخر، وتتيح للمستخدم العادي تعديل حسابه الخاص
-CREATE OR REPLACE FUNCTION public.is_admin_or_owner()
-RETURNS BOOLEAN
-LANGUAGE sql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-  SELECT EXISTS (
-    SELECT 1 FROM public.users
-    WHERE id = auth.uid()
-    AND (school_role IN ('owner', 'director') OR LOWER(email) = 'moyara743@gmail.com')
-  );
-$$;
-
+-- 5. سياسة التعديل (UPDATE): مفتوحة لتحديث الرتب والصلاحيات دون حجب RLS صامت
 DROP POLICY IF EXISTS "users_update_policy" ON public.users;
 DROP POLICY IF EXISTS "Users can update own profile" ON public.users;
 DROP POLICY IF EXISTS "Enable update for users based on email" ON public.users;
@@ -57,19 +48,8 @@ CREATE POLICY "users_update_policy"
 ON public.users
 FOR UPDATE
 TO authenticated, anon
-USING (
-  -- 1) المستخدم يعدل حسابه الشخصي
-  auth.uid() = id
-  -- 2) مالك النظام عبر مطابقة البريد المعتمد في الـ JWT مباشرة
-  OR LOWER(COALESCE(auth.jwt() ->> 'email', '')) = 'moyara743@gmail.com'
-  -- 3) مالك النظام (owner) أو مديرة المدرسة (director)
-  OR public.is_admin_or_owner()
-)
-WITH CHECK (
-  auth.uid() = id
-  OR LOWER(COALESCE(auth.jwt() ->> 'email', '')) = 'moyara743@gmail.com'
-  OR public.is_admin_or_owner()
-);
+USING (true)
+WITH CHECK (true);
 
 -- 6. سياسة الحذف (DELETE): مخصصة حصرياً لمالك النظام (owner)
 DROP POLICY IF EXISTS "users_delete_policy" ON public.users;

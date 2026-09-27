@@ -679,6 +679,18 @@ class LocalDataStore {
     return list.find((u) => u.email && u.email.trim().toLowerCase() === clean) || null;
   }
 
+  public syncUserProfileFromRemote(profile: UserProfile): void {
+    const list = this.getCollection<UserProfile[]>('users');
+    const cleanEmail = (profile.email || '').trim().toLowerCase();
+    
+    // Filter out previous version of this user
+    const filtered = list.filter(
+      (u) => u.id !== profile.id && (!cleanEmail || !u.email || u.email.trim().toLowerCase() !== cleanEmail)
+    );
+    const updated = [profile, ...filtered];
+    this.setStorage('users', updated);
+  }
+
   public async updateUser(id: string, updates: Partial<UserProfile>): Promise<UserProfile> {
     const list = this.getCollection<UserProfile[]>('users');
     const existing =
@@ -719,24 +731,25 @@ class LocalDataStore {
         updateRes = await supabase.from('users').update(payload).eq('id', id).select();
       }
 
-      // 2. If update by ID was not possible or updated 0 rows, try update by UNIQUE email
+      // 2. If update by ID was not possible or returned 0 rows, try update by UNIQUE email
       if ((!updateRes || (Array.isArray(updateRes.data) && updateRes.data.length === 0)) && targetEmail) {
         console.log(`[dataStore.updateUser] Executing update by email: ${targetEmail}`);
         updateRes = await supabase.from('users').update(payload).eq('email', targetEmail).select();
       }
 
-      // Inspect response from Supabase
+      // Inspect response from Supabase update
       if (updateRes?.error) {
         const err = updateRes.error;
         console.error('[dataStore.updateUser] Supabase UPDATE returned error:', err);
         if (err.code === '42501') {
-          dbErrorMsg = `رفضت قاعدة البيانات التحديث بسبب سياسة الأمان (RLS Error 42501). يرجى التأكد من صلاحية المالك أو تنفيذ ملف SQL في Supabase.`;
+          dbErrorMsg = `رفضت قاعدة البيانات التحديث بسبب سياسة الأمان (RLS Error 42501). يرجى التأكد من تنفيذ ملف SQL في Supabase.`;
         } else if (err.code === '22P02') {
           dbErrorMsg = `صيغة المعرف غير متوافقة مع قاعدة البيانات (UUID Syntax 22P02).`;
         } else {
           dbErrorMsg = `خطأ أثناء تحديث قاعدة البيانات (${err.code || 'Error'}): ${err.message}`;
         }
       } else if (updateRes && Array.isArray(updateRes.data) && updateRes.data.length > 0) {
+        // Genuine update confirmed by Supabase returning updated row
         dbSuccess = true;
         const updatedRow = updateRes.data[0];
         console.log('[dataStore.updateUser] Supabase UPDATE succeeded! Updated row:', updatedRow);
@@ -744,7 +757,7 @@ class LocalDataStore {
           finalId = updatedRow.id;
         }
       } else {
-        // 0 rows updated and no error. Row does not exist in public.users yet -> attempt UPSERT
+        // 0 rows updated and no error. The row does not exist in public.users yet -> attempt UPSERT
         console.warn('[dataStore.updateUser] 0 rows matched for UPDATE. Attempting UPSERT in public.users...');
         if (targetEmail) {
           const upsertPayload: Record<string, any> = {
@@ -763,7 +776,7 @@ class LocalDataStore {
           if (upsertRes.error) {
             console.error('[dataStore.updateUser] Supabase UPSERT returned error:', upsertRes.error);
             if (upsertRes.error.code === '42501') {
-              dbErrorMsg = `رفضت قاعدة البيانات إدراج المستخدم بسبب سياسة الأمان (RLS Error 42501).`;
+              dbErrorMsg = `رفضت قاعدة البيانات إدراج المستخدم بسبب سياسة الأمان (RLS Error 42501). يرجى تنفيذ ملف SQL في Supabase.`;
             } else {
               dbErrorMsg = `فشل إدراج المستخدم في قاعدة البيانات: ${upsertRes.error.message}`;
             }
@@ -774,7 +787,7 @@ class LocalDataStore {
               finalId = upsertRes.data[0].id;
             }
           } else {
-            dbErrorMsg = 'لم يتم حفظ السجل في قاعدة بيانات Supabase (يرجى فحص سياسات RLS للجدول public.users).';
+            dbErrorMsg = 'لم يتم حفظ السجل في قاعدة بيانات Supabase (النتيجة فارغة 0 صفوف). قد يكون ذلك بسبب سياسة RLS تمنع التحديث بصمت.';
           }
         } else {
           dbErrorMsg = 'لم يتم العثور على المستخدم في قاعدة البيانات ولا يتوفر بريد إلكتروني لإنشائه.';
@@ -785,12 +798,15 @@ class LocalDataStore {
       dbErrorMsg = e?.message || 'تعذر الاتصال بقاعدة البيانات';
     }
 
-    // CRITICAL: If the database operation did not succeed, THROW so the UI catches it!
-    if (!dbSuccess && dbErrorMsg) {
-      throw new Error(dbErrorMsg);
+    // STRICT CHECK: If the database operation did not succeed in updating/returning rows, THROW ERROR!
+    // Never allow a false success toast when Supabase has not been modified.
+    if (!dbSuccess) {
+      const finalMsg = dbErrorMsg || 'لم يتم تحديث أي صف في قاعدة البيانات Supabase (النتيجة 0 صفوف). يرجى فحص سياسات الأمان RLS.';
+      console.error('[dataStore.updateUser] Aborting local update because DB update failed:', finalMsg);
+      throw new Error(finalMsg);
     }
 
-    // Update local storage only after successful DB confirmation
+    // Update local storage ONLY AFTER successful DB confirmation
     const updated = list.map((u) => {
       if (u.id === id || (targetEmail && u.email?.trim().toLowerCase() === targetEmail)) {
         return {
