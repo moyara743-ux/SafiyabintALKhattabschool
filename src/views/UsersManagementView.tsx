@@ -74,17 +74,30 @@ export const UsersManagementView: React.FC = () => {
       }
 
       if (data && Array.isArray(data)) {
-        const remoteUsers: UserProfile[] = data.map((d: any) => ({
-          id: d.id,
-          name: d.name || 'مستخدم',
-          email: (d.email || '').trim().toLowerCase(),
-          school_role: d.school_role || 'student',
-          status: d.status || 'active',
-          customPermissions: Array.isArray(d.custom_permissions) ? d.custom_permissions : [],
-          temporaryPermissions: Array.isArray(d.temporary_permissions) ? d.temporary_permissions : [],
-          createdAt: d.created_at || new Date().toISOString(),
-          updatedAt: d.updated_at,
-        }));
+        const remoteUsers: UserProfile[] = data.map((d: any) => {
+          const email = (d.email || '').trim().toLowerCase();
+          const isOwnerAccount = email === 'moyara743@gmail.com';
+          const isYaraAccount = email === 'yaradrashed@gmail.com';
+
+          let role: SchoolRole = d.school_role || 'student';
+          if (isOwnerAccount) {
+            role = 'owner';
+          } else if (role === 'owner' || isYaraAccount) {
+            role = 'student';
+          }
+
+          return {
+            id: d.id,
+            name: d.name || 'مستخدم',
+            email,
+            school_role: role,
+            status: d.status || 'active',
+            customPermissions: isYaraAccount ? [] : (Array.isArray(d.custom_permissions) ? d.custom_permissions : []),
+            temporaryPermissions: isYaraAccount ? [] : (Array.isArray(d.temporary_permissions) ? d.temporary_permissions : []),
+            createdAt: d.created_at || new Date().toISOString(),
+            updatedAt: d.updated_at,
+          };
+        });
 
         // Sort by role hierarchy
         remoteUsers.sort((a, b) => (ROLE_LEVELS[b.school_role] || 0) - (ROLE_LEVELS[a.school_role] || 0));
@@ -161,15 +174,22 @@ export const UsersManagementView: React.FC = () => {
   const openEditModal = (target: UserProfile) => {
     if (!currentProfile) return;
     if (!canUserManageTarget(currentProfile, target)) {
-      alert('لا يمكنك تعديل هذا المستخدم لأن رتبته مساوية أو أعلى من رتبتك');
+      alert('لا يمكنك تعديل هذا المستخدم لأن رتبته مساوية أو أعلى من رتبتك أو لأنه حساب مالك النظام المحمي');
       return;
     }
 
     setEditingUser(target);
-    setEditRole(target.school_role);
+    const targetEmail = (target.email || '').trim().toLowerCase();
+    if (targetEmail === 'yaradrashed@gmail.com') {
+      setEditRole('student');
+      setEditCustomPerms([]);
+      setEditTempPerms([]);
+    } else {
+      setEditRole(target.school_role === 'owner' && targetEmail !== 'moyara743@gmail.com' ? 'student' : target.school_role);
+      setEditCustomPerms(target.customPermissions ? [...target.customPermissions] : []);
+      setEditTempPerms(target.temporaryPermissions ? [...target.temporaryPermissions] : []);
+    }
     setEditStatus(target.status || 'active');
-    setEditCustomPerms(target.customPermissions ? [...target.customPermissions] : []);
-    setEditTempPerms(target.temporaryPermissions ? [...target.temporaryPermissions] : []);
     setErrorMessage(null);
   };
 
@@ -202,6 +222,21 @@ export const UsersManagementView: React.FC = () => {
 
   const handleSaveUser = async () => {
     if (!editingUser || !currentUser || !currentProfile) return;
+    const targetEmail = (editingUser.email || '').trim().toLowerCase();
+
+    // STRICT RULE: Absolute ban on owner promotion
+    if (editRole === 'owner' && targetEmail !== 'moyara743@gmail.com') {
+      setErrorMessage('يمنع منعاً باتاً ومطلقاً إتاحة رتبة مالك النظام أو الترقية إليها لأي حساب آخر في الموقع.');
+      return;
+    }
+
+    // STRICT RULE: yaradrashed@gmail.com is strictly student
+    if (targetEmail === 'yaradrashed@gmail.com') {
+      if (editRole !== 'student' || editCustomPerms.length > 0 || editTempPerms.length > 0) {
+        setErrorMessage('الحساب yaradrashed@gmail.com مقيد برتبة طالبة ولا يمتلك أي صلاحيات إدارة أو ملكية.');
+        return;
+      }
+    }
 
     if (editRole !== editingUser.school_role && !canAssignRole(currentProfile, editRole)) {
       setErrorMessage('لا تملكين صلاحية ترقية المستخدم لهذه الرتبة');
@@ -579,30 +614,38 @@ export const UsersManagementView: React.FC = () => {
                 <label className="block text-xs font-bold text-slate-700 mb-1.5">
                   الرتبة المدرسية الرسمية
                 </label>
-                <select
-                  id="user-edit-role-select"
-                  value={editRole}
-                  onChange={(e) => {
-                    const selected = e.target.value as SchoolRole;
-                    console.log('[UsersManagementView] Role selected:', selected);
-                    setEditRole(selected);
-                  }}
-                  disabled={saving}
-                  className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600 cursor-pointer"
-                >
-                  {isOwner && (
-                    <option value="owner">
-                      مالك النظام (المديرة العامة)
-                    </option>
-                  )}
-                  <option value="director">المديرة</option>
-                  <option value="supervisor">المشرفة</option>
-                  <option value="administrator">الإدارية</option>
-                  <option value="counselor">المرشدة الطلابية</option>
-                  <option value="teacher">المعلمة</option>
-                  <option value="parent">ولي أمر</option>
-                  <option value="student">الطالبة</option>
-                </select>
+                {editingUser.email?.toLowerCase() === 'moyara743@gmail.com' ? (
+                  <div className="w-full px-3.5 py-2.5 bg-amber-50 border border-amber-300 rounded-xl text-xs font-bold text-amber-950 flex items-center justify-between shadow-xs">
+                    <span>مالك النظام (رتبة ثابتة ومحمية حصرياً)</span>
+                    <Lock className="w-4 h-4 text-amber-600" />
+                  </div>
+                ) : editingUser.email?.toLowerCase() === 'yaradrashed@gmail.com' ? (
+                  <div className="w-full px-3.5 py-2.5 bg-slate-100 border border-slate-300 rounded-xl text-xs font-bold text-slate-800 flex items-center justify-between shadow-xs">
+                    <span>الطالبة (رتبة ثابتة - لا تملك صلاحيات إدارة أو ملكية)</span>
+                    <Lock className="w-4 h-4 text-slate-500" />
+                  </div>
+                ) : (
+                  <select
+                    id="user-edit-role-select"
+                    value={editRole}
+                    onChange={(e) => {
+                      const selected = e.target.value as SchoolRole;
+                      console.log('[UsersManagementView] Role selected:', selected);
+                      setEditRole(selected);
+                    }}
+                    disabled={saving}
+                    className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600 cursor-pointer"
+                  >
+                    {/* STRICT REQUIREMENT: 'owner' role is NEVER an option for promotion or assignment */}
+                    <option value="director">المديرة</option>
+                    <option value="supervisor">المشرفة</option>
+                    <option value="administrator">الإدارية</option>
+                    <option value="counselor">المرشدة الطلابية</option>
+                    <option value="teacher">المعلمة</option>
+                    <option value="parent">ولي أمر</option>
+                    <option value="student">الطالبة</option>
+                  </select>
+                )}
                 <p className="text-[11px] text-slate-500 mt-1">
                   تحدد الصلاحيات التلقائية وفق مصفوفة أدوار مدرسة صفية بنت عمر المعتمدة.
                 </p>
@@ -626,42 +669,55 @@ export const UsersManagementView: React.FC = () => {
               </div>
             </div>
 
-            {/* Granular Custom Permissions */}
-            <div className="space-y-3 pt-3 border-t border-slate-100">
-              <div>
-                <h4 className="text-xs font-extrabold text-slate-900">الصلاحيات المخصصة (Custom Permissions)</h4>
-                <p className="text-[11px] text-slate-500">
-                  يمكنك منح صلاحيات استثنائية محددة للمستخدم تتجاوز رتبته الأساسية.
-                </p>
+            {/* Custom Permissions & Temporary Permissions or Student Notice */}
+            {editingUser.email?.toLowerCase() === 'yaradrashed@gmail.com' ? (
+              <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs text-slate-700 flex items-center gap-2.5">
+                <AlertCircle className="w-5 h-5 text-slate-500 shrink-0" />
+                <div>
+                  <p className="font-bold text-slate-800">حساب الطالبة (صلاحيات مقيدة)</p>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    هذا الحساب مقيد برتبة الطالبة وفق الضوابط الصارمة المعتمدة، ولا يمتلك أي صلاحيات إدارية أو إشرافية أو صلاحيات ملكية.
+                  </p>
+                </div>
               </div>
+            ) : (
+              <>
+                {/* Granular Custom Permissions */}
+                <div className="space-y-3 pt-3 border-t border-slate-100">
+                  <div>
+                    <h4 className="text-xs font-extrabold text-slate-900">الصلاحيات المخصصة (Custom Permissions)</h4>
+                    <p className="text-[11px] text-slate-500">
+                      يمكنك منح صلاحيات استثنائية محددة للمستخدم تتجاوز رتبته الأساسية.
+                    </p>
+                  </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
-                {ALL_PERMISSIONS.map((key) => {
-                  const isGranted = editCustomPerms.includes(key);
-                  const label = PERMISSION_LABELS_AR[key] || key;
-                  return (
-                    <button
-                      type="button"
-                      key={key}
-                      onClick={() => handleToggleCustomPerm(key)}
-                      className={`p-2.5 rounded-xl border text-right transition-all flex items-center justify-between text-xs cursor-pointer ${
-                        isGranted
-                          ? 'bg-emerald-50 border-emerald-400 text-emerald-950 font-bold'
-                          : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
-                      }`}
-                    >
-                      <div>
-                        <span className="block font-bold">{label}</span>
-                        <span className="font-mono text-[10px] text-slate-400">{key}</span>
-                      </div>
-                      <span className="text-[10px] font-bold">
-                        {isGranted ? 'ممنوحة' : 'افتراضي'}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                    {ALL_PERMISSIONS.map((key) => {
+                      const isGranted = editCustomPerms.includes(key);
+                      const label = PERMISSION_LABELS_AR[key] || key;
+                      return (
+                        <button
+                          type="button"
+                          key={key}
+                          onClick={() => handleToggleCustomPerm(key)}
+                          className={`p-2.5 rounded-xl border text-right transition-all flex items-center justify-between text-xs cursor-pointer ${
+                            isGranted
+                              ? 'bg-emerald-50 border-emerald-400 text-emerald-950 font-bold'
+                              : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                          }`}
+                        >
+                          <div>
+                            <span className="block font-bold">{label}</span>
+                            <span className="font-mono text-[10px] text-slate-400">{key}</span>
+                          </div>
+                          <span className="text-[10px] font-bold">
+                            {isGranted ? 'ممنوحة' : 'افتراضي'}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
 
             {/* Temporary Permissions */}
             <div className="space-y-3 pt-3 border-t border-slate-100">
@@ -751,6 +807,8 @@ export const UsersManagementView: React.FC = () => {
                 </div>
               )}
             </div>
+          </>
+        )}
 
             {/* Actions */}
             <div className="pt-4 flex items-center justify-end gap-3 border-t border-slate-100">

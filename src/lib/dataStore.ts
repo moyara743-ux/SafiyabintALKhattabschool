@@ -10,6 +10,7 @@ import {
   SiteSettings,
   UserProfile,
   ActivityLog,
+  SchoolRole,
 } from '../types';
 import {
   DEFAULT_SETTINGS,
@@ -551,6 +552,27 @@ class LocalDataStore {
   }
 
   // Users management (Exclusively fetched from Supabase public.users table)
+  private sanitizeUserProfile(u: UserProfile): UserProfile {
+    const email = (u.email || '').trim().toLowerCase();
+    const isOwnerAccount = email === OWNER_EMAIL.toLowerCase();
+    const isYaraAccount = email === 'yaradrashed@gmail.com';
+
+    let role: SchoolRole = u.school_role || 'student';
+    if (isOwnerAccount) {
+      role = 'owner';
+    } else if (role === 'owner' || isYaraAccount) {
+      role = 'student';
+    }
+
+    return {
+      ...u,
+      email,
+      school_role: role,
+      customPermissions: isYaraAccount ? [] : (u.customPermissions || []),
+      temporaryPermissions: isYaraAccount ? [] : (u.temporaryPermissions || []),
+    };
+  }
+
   public async getUsers(): Promise<UserProfile[]> {
     let remoteUsers: UserProfile[] = [];
 
@@ -568,17 +590,30 @@ class LocalDataStore {
       const { data, error } = (await Promise.race([fetchPromise, timeoutPromise])) as any;
 
       if (!error && Array.isArray(data)) {
-        remoteUsers = data.map((d: any) => ({
-          id: d.id,
-          name: d.name || 'مستخدم',
-          email: (d.email || '').trim().toLowerCase(),
-          school_role: d.school_role || 'student',
-          status: d.status || 'active',
-          customPermissions: Array.isArray(d.custom_permissions) ? d.custom_permissions : [],
-          temporaryPermissions: Array.isArray(d.temporary_permissions) ? d.temporary_permissions : [],
-          createdAt: d.created_at || new Date().toISOString(),
-          updatedAt: d.updated_at,
-        }));
+        remoteUsers = data.map((d: any) => {
+          const email = (d.email || '').trim().toLowerCase();
+          const isOwnerAccount = email === OWNER_EMAIL.toLowerCase();
+          const isYaraAccount = email === 'yaradrashed@gmail.com';
+
+          let role: SchoolRole = d.school_role || 'student';
+          if (isOwnerAccount) {
+            role = 'owner';
+          } else if (role === 'owner' || isYaraAccount) {
+            role = 'student';
+          }
+
+          return {
+            id: d.id,
+            name: d.name || 'مستخدم',
+            email,
+            school_role: role,
+            status: d.status || 'active',
+            customPermissions: isYaraAccount ? [] : (Array.isArray(d.custom_permissions) ? d.custom_permissions : []),
+            temporaryPermissions: isYaraAccount ? [] : (Array.isArray(d.temporary_permissions) ? d.temporary_permissions : []),
+            createdAt: d.created_at || new Date().toISOString(),
+            updatedAt: d.updated_at,
+          };
+        });
 
         // Exclusively save Supabase users to storage, completely purging any old mock data
         this.setStorage('users', remoteUsers);
@@ -590,26 +625,36 @@ class LocalDataStore {
 
     // Fallback: If network / query timed out, return ONLY valid non-mock cached users
     const cached = this.getCollection<UserProfile[]>('users') || [];
-    return cached.filter(
-      (u) => u && u.id && !u.id.startsWith('00000000') && !u.id.startsWith('owner_') && !u.id.startsWith('user_')
-    );
+    return cached
+      .filter((u) => u && u.id && !u.id.startsWith('00000000') && !u.id.startsWith('owner_') && !u.id.startsWith('user_'))
+      .map((u) => this.sanitizeUserProfile(u));
   }
 
   public setUsers(users: UserProfile[]): void {
-    const validOnly = users.filter(
-      (u) => u && u.id && !u.id.startsWith('00000000') && !u.id.startsWith('owner_') && !u.id.startsWith('user_')
-    );
+    const validOnly = users
+      .filter((u) => u && u.id && !u.id.startsWith('00000000') && !u.id.startsWith('owner_') && !u.id.startsWith('user_'))
+      .map((u) => this.sanitizeUserProfile(u));
     this.setStorage('users', validOnly);
   }
 
   public async addUser(user: UserProfile): Promise<UserProfile> {
     const cleanEmail = (user.email || '').trim().toLowerCase();
     const isOwner = cleanEmail === OWNER_EMAIL.toLowerCase();
+    const isYaraAccount = cleanEmail === 'yaradrashed@gmail.com';
+
+    let resolvedRole: SchoolRole = user.school_role || 'student';
+    if (isOwner) {
+      resolvedRole = 'owner';
+    } else if (resolvedRole === 'owner' || isYaraAccount) {
+      resolvedRole = 'student';
+    }
+
     const cleanUser: UserProfile = {
       ...user,
       email: cleanEmail || user.email,
-      school_role: isOwner ? 'owner' : (user.school_role || 'student'),
+      school_role: resolvedRole,
       status: user.status || 'active',
+      customPermissions: isYaraAccount ? [] : (user.customPermissions || []),
     };
 
     const list = this.getCollection<UserProfile[]>('users');
@@ -643,25 +688,28 @@ class LocalDataStore {
 
   public getUserById(id: string): UserProfile | null {
     const list = this.getCollection<UserProfile[]>('users');
-    return list.find((u) => u.id === id) || null;
+    const u = list.find((u) => u.id === id);
+    return u ? this.sanitizeUserProfile(u) : null;
   }
 
   public getUserByEmail(email: string): UserProfile | null {
     if (!email) return null;
     const clean = email.trim().toLowerCase();
     const list = this.getCollection<UserProfile[]>('users');
-    return list.find((u) => u.email && u.email.trim().toLowerCase() === clean) || null;
+    const u = list.find((u) => u.email && u.email.trim().toLowerCase() === clean);
+    return u ? this.sanitizeUserProfile(u) : null;
   }
 
   public syncUserProfileFromRemote(profile: UserProfile): void {
+    const sanitized = this.sanitizeUserProfile(profile);
     const list = this.getCollection<UserProfile[]>('users');
-    const cleanEmail = (profile.email || '').trim().toLowerCase();
+    const cleanEmail = (sanitized.email || '').trim().toLowerCase();
     
     // Filter out previous version of this user
     const filtered = list.filter(
-      (u) => u.id !== profile.id && (!cleanEmail || !u.email || u.email.trim().toLowerCase() !== cleanEmail)
+      (u) => u.id !== sanitized.id && (!cleanEmail || !u.email || u.email.trim().toLowerCase() !== cleanEmail)
     );
-    const updated = [profile, ...filtered];
+    const updated = [sanitized, ...filtered];
     this.setStorage('users', updated);
   }
 
@@ -673,15 +721,28 @@ class LocalDataStore {
 
     const targetEmail = (updates.email || existing?.email || '').trim().toLowerCase();
     const isOwner = targetEmail === OWNER_EMAIL.toLowerCase();
+    const isYaraAccount = targetEmail === 'yaradrashed@gmail.com';
+
+    // Strict rule: Under NO circumstances can ANY account be promoted or assigned the 'owner' role
+    if (updates.school_role === 'owner' && !isOwner) {
+      throw new Error('يمنع منعاً باتاً ومطلقاً إتاحة رتبة مالك النظام أو الترقية إليها لأي حساب آخر في الموقع.');
+    }
+
+    // Strict rule: yaradrashed@gmail.com is strictly locked to 'student'
+    if (isYaraAccount && updates.school_role && updates.school_role !== 'student') {
+      throw new Error('الحساب yaradrashed@gmail.com مقيد برتبة طالبة ولا يمكن منحه صلاحيات إدارة أو ترقيته.');
+    }
 
     // Prepare payload for Supabase public.users table
     const payload: Record<string, any> = {
       updated_at: new Date().toISOString(),
     };
-    if (updates.school_role) payload.school_role = isOwner ? 'owner' : updates.school_role;
+    if (updates.school_role) {
+      payload.school_role = isOwner ? 'owner' : (isYaraAccount ? 'student' : (updates.school_role === 'owner' ? 'student' : updates.school_role));
+    }
     if (updates.status) payload.status = updates.status;
     if (updates.name) payload.name = updates.name;
-    if (updates.customPermissions) payload.custom_permissions = updates.customPermissions;
+    if (updates.customPermissions) payload.custom_permissions = isYaraAccount ? [] : updates.customPermissions;
 
     // Check if id is a valid PostgreSQL UUID
     const isValidUuid = Boolean(

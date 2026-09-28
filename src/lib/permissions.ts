@@ -169,10 +169,24 @@ export function computeEffectivePermissions(profile: UserProfile | null): Set<Pe
     return new Set<PermissionKey>();
   }
 
+  const cleanEmail = (profile.email || '').trim().toLowerCase();
+
+  // STRICT RULE: yaradrashed@gmail.com is strictly a student with no elevated permissions
+  if (cleanEmail === 'yaradrashed@gmail.com') {
+    const studentPerms = ROLE_PERMISSIONS['student'] || [];
+    return new Set<PermissionKey>(studentPerms);
+  }
+
+  // STRICT RULE: Only moyara743@gmail.com can possess the 'owner' role. Any other user with 'owner' is treated as 'student'.
+  const safeRole: SchoolRole =
+    profile.school_role === 'owner' && cleanEmail !== 'moyara743@gmail.com'
+      ? 'student'
+      : profile.school_role;
+
   const effective = new Set<PermissionKey>();
 
   // 1. Base role permissions
-  const roleBase = ROLE_PERMISSIONS[profile.school_role] || [];
+  const roleBase = ROLE_PERMISSIONS[safeRole] || [];
   roleBase.forEach((p) => effective.add(p));
 
   // 2. Custom permissions
@@ -200,7 +214,21 @@ export function hasPermission(profile: UserProfile | null, permission: Permissio
     return permission.startsWith('view');
   }
   if (profile.status === 'disabled') return false;
-  if (profile.school_role === 'owner' || profile.email?.toLowerCase() === 'moyara743@gmail.com') return true;
+
+  const cleanEmail = (profile.email || '').trim().toLowerCase();
+
+  // STRICT RULE: Sole System Owner is moyara743@gmail.com
+  if (cleanEmail === 'moyara743@gmail.com') return true;
+
+  // STRICT RULE: yaradrashed@gmail.com is strictly a student with NO admin or owner permissions
+  if (cleanEmail === 'yaradrashed@gmail.com') {
+    return permission.startsWith('view');
+  }
+
+  // Any non-owner email with 'owner' role is not recognized as owner
+  if (profile.school_role === 'owner' && cleanEmail !== 'moyara743@gmail.com') {
+    return permission.startsWith('view');
+  }
 
   const permissions = computeEffectivePermissions(profile);
   return permissions.has(permission);
@@ -212,13 +240,19 @@ export function hasPermission(profile: UserProfile | null, permission: Permissio
 export function canUserManageTarget(actor: UserProfile, target: UserProfile): boolean {
   if (!actor || actor.status === 'disabled') return false;
 
-  // Rule 17 & 99: NO ONE except the Owner can manage or modify the Owner!
-  if (target.school_role === 'owner' && actor.id !== target.id) {
+  const actorEmail = (actor.email || '').trim().toLowerCase();
+  const targetEmail = (target.email || '').trim().toLowerCase();
+
+  // yaradrashed@gmail.com has zero management permissions
+  if (actorEmail === 'yaradrashed@gmail.com') return false;
+
+  // Owner account (moyara743@gmail.com) is immutable and protected from management by any other user
+  if (targetEmail === 'moyara743@gmail.com' || target.school_role === 'owner') {
     return false;
   }
 
-  // Owner can manage anyone
-  if (actor.school_role === 'owner') return true;
+  // Sole owner moyara743@gmail.com can manage other accounts
+  if (actorEmail === 'moyara743@gmail.com') return true;
 
   // Actor must have manageUsers permission
   if (!hasPermission(actor, 'manageUsers')) return false;
@@ -233,15 +267,20 @@ export function canUserManageTarget(actor: UserProfile, target: UserProfile): bo
 // Check if actor is allowed to assign a specific role to someone
 export function canAssignRole(actor: UserProfile, newRole: SchoolRole): boolean {
   if (!actor || actor.status === 'disabled') return false;
-  const isOwnerActor = actor.school_role === 'owner' || actor.email?.toLowerCase() === 'moyara743@gmail.com';
-  if (isOwnerActor) return true;
 
-  if (!hasPermission(actor, 'changeRoles')) return false;
-
-  // Only the Owner can assign the 'owner' role
+  // STRICT RULE: Absolute prohibition on assigning or promoting to 'owner' for any account.
+  // The owner role is permanent, fixed, and exclusively restricted to moyara743@gmail.com.
   if (newRole === 'owner') {
     return false;
   }
+
+  const actorEmail = (actor.email || '').trim().toLowerCase();
+  if (actorEmail === 'yaradrashed@gmail.com') return false;
+
+  const isOwnerActor = actorEmail === 'moyara743@gmail.com';
+  if (isOwnerActor) return true;
+
+  if (!hasPermission(actor, 'changeRoles')) return false;
 
   // Actor can only assign roles STRICTLY LOWER than their own role level
   const actorLevel = ROLE_LEVELS[actor.school_role] || 0;
@@ -253,8 +292,12 @@ export function canAssignRole(actor: UserProfile, newRole: SchoolRole): boolean 
 // Check if actor can grant a specific permission
 export function canGrantPermission(actor: UserProfile, permission: PermissionKey): boolean {
   if (!actor || actor.status === 'disabled') return false;
+
+  const actorEmail = (actor.email || '').trim().toLowerCase();
+  if (actorEmail === 'yaradrashed@gmail.com') return false;
+
   if (!hasPermission(actor, 'managePermissions')) return false;
-  if (actor.school_role === 'owner') return true;
+  if (actorEmail === 'moyara743@gmail.com') return true;
 
   // Actor cannot grant a permission that they themselves do not possess
   return hasPermission(actor, permission);
@@ -263,6 +306,10 @@ export function canGrantPermission(actor: UserProfile, permission: PermissionKey
 // Check if user has ANY create permission (for "+ إضافة" button)
 export function hasAnyCreatePermission(profile: UserProfile | null): boolean {
   if (!profile || profile.status === 'disabled') return false;
+
+  const email = (profile.email || '').trim().toLowerCase();
+  if (email === 'yaradrashed@gmail.com') return false;
+
   const perms = computeEffectivePermissions(profile);
   for (const p of perms) {
     if (p.startsWith('create')) return true;

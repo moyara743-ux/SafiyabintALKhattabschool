@@ -44,8 +44,11 @@ export const EventsView: React.FC<EventsViewProps> = ({
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   // Determine permissions
-  const userRole = profile?.school_role || '';
-  const isSystemOwner = isOwner || userRole === 'owner' || user?.email?.toLowerCase() === 'moyara743@gmail.com';
+  const isSystemOwner = Boolean(
+    isOwner ||
+    (user?.email && user.email.toLowerCase() === 'moyara743@gmail.com') ||
+    (profile?.email && profile.email.toLowerCase() === 'moyara743@gmail.com')
+  );
   const canCreate = hasPerm('createEvents') || isSystemOwner;
   const canEdit = hasPerm('editEvents') || isSystemOwner;
   const canDelete = hasPerm('deleteEvents') || isSystemOwner;

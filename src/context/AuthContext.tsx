@@ -47,16 +47,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Create instant fallback profile from auth user metadata to avoid blocking on DB queries
   const createFallbackProfile = (authUser: { id: string; email?: string; user_metadata?: any }): UserProfile => {
-    const isOwnerEmail = authUser.email?.toLowerCase() === OWNER_EMAIL.toLowerCase();
+    const cleanEmail = (authUser.email || '').trim().toLowerCase();
+    const isOwnerEmail = cleanEmail === OWNER_EMAIL.toLowerCase();
+    const isYaraAccount = cleanEmail === 'yaradrashed@gmail.com';
+
+    // Strict rule: Only OWNER_EMAIL can ever be owner. yaradrashed@gmail.com is strictly student.
     const initialRole: SchoolRole = isOwnerEmail ? 'owner' : 'student';
     const initialName =
       authUser.user_metadata?.name ||
-      (isOwnerEmail ? 'مالك النظام' : authUser.email?.split('@')[0] || 'مستخدم');
+      (isOwnerEmail ? 'يارا محمد راشد - مالك النظام' : isYaraAccount ? 'منال علي' : authUser.email?.split('@')[0] || 'مستخدم');
 
     return {
       id: authUser.id,
       name: initialName,
-      email: authUser.email || '',
+      email: cleanEmail,
       photoURL: authUser.user_metadata?.avatar_url || undefined,
       school_role: initialRole,
       customPermissions: [],
@@ -72,9 +76,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const currentId = authUser.id;
     const currentEmail = (authUser.email || '').trim().toLowerCase();
     const isOwner = currentEmail === OWNER_EMAIL.toLowerCase();
+    const isYaraAccount = currentEmail === 'yaradrashed@gmail.com';
     const currentName =
       authUser.user_metadata?.name ||
-      (isOwner ? 'بارا محمد راشد - مالك النظام' : currentEmail.split('@')[0] || 'مستخدم');
+      (isOwner ? 'يارا محمد راشد - مالك النظام' : isYaraAccount ? 'منال علي' : currentEmail.split('@')[0] || 'مستخدم');
     const defaultRole: SchoolRole = isOwner ? 'owner' : 'student';
 
     // 1. FRESH FETCH DIRECTLY FROM SUPABASE public.users TABLE (PRIMARY SOURCE OF TRUTH)
@@ -106,13 +111,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (dbUser) {
       // The row exists in Supabase: USE EXACT DATABASE VALUES AS SOLE SOURCE OF TRUTH
       console.log('[AuthContext] Synced fresh authoritative user profile from Supabase:', dbUser);
+      let resolvedRole: SchoolRole = (dbUser.school_role as SchoolRole) || defaultRole;
+      if (isOwner) {
+        resolvedRole = 'owner';
+      } else if (resolvedRole === 'owner' || isYaraAccount) {
+        // Enforce restriction: No non-owner account can have 'owner', and yaradrashed@gmail.com is strictly student
+        resolvedRole = 'student';
+      }
+
       activeProfile = {
         id: dbUser.id || currentId,
         name: dbUser.name || currentName,
-        email: (dbUser.email || currentEmail).toLowerCase(),
-        school_role: isOwner ? 'owner' : ((dbUser.school_role as SchoolRole) || defaultRole),
+        email: currentEmail,
+        school_role: resolvedRole,
         status: dbUser.status === 'disabled' ? 'disabled' : 'active',
-        customPermissions: Array.isArray(dbUser.custom_permissions) ? dbUser.custom_permissions : [],
+        customPermissions: isYaraAccount ? [] : (Array.isArray(dbUser.custom_permissions) ? dbUser.custom_permissions : []),
         temporaryPermissions: [],
         createdAt: dbUser.created_at || new Date().toISOString(),
         lastLoginAt: new Date().toISOString(),
@@ -123,13 +136,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } else {
       // User row not found in Supabase yet -> Use local store or defaults, then insert into Supabase
       const localExisting = dataStore.getUserByEmail(currentEmail) || dataStore.getUserById(currentId);
+      let resolvedRole: SchoolRole = isOwner ? 'owner' : (localExisting?.school_role || defaultRole);
+      if (!isOwner && resolvedRole === 'owner') resolvedRole = 'student';
+      if (isYaraAccount) resolvedRole = 'student';
+
       activeProfile = {
         id: currentId,
         name: localExisting?.name || currentName,
         email: currentEmail,
-        school_role: isOwner ? 'owner' : (localExisting?.school_role || defaultRole),
-        customPermissions: localExisting?.customPermissions || [],
-        temporaryPermissions: localExisting?.temporaryPermissions || [],
+        school_role: resolvedRole,
+        customPermissions: isYaraAccount ? [] : (localExisting?.customPermissions || []),
+        temporaryPermissions: isYaraAccount ? [] : (localExisting?.temporaryPermissions || []),
         status: localExisting?.status || 'active',
         createdAt: localExisting?.createdAt || new Date().toISOString(),
         lastLoginAt: new Date().toISOString(),
@@ -152,7 +169,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (insRes.data && insRes.data[0]) {
           const row = insRes.data[0];
           activeProfile.id = row.id || activeProfile.id;
-          activeProfile.school_role = isOwner ? 'owner' : ((row.school_role as SchoolRole) || activeProfile.school_role);
+          let roleAfterInsert: SchoolRole = (row.school_role as SchoolRole) || activeProfile.school_role;
+          if (isOwner) roleAfterInsert = 'owner';
+          else if (roleAfterInsert === 'owner' || isYaraAccount) roleAfterInsert = 'student';
+          activeProfile.school_role = roleAfterInsert;
         }
       } catch (upsertErr) {
         console.warn('[AuthContext] Notice in DB upsert for new user:', upsertErr);
@@ -478,9 +498,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return canUserManageTarget(profile, target);
   };
 
-  const isOwner = profile?.school_role === 'owner' || user?.email?.toLowerCase() === OWNER_EMAIL.toLowerCase();
+  const isOwner = Boolean(
+    (user?.email && user.email.trim().toLowerCase() === OWNER_EMAIL.toLowerCase()) ||
+    (profile?.email && profile.email.trim().toLowerCase() === OWNER_EMAIL.toLowerCase())
+  );
   const isDirector = isOwner || profile?.school_role === 'director';
-  const roleLabel = profile ? ROLE_LABELS_AR[profile.school_role] || 'مستخدم' : 'زائر';
+  
+  const roleLabel = useMemo(() => {
+    const email = (user?.email || profile?.email || '').trim().toLowerCase();
+    if (email === OWNER_EMAIL.toLowerCase()) {
+      return 'مالك النظام';
+    }
+    if (email === 'yaradrashed@gmail.com') {
+      return 'الطالبة';
+    }
+    if (profile?.school_role) {
+      return ROLE_LABELS_AR[profile.school_role] || 'مستخدم';
+    }
+    return user ? 'مستخدم' : 'زائر';
+  }, [user, profile]);
 
   return (
     <AuthContext.Provider

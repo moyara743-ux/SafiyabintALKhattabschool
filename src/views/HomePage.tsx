@@ -94,7 +94,7 @@ export const HomePage: React.FC<HomePageProps> = ({
   // - Visible exclusively to users with Admin role (administrator, director) or System Owner (owner, isOwner)
   const canManageStats = !!user && !!profile && (
     isOwner ||
-    profile.school_role === 'owner' ||
+    (profile.school_role === 'owner' && profile.email?.toLowerCase() === 'moyara743@gmail.com') ||
     profile.school_role === 'director' ||
     profile.school_role === 'administrator'
   );

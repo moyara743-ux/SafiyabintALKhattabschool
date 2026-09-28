@@ -42,8 +42,11 @@ export const AnnouncementsView: React.FC<AnnouncementsViewProps> = ({
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
-  const userRole = profile?.school_role || '';
-  const isSystemOwner = isOwner || userRole === 'owner' || user?.email?.toLowerCase() === 'moyara743@gmail.com';
+  const isSystemOwner = Boolean(
+    isOwner ||
+    (user?.email && user.email.toLowerCase() === 'moyara743@gmail.com') ||
+    (profile?.email && profile.email.toLowerCase() === 'moyara743@gmail.com')
+  );
   const canCreate = hasPerm('createAnnouncements') || isSystemOwner;
   const canEdit = hasPerm('editAnnouncements') || isSystemOwner;
   const canDelete = hasPerm('deleteAnnouncements') || isSystemOwner;
