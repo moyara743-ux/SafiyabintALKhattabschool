@@ -111,13 +111,13 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onEdit, onViewDetails 
   const getTypeBadge = (t: string) => {
     switch (t) {
       case 'today_summary':
-        return 'bg-amber-500/20 text-amber-300 border-amber-500/40';
+        return 'bg-amber-50 text-amber-900 border-amber-300';
       case 'achievement':
-        return 'bg-purple-500/20 text-purple-300 border-purple-500/40';
+        return 'bg-emerald-50 text-emerald-900 border-emerald-300';
       case 'announcement':
-        return 'bg-rose-500/20 text-rose-300 border-rose-500/40';
+        return 'bg-rose-50 text-rose-900 border-rose-300';
       default:
-        return 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40';
+        return 'bg-emerald-50 text-emerald-900 border-emerald-300';
     }
   };
 
@@ -150,12 +150,12 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onEdit, onViewDetails 
   return (
     <article
       onClick={() => onViewDetails?.(post)}
-      className="group relative bg-slate-900 rounded-3xl border border-slate-800 shadow-md hover:shadow-xl hover:border-slate-700 transition-all duration-300 flex flex-col justify-between overflow-hidden cursor-pointer"
+      className="group relative bg-white rounded-3xl border border-slate-200 hover:border-amber-400/80 shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col justify-between overflow-hidden cursor-pointer"
       dir="rtl"
     >
       {/* Pinned indicator banner */}
       {post.isPinned && (
-        <div className="bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 px-4 py-1 text-[11px] font-black flex items-center justify-between shadow-inner">
+        <div className="bg-gradient-to-r from-amber-500 via-amber-600 to-amber-500 text-white px-4 py-1.5 text-[11px] font-black flex items-center justify-between shadow-inner">
           <div className="flex items-center gap-1.5">
             <Pin className="w-3.5 h-3.5 fill-current" />
             <span>منشور مثبت في واجهة المدرسة</span>
@@ -166,17 +166,17 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onEdit, onViewDetails 
 
       {/* Post Cover Image if exists */}
       {post.images && post.images.length > 0 && (
-        <div className="relative aspect-video w-full overflow-hidden bg-slate-800">
+        <div className="relative aspect-video w-full overflow-hidden bg-slate-100">
           <img
             src={post.images[0]}
             alt={post.title}
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
             loading="lazy"
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-transparent opacity-80" />
+          <div className="absolute inset-0 bg-gradient-to-t from-slate-900/60 via-transparent to-transparent opacity-80" />
 
           {/* Type Tag Badge */}
-          <div className="absolute bottom-3 right-3 flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold border backdrop-blur-md bg-slate-900/80 text-white border-white/20">
+          <div className="absolute bottom-3 right-3 flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold border backdrop-blur-md bg-white/90 text-slate-800 border-slate-200 shadow-sm">
             {getTypeIcon(post.type)}
             <span>{getTypeLabel(post.type)}</span>
           </div>
@@ -187,13 +187,13 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onEdit, onViewDetails 
       <div className="p-5 sm:p-6 lg:p-7 flex-1 flex flex-col justify-between space-y-4">
         <div className="space-y-2.5">
           {/* Header Metadata and Action Menu */}
-          <div className="flex items-center justify-between text-xs sm:text-sm text-slate-400">
+          <div className="flex items-center justify-between text-xs sm:text-sm text-slate-500">
             <div className="flex items-center gap-2">
               <span className={`px-2.5 py-0.5 rounded-full text-[10px] sm:text-xs font-bold border ${getTypeBadge(post.type)}`}>
                 {post.category || 'عام'}
               </span>
-              <span className="flex items-center gap-1 text-[11px] sm:text-xs text-slate-400">
-                <Calendar className="w-3.5 h-3.5 text-slate-500" />
+              <span className="flex items-center gap-1 text-[11px] sm:text-xs text-slate-500">
+                <Calendar className="w-3.5 h-3.5 text-slate-400" />
                 <span>{formatDate(post.date || post.createdAt)}</span>
               </span>
             </div>
@@ -203,7 +203,7 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onEdit, onViewDetails 
               <div className="relative" onClick={(e) => e.stopPropagation()}>
                 <button
                   onClick={() => setDropdownOpen(!dropdownOpen)}
-                  className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
+                  className="p-1 rounded-lg text-slate-400 hover:text-slate-800 hover:bg-slate-100"
                 >
                   <MoreVertical className="w-4 h-4" />
                 </button>
@@ -211,7 +211,7 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onEdit, onViewDetails 
                 {dropdownOpen && (
                   <div
                     onMouseLeave={() => setDropdownOpen(false)}
-                    className="absolute left-0 mt-1 w-32 bg-slate-800 border border-slate-700 rounded-xl shadow-xl py-1 z-20"
+                    className="absolute left-0 mt-1 w-32 bg-white border border-slate-200 rounded-xl shadow-xl py-1 z-20"
                   >
                     {canEdit && onEdit && (
                       <button
@@ -219,9 +219,9 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onEdit, onViewDetails 
                           setDropdownOpen(false);
                           onEdit(post);
                         }}
-                        className="w-full px-3 py-1.5 text-right text-xs sm:text-sm text-slate-200 hover:bg-slate-700 flex items-center gap-2"
+                        className="w-full px-3 py-1.5 text-right text-xs sm:text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2"
                       >
-                        <Edit2 className="w-3.5 h-3.5 text-emerald-400" />
+                        <Edit2 className="w-3.5 h-3.5 text-emerald-600" />
                         <span>تعديل</span>
                       </button>
                     )}
@@ -229,9 +229,9 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onEdit, onViewDetails 
                       <button
                         onClick={handleDelete}
                         disabled={deleting}
-                        className="w-full px-3 py-1.5 text-right text-xs sm:text-sm text-rose-400 hover:bg-rose-500/10 flex items-center gap-2"
+                        className="w-full px-3 py-1.5 text-right text-xs sm:text-sm text-rose-600 hover:bg-rose-50 flex items-center gap-2"
                       >
-                        <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                        <Trash2 className="w-3.5 h-3.5 text-rose-600" />
                         <span>{deleting ? 'جارٍ الحذف...' : 'حذف'}</span>
                       </button>
                     )}
@@ -241,24 +241,24 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onEdit, onViewDetails 
             )}
           </div>
 
-          {/* Title */}
-          <h3 className="text-base sm:text-lg lg:text-xl font-bold text-white group-hover:text-emerald-400 transition-colors line-clamp-2 leading-snug">
+          {/* Title - Deep Emerald Green */}
+          <h3 className="text-base sm:text-lg lg:text-xl font-extrabold text-emerald-950 group-hover:text-emerald-700 transition-colors line-clamp-2 leading-snug">
             {post.title}
           </h3>
 
           {/* Snippet */}
-          <p className="text-xs sm:text-sm lg:text-base text-slate-300 line-clamp-3 leading-relaxed">
+          <p className="text-xs sm:text-sm lg:text-base text-slate-600 line-clamp-3 leading-relaxed">
             {post.content}
           </p>
         </div>
 
         {/* Footer info: Author & Like / Views */}
-        <div className="pt-3 border-t border-slate-800 flex items-center justify-between text-xs sm:text-sm text-slate-400">
+        <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs sm:text-sm text-slate-500">
           <div className="flex items-center gap-2">
-            <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-slate-800 flex items-center justify-center text-slate-300 font-bold text-[10px] sm:text-xs border border-slate-700">
+            <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-slate-100 flex items-center justify-center text-slate-700 font-bold text-[10px] sm:text-xs border border-slate-200">
               <User className="w-3.5 h-3.5" />
             </div>
-            <span className="text-[11px] sm:text-xs lg:text-sm font-semibold text-slate-300">
+            <span className="text-[11px] sm:text-xs lg:text-sm font-semibold text-slate-700">
               {post.authorName || 'إدارة المدرسة'}
             </span>
           </div>
@@ -269,8 +269,8 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onEdit, onViewDetails 
               onClick={handleLikeToggle}
               className={`flex items-center gap-1 text-xs sm:text-sm transition-colors p-1 rounded-lg ${
                 isLiked
-                  ? 'text-rose-400 font-bold'
-                  : 'text-slate-400 hover:text-rose-400'
+                  ? 'text-rose-600 font-bold'
+                  : 'text-slate-400 hover:text-rose-600'
               }`}
             >
               <Heart className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${isLiked ? 'fill-current' : ''}`} />
@@ -288,7 +288,7 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onEdit, onViewDetails 
                   alert('تم نسخ رابط الصفحة');
                 }
               }}
-              className="text-slate-400 hover:text-emerald-400 transition-colors p-1"
+              className="text-slate-400 hover:text-emerald-700 transition-colors p-1"
               title="مشاركة"
             >
               <Share2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />

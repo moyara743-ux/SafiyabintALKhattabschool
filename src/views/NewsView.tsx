@@ -37,13 +37,13 @@ export const NewsView: React.FC<NewsViewProps> = ({ posts, onSelectPost, onOpenN
   return (
     <div className="space-y-8 pb-16" dir="rtl">
       {/* Header Banner */}
-      <div className="bg-gradient-to-l from-emerald-900 to-teal-800 rounded-3xl p-6 sm:p-8 text-white flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-lg border border-emerald-700/40">
+      <div className="bg-gradient-to-l from-emerald-950 via-[#064e3b] to-emerald-900 rounded-3xl p-6 sm:p-8 text-white flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xl border-2 border-amber-400/40">
         <div>
           <div className="flex items-center gap-2 mb-2">
             <BookOpen className="w-6 h-6 text-amber-300" />
-            <h1 className="text-xl sm:text-2xl font-bold font-serif">أخبار وفعاليات مدرسة صفية بنت عمر</h1>
+            <h1 className="text-xl sm:text-2xl font-extrabold font-serif text-white">أخبار وفعاليات مدرسة صفية بنت عمر</h1>
           </div>
-          <p className="text-xs sm:text-sm text-emerald-100 max-w-xl">
+          <p className="text-xs sm:text-sm text-emerald-100/90 max-w-xl font-normal">
             متابعة شاملة لجميع الأخبار الرسمية، أنشطة الطالبات، المناسبات الوطنية والتربوية، وتوثيق المبادرات.
           </p>
         </div>
@@ -51,9 +51,9 @@ export const NewsView: React.FC<NewsViewProps> = ({ posts, onSelectPost, onOpenN
         {canPublish && onOpenNewPostModal && (
           <button
             onClick={onOpenNewPostModal}
-            className="px-5 py-2.5 bg-white text-emerald-950 hover:bg-emerald-50 text-xs font-bold rounded-xl shadow-md transition-transform hover:scale-102 flex items-center gap-2 self-start md:self-auto"
+            className="px-5 py-2.5 bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-bold rounded-xl shadow-md transition-transform hover:scale-105 flex items-center gap-2 self-start md:self-auto border border-amber-300 cursor-pointer"
           >
-            <PlusCircle className="w-4 h-4 text-emerald-700" />
+            <PlusCircle className="w-4 h-4 text-emerald-950" />
             <span>نشر خبر جديد</span>
           </button>
         )}

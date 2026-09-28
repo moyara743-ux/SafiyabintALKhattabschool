@@ -230,20 +230,20 @@ function AppContent() {
   if (authLoading && !bypassAuthLoading) {
     return (
       <div
-        className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4 text-white"
+        className="min-h-screen bg-white flex flex-col items-center justify-center p-4 text-slate-800"
         dir="rtl"
       >
-        <div className="w-14 h-14 bg-gradient-to-tr from-emerald-600 to-teal-400 rounded-2xl flex items-center justify-center shadow-xl shadow-emerald-950/60 border border-emerald-400/30 animate-pulse mb-4">
-          <GraduationCap className="w-8 h-8 text-white" />
+        <div className="w-16 h-16 bg-gradient-to-tr from-emerald-900 to-emerald-700 rounded-3xl flex items-center justify-center shadow-xl shadow-emerald-950/20 border-2 border-amber-400/50 animate-pulse mb-4">
+          <GraduationCap className="w-9 h-9 text-amber-300" />
         </div>
-        <h2 className="text-base font-extrabold text-white">مدرسة صفية بنت عمر الابتدائية</h2>
-        <p className="text-xs text-slate-400 mt-1">جارٍ التحقق من جلسة الدخول...</p>
+        <h2 className="text-lg font-extrabold text-emerald-950">مدرسة صفية بنت عمر الابتدائية</h2>
+        <p className="text-xs text-slate-500 mt-1">جارٍ التحقق من جلسة الدخول...</p>
 
         {showSkipButton && (
           <button
             type="button"
             onClick={() => setBypassAuthLoading(true)}
-            className="mt-6 px-4 py-2 bg-slate-900 hover:bg-slate-800 border border-slate-700 hover:border-emerald-500/50 text-xs font-bold text-slate-300 hover:text-white rounded-xl transition-all shadow-md cursor-pointer animate-in fade-in duration-300"
+            className="mt-6 px-4 py-2 bg-emerald-800 hover:bg-emerald-700 border border-emerald-900 text-xs font-bold text-white rounded-xl transition-all shadow-md cursor-pointer animate-in fade-in duration-300"
           >
             المتابعة إلى صفحة الدخول ←
           </button>
@@ -259,7 +259,7 @@ function AppContent() {
 
   return (
     <div
-      className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col justify-between selection:bg-emerald-500 selection:text-white overflow-x-hidden w-full max-w-full"
+      className="min-h-screen bg-white text-slate-800 font-sans flex flex-col justify-between selection:bg-emerald-900 selection:text-amber-200 overflow-x-hidden w-full max-w-full"
       dir="rtl"
     >
       {/* Top Navbar */}
@@ -276,14 +276,14 @@ function AppContent() {
       <main className="flex-1 max-w-7xl 2xl:max-w-[1400px] w-full mx-auto px-4 sm:px-6 lg:px-8 xl:px-10 pt-6 sm:pt-8 lg:pt-10 pb-16 overflow-x-hidden">
         {/* Global Search Results Alert if active */}
         {searchQuery.trim() && (
-          <div className="mb-6 p-4 sm:p-5 bg-emerald-950/60 border border-emerald-500/40 rounded-2xl flex items-center justify-between">
-            <span className="text-xs sm:text-sm lg:text-base font-bold text-emerald-300">
+          <div className="mb-6 p-4 sm:p-5 bg-emerald-50 border border-emerald-300 rounded-2xl flex items-center justify-between shadow-sm">
+            <span className="text-xs sm:text-sm lg:text-base font-bold text-emerald-950">
               نتائج البحث عن:{' '}
-              <span className="underline font-black text-white">"{searchQuery}"</span>
+              <span className="underline font-black text-emerald-900">"{searchQuery}"</span>
             </span>
             <button
               onClick={() => setSearchQuery('')}
-              className="text-xs sm:text-sm lg:text-base text-emerald-400 hover:text-white font-bold"
+              className="text-xs sm:text-sm lg:text-base text-emerald-800 hover:text-emerald-950 font-bold underline"
             >
               مسح البحث
             </button>
@@ -484,56 +484,59 @@ function AppContent() {
       />
 
       {/* Footer */}
-      <footer className="bg-slate-900 text-white border-t border-slate-800 mt-16 pt-12 pb-8" dir="rtl">
+      <footer className="bg-emerald-950 text-white border-t-2 border-amber-400/40 mt-16 pt-12 pb-8 shadow-2xl" dir="rtl">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-8 pb-8 border-b border-slate-800">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-8 pb-8 border-b border-emerald-800/60">
             {/* School Profile */}
             <div className="md:col-span-2 space-y-3">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-emerald-600 rounded-2xl flex items-center justify-center text-white">
-                  <GraduationCap className="w-6 h-6" />
+                <div className="w-11 h-11 bg-gradient-to-tr from-emerald-800 to-emerald-600 rounded-2xl flex items-center justify-center text-amber-300 border border-amber-400/40 shadow-md">
+                  <GraduationCap className="w-6 h-6 text-amber-300" />
                 </div>
                 <div>
-                  <h3 className="text-base font-extrabold font-serif">{settings.schoolName}</h3>
-                  <p className="text-xs text-emerald-400 font-medium">{settings.motto}</p>
+                  <h3 className="text-base sm:text-lg font-extrabold text-white">{settings.schoolName}</h3>
+                  <p className="text-xs text-amber-300/90 font-medium">{settings.motto}</p>
                 </div>
               </div>
-              <p className="text-xs text-slate-400 leading-relaxed max-w-md font-light">
+              <p className="text-xs text-emerald-100/80 leading-relaxed max-w-md font-light">
                 {settings.aboutText}
               </p>
             </div>
 
             {/* Quick Links */}
             <div className="space-y-2.5">
-              <h4 className="text-xs font-bold text-amber-300">أقسام المنصة الرئيسية</h4>
-              <ul className="space-y-1.5 text-xs text-slate-300">
+              <h4 className="text-xs font-bold text-amber-300 flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                <span>أقسام المنصة الرئيسية</span>
+              </h4>
+              <ul className="space-y-1.5 text-xs text-emerald-100/90">
                 <li>
-                  <button onClick={() => setCurrentView('announcements')} className="hover:text-white">
+                  <button onClick={() => setCurrentView('announcements')} className="hover:text-amber-300 transition-colors">
                     الإعلانات والتعاميم
                   </button>
                 </li>
                 <li>
-                  <button onClick={() => setCurrentView('news')} className="hover:text-white">
+                  <button onClick={() => setCurrentView('news')} className="hover:text-amber-300 transition-colors">
                     الأخبار والمنشورات
                   </button>
                 </li>
                 <li>
-                  <button onClick={() => setCurrentView('today')} className="hover:text-white">
+                  <button onClick={() => setCurrentView('today')} className="hover:text-amber-300 transition-colors">
                     ماذا حدث اليوم؟
                   </button>
                 </li>
                 <li>
-                  <button onClick={() => setCurrentView('events')} className="hover:text-white">
+                  <button onClick={() => setCurrentView('events')} className="hover:text-amber-300 transition-colors">
                     جدول الفعاليات
                   </button>
                 </li>
                 <li>
-                  <button onClick={() => setCurrentView('achievements')} className="hover:text-white">
+                  <button onClick={() => setCurrentView('achievements')} className="hover:text-amber-300 transition-colors">
                     لوحة الشرف والإنجازات
                   </button>
                 </li>
                 <li>
-                  <button onClick={() => setCurrentView('gallery')} className="hover:text-white">
+                  <button onClick={() => setCurrentView('gallery')} className="hover:text-amber-300 transition-colors">
                     معرض الصور والألبومات
                   </button>
                 </li>
@@ -541,24 +544,27 @@ function AppContent() {
             </div>
 
             {/* Contact Details */}
-            <div className="space-y-2.5 text-xs text-slate-300">
-              <h4 className="text-xs font-bold text-amber-300">معلومات التواصل المعتمدة</h4>
-              <div className="space-y-2 text-slate-400">
+            <div className="space-y-2.5 text-xs text-emerald-100/90">
+              <h4 className="text-xs font-bold text-amber-300 flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                <span>معلومات التواصل المعتمدة</span>
+              </h4>
+              <div className="space-y-2 text-emerald-200/80">
                 {settings.phone && (
                   <div className="flex items-center gap-2">
-                    <Phone className="w-3.5 h-3.5 text-emerald-400" />
+                    <Phone className="w-3.5 h-3.5 text-amber-300" />
                     <span>{settings.phone}</span>
                   </div>
                 )}
                 {settings.email && (
                   <div className="flex items-center gap-2">
-                    <Mail className="w-3.5 h-3.5 text-emerald-400" />
+                    <Mail className="w-3.5 h-3.5 text-amber-300" />
                     <span>{settings.email}</span>
                   </div>
                 )}
                 {settings.address && (
                   <div className="flex items-center gap-2">
-                    <MapPin className="w-3.5 h-3.5 text-emerald-400" />
+                    <MapPin className="w-3.5 h-3.5 text-amber-300" />
                     <span>{settings.address}</span>
                   </div>
                 )}
@@ -566,10 +572,10 @@ function AppContent() {
             </div>
           </div>
 
-          <div className="pt-6 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-400">
+          <div className="pt-6 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-emerald-300/80">
             <p>© {new Date().getFullYear()} مدرسة صفية بنت عمر — جميع الحقوق محفوظة</p>
             <div className="flex items-center gap-2">
-              <Shield className="w-3.5 h-3.5 text-emerald-400" />
+              <Shield className="w-3.5 h-3.5 text-amber-300" />
               <span>نظام إدارة المحتوى المدرسي الآمن (RBAC)</span>
             </div>
           </div>

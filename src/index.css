@@ -2,13 +2,27 @@
 
 @theme {
   --font-sans: 'Cairo', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --color-emerald-royal: #022c22;
+  --color-emerald-deep: #064e3b;
+  --color-emerald-primary: #047857;
+  --color-gold-warm: #d97706;
+  --color-gold-accent: #b45309;
+  --color-gold-border: #fde68a;
+  --color-gold-badge: #fef3c7;
 }
 
 html, body {
   font-family: 'Cairo', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  background-color: #ffffff;
+  color: #0f172a;
   overflow-x: hidden;
   max-width: 100%;
   width: 100%;
+}
+
+::selection {
+  background-color: #064e3b;
+  color: #fef3c7;
 }

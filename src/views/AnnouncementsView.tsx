@@ -106,24 +106,24 @@ export const AnnouncementsView: React.FC<AnnouncementsViewProps> = ({
       {/* 2. Delete Confirmation Modal (Admin only) */}
       {announcementToDelete && (
         <div
-          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200"
+          className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200"
           dir="rtl"
           onClick={() => {
             if (!isDeleting) setAnnouncementToDelete(null);
           }}
         >
           <div
-            className="bg-slate-900 border border-slate-700/80 rounded-3xl max-w-md w-full shadow-2xl p-6 space-y-4 animate-in zoom-in-95 duration-200"
+            className="bg-white border border-slate-200 rounded-3xl max-w-md w-full shadow-2xl p-6 space-y-4 animate-in zoom-in-95 duration-200 text-slate-900"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start justify-between gap-3">
               <div className="flex items-center gap-3">
-                <div className="w-11 h-11 rounded-2xl bg-rose-500/20 text-rose-400 border border-rose-500/30 flex items-center justify-center shrink-0">
-                  <Trash2 className="w-5 h-5 text-rose-400" />
+                <div className="w-11 h-11 rounded-2xl bg-rose-50 text-rose-700 border border-rose-200 flex items-center justify-center shrink-0">
+                  <Trash2 className="w-5 h-5 text-rose-600" />
                 </div>
                 <div>
-                  <h3 className="text-base font-extrabold text-white">تأكيد حذف الإعلان</h3>
-                  <p className="text-xs text-slate-400 mt-0.5">لا يمكن التراجع عن هذا الإجراء</p>
+                  <h3 className="text-base font-extrabold text-slate-900">تأكيد حذف الإعلان</h3>
+                  <p className="text-xs text-slate-500 mt-0.5">لا يمكن التراجع عن هذا الإجراء</p>
                 </div>
               </div>
               <button
@@ -132,23 +132,23 @@ export const AnnouncementsView: React.FC<AnnouncementsViewProps> = ({
                   if (!isDeleting) setAnnouncementToDelete(null);
                 }}
                 disabled={isDeleting}
-                className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition-colors cursor-pointer"
+                className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             <div className="space-y-2">
-              <p className="text-xs sm:text-sm font-bold text-white">
+              <p className="text-xs sm:text-sm font-bold text-slate-800">
                 هل أنتِ متأكدة من حذف الإعلان: &quot;{announcementToDelete.title}&quot;؟
               </p>
-              <p className="text-xs text-slate-400 bg-slate-800/60 p-3 rounded-xl border border-slate-800 line-clamp-2">
+              <p className="text-xs text-slate-600 bg-slate-50 p-3 rounded-xl border border-slate-200 line-clamp-2">
                 {announcementToDelete.content}
               </p>
             </div>
 
             {deleteError && (
-              <div className="p-3 bg-rose-500/15 border border-rose-500/30 rounded-xl text-xs text-rose-300">
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700">
                 {deleteError}
               </div>
             )}
@@ -158,7 +158,7 @@ export const AnnouncementsView: React.FC<AnnouncementsViewProps> = ({
                 type="button"
                 onClick={() => setAnnouncementToDelete(null)}
                 disabled={isDeleting}
-                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
               >
                 إلغاء
               </button>
@@ -166,7 +166,7 @@ export const AnnouncementsView: React.FC<AnnouncementsViewProps> = ({
                 type="button"
                 onClick={handleConfirmDelete}
                 disabled={isDeleting}
-                className="px-5 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-lg shadow-rose-950/50 transition-all cursor-pointer"
+                className="px-5 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-md transition-all cursor-pointer"
               >
                 {isDeleting ? (
                   <>
@@ -186,17 +186,17 @@ export const AnnouncementsView: React.FC<AnnouncementsViewProps> = ({
       )}
 
       {/* Banner */}
-      <div className="bg-gradient-to-l from-rose-950 via-slate-900 to-slate-900 rounded-3xl p-6 sm:p-8 text-white flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xl border border-rose-800/40">
+      <div className="bg-gradient-to-l from-emerald-950 via-[#064e3b] to-emerald-900 rounded-3xl p-6 sm:p-8 text-white flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xl border-2 border-amber-400/40">
         <div>
           <div className="flex items-center gap-2.5 mb-2">
-            <div className="w-10 h-10 rounded-2xl bg-rose-500/20 text-rose-400 flex items-center justify-center border border-rose-500/30">
+            <div className="w-10 h-10 rounded-2xl bg-amber-400/20 text-amber-300 flex items-center justify-center border border-amber-400/40 shadow-xs">
               <Bell className="w-5 h-5" />
             </div>
             <h1 className="text-xl sm:text-2xl font-extrabold text-white">
               إعلانات وتعاميم مدرسة صفية بنت عمر
             </h1>
           </div>
-          <p className="text-xs sm:text-sm text-slate-300 max-w-xl leading-relaxed">
+          <p className="text-xs sm:text-sm text-emerald-100/90 max-w-xl leading-relaxed font-normal">
             التبليغات الرسمية الصادرة من إدارة المدرسة، مواعيد الاختبارات، التنبيهات المهمة، والتعاميم الوزارية. اضغطي على أي إعلان لعرض تفاصيله بالكامل والصور المرفقة.
           </p>
         </div>
@@ -205,24 +205,24 @@ export const AnnouncementsView: React.FC<AnnouncementsViewProps> = ({
           <button
             type="button"
             onClick={onOpenCreateModal}
-            className="px-5 py-2.5 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-lg shadow-rose-950/50 self-start md:self-auto transition-all cursor-pointer"
+            className="px-5 py-2.5 bg-amber-400 hover:bg-amber-300 text-slate-950 rounded-xl text-xs font-bold flex items-center gap-2 shadow-md border border-amber-300 self-start md:self-auto transition-transform hover:scale-105 cursor-pointer"
           >
-            <Plus className="w-4 h-4" />
+            <Plus className="w-4 h-4 text-emerald-950" />
             <span>إضافة إعلان جديد</span>
           </button>
         )}
       </div>
 
       {/* Filter and Search Bar */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-slate-900 p-3.5 rounded-2xl border border-slate-800 shadow-md">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white p-3.5 rounded-2xl border border-slate-200 shadow-sm text-slate-900">
         <div className="flex gap-2">
           <button
             type="button"
             onClick={() => setFilterType('all')}
             className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
               filterType === 'all'
-                ? 'bg-rose-600 text-white shadow-md'
-                : 'text-slate-400 hover:bg-slate-800'
+                ? 'bg-emerald-800 text-white shadow-xs'
+                : 'text-slate-600 hover:bg-slate-100'
             }`}
           >
             كل الإعلانات
@@ -232,23 +232,23 @@ export const AnnouncementsView: React.FC<AnnouncementsViewProps> = ({
             onClick={() => setFilterType('important')}
             className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
               filterType === 'important'
-                ? 'bg-rose-600 text-white shadow-md'
-                : 'text-slate-400 hover:bg-slate-800'
+                ? 'bg-amber-500 text-slate-950 shadow-xs border border-amber-400'
+                : 'text-slate-600 hover:bg-slate-100'
             }`}
           >
-            <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
+            <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
             <span>الهام والعاجل فقط</span>
           </button>
         </div>
 
         <div className="relative min-w-[240px]">
-          <Search className="absolute right-3.5 top-3 w-4 h-4 text-slate-500" />
+          <Search className="absolute right-3.5 top-2.5 w-4 h-4 text-slate-400" />
           <input
             type="text"
             placeholder="البحث في الإعلانات..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pr-10 pl-3 py-2 text-xs bg-slate-800 border border-slate-700 rounded-xl text-white placeholder:text-slate-500 focus:outline-none focus:border-rose-500"
+            className="w-full pr-10 pl-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600"
           />
         </div>
       </div>
@@ -268,24 +268,24 @@ export const AnnouncementsView: React.FC<AnnouncementsViewProps> = ({
                   setSelectedAnnouncement(item);
                 }
               }}
-              className={`rounded-3xl border transition-all flex flex-col justify-between overflow-hidden cursor-pointer group shadow-sm hover:shadow-xl hover:-translate-y-0.5 ${
+              className={`rounded-3xl border transition-all flex flex-col justify-between overflow-hidden cursor-pointer group shadow-sm hover:shadow-md hover:-translate-y-0.5 ${
                 item.isImportant
-                  ? 'bg-slate-900/95 border-rose-500/40 hover:border-rose-500/70 shadow-rose-950/20'
-                  : 'bg-slate-900 border-slate-800 hover:border-rose-500/40'
+                  ? 'bg-amber-50/50 border-amber-300 hover:border-amber-400'
+                  : 'bg-white border-slate-200 hover:border-amber-400/80'
               }`}
             >
               {/* Optional Preview Image Banner on Card */}
               {item.image && (
-                <div className="h-44 w-full bg-slate-950 overflow-hidden relative border-b border-slate-800/80">
+                <div className="h-44 w-full bg-slate-100 overflow-hidden relative border-b border-slate-200">
                   <img
                     src={item.image}
                     alt={item.title}
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                     loading="lazy"
                   />
-                  <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-transparent to-transparent opacity-80" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-emerald-950/70 via-transparent to-transparent opacity-80" />
                   <div className="absolute bottom-2.5 right-3 flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-black/60 backdrop-blur-md text-[10px] text-white font-medium border border-white/10">
-                    <ImageIcon className="w-3 h-3 text-rose-400" />
+                    <ImageIcon className="w-3 h-3 text-amber-300" />
                     <span>مرفق صورة توضيحية</span>
                   </div>
                 </div>
@@ -297,17 +297,17 @@ export const AnnouncementsView: React.FC<AnnouncementsViewProps> = ({
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
                       {item.isImportant ? (
-                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-rose-500/20 text-rose-300 border border-rose-500/40 flex items-center gap-1">
-                          <AlertTriangle className="w-3 h-3 text-rose-400" />
+                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-900 border border-amber-300 flex items-center gap-1">
+                          <AlertTriangle className="w-3 h-3 text-amber-700" />
                           <span>هام وعاجل</span>
                         </span>
                       ) : (
-                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-800 text-slate-300 border border-slate-700">
+                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-900 border border-emerald-300">
                           إعلان مدرسي
                         </span>
                       )}
-                      <span className="text-[11px] text-slate-400 flex items-center gap-1">
-                        <Calendar className="w-3 h-3 text-slate-500" />
+                      <span className="text-[11px] text-slate-500 flex items-center gap-1">
+                        <Calendar className="w-3 h-3 text-slate-400" />
                         <span>{item.date}</span>
                       </span>
                     </div>
@@ -324,7 +324,7 @@ export const AnnouncementsView: React.FC<AnnouncementsViewProps> = ({
                             e.stopPropagation();
                             onEditAnnouncement(item);
                           }}
-                          className="p-1.5 text-slate-400 hover:text-emerald-400 hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+                          className="p-1.5 text-slate-400 hover:text-emerald-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
                           title="تعديل الإعلان"
                           aria-label="تعديل الإعلان"
                         >
@@ -338,7 +338,7 @@ export const AnnouncementsView: React.FC<AnnouncementsViewProps> = ({
                             e.stopPropagation();
                             handleInitiateDelete(item);
                           }}
-                          className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+                          className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
                           title="حذف الإعلان"
                           aria-label="حذف الإعلان"
                         >
@@ -349,24 +349,24 @@ export const AnnouncementsView: React.FC<AnnouncementsViewProps> = ({
                   </div>
 
                   {/* Title & Preview Text */}
-                  <h3 className="text-sm sm:text-base font-extrabold text-white group-hover:text-rose-300 transition-colors leading-snug">
+                  <h3 className="text-sm sm:text-base font-extrabold text-slate-900 group-hover:text-emerald-800 transition-colors leading-snug">
                     {item.title}
                   </h3>
 
-                  <p className="text-xs text-slate-300 leading-relaxed line-clamp-3 whitespace-pre-line">
+                  <p className="text-xs text-slate-600 leading-relaxed line-clamp-3 whitespace-pre-line">
                     {item.content}
                   </p>
                 </div>
 
                 {/* Click to read indicator */}
-                <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400">
-                  <span className="flex items-center gap-1 text-emerald-400 font-medium">
-                    <CheckCircle2 className="w-3.5 h-3.5" />
+                <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
+                  <span className="flex items-center gap-1 text-emerald-700 font-medium">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
                     <span>معتمد رسمياً</span>
                   </span>
 
-                  <span className="text-rose-400 group-hover:text-rose-300 font-bold flex items-center gap-1 transition-colors">
-                    <Eye className="w-3.5 h-3.5" />
+                  <span className="text-emerald-800 group-hover:text-emerald-900 font-bold flex items-center gap-1 transition-colors">
+                    <Eye className="w-3.5 h-3.5 text-amber-600" />
                     <span>عرض التفاصيل الكاملة</span>
                   </span>
                 </div>
@@ -375,10 +375,10 @@ export const AnnouncementsView: React.FC<AnnouncementsViewProps> = ({
           ))}
         </div>
       ) : (
-        <div className="text-center py-16 bg-slate-900 rounded-3xl border border-dashed border-slate-800 text-slate-400 space-y-2">
-          <Bell className="w-10 h-10 mx-auto text-slate-600 mb-2" />
-          <p className="text-sm font-bold text-slate-300">لا توجد إعلانات مطابقة</p>
-          <p className="text-xs text-slate-500">جربي تغيير شروط البحث أو اختيار تبويب آخر.</p>
+        <div className="text-center py-16 bg-white rounded-3xl border border-dashed border-slate-300 text-slate-500 space-y-2">
+          <Bell className="w-10 h-10 mx-auto text-slate-300 mb-2" />
+          <p className="text-sm font-bold text-slate-700">لا توجد إعلانات مطابقة</p>
+          <p className="text-xs text-slate-400">جربي تغيير شروط البحث أو اختيار تبويب آخر.</p>
         </div>
       )}
     </div>

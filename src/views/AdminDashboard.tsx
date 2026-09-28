@@ -106,28 +106,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   }
 
   const statCards = [
-    { title: 'الأخبار والمنشورات', count: counts.posts, icon: BookOpen, color: 'text-emerald-400 bg-emerald-950/60 border-emerald-500/30', view: 'news' as PageView },
-    { title: 'الإعلانات والتعاميم', count: counts.announcements, icon: Bell, color: 'text-rose-400 bg-rose-950/60 border-rose-500/30', view: 'announcements' as PageView },
-    { title: 'الفعاليات المجدولة', count: counts.events, icon: Calendar, color: 'text-teal-400 bg-teal-950/60 border-teal-500/30', view: 'events' as PageView },
-    { title: 'الإنجازات والجوائز', count: counts.achievements, icon: Award, color: 'text-purple-400 bg-purple-950/60 border-purple-500/30', view: 'achievements' as PageView },
-    { title: 'الصور بالمعرض', count: counts.photos, icon: ImageIcon, color: 'text-blue-400 bg-blue-950/60 border-blue-500/30', view: 'gallery' as PageView },
-    { title: 'المستخدمين والمنسوبين', count: counts.users, icon: Users, color: 'text-amber-400 bg-amber-950/60 border-amber-500/30', view: 'users_management' as PageView },
+    { title: 'الأخبار والمنشورات', count: counts.posts, icon: BookOpen, color: 'text-emerald-900 bg-emerald-50 border-emerald-200 hover:border-emerald-400', view: 'news' as PageView },
+    { title: 'الإعلانات والتعاميم', count: counts.announcements, icon: Bell, color: 'text-amber-900 bg-amber-50 border-amber-200 hover:border-amber-400', view: 'announcements' as PageView },
+    { title: 'الفعاليات المجدولة', count: counts.events, icon: Calendar, color: 'text-teal-900 bg-teal-50 border-teal-200 hover:border-teal-400', view: 'events' as PageView },
+    { title: 'الإنجازات والجوائز', count: counts.achievements, icon: Award, color: 'text-purple-900 bg-purple-50 border-purple-200 hover:border-purple-400', view: 'achievements' as PageView },
+    { title: 'الصور بالمعرض', count: counts.photos, icon: ImageIcon, color: 'text-blue-900 bg-blue-50 border-blue-200 hover:border-blue-400', view: 'gallery' as PageView },
+    { title: 'المستخدمين والمنسوبين', count: counts.users, icon: Users, color: 'text-slate-900 bg-slate-50 border-slate-200 hover:border-slate-400', view: 'users_management' as PageView },
   ];
 
   return (
     <div className="space-y-8 pb-16" dir="rtl">
       {/* Header Banner */}
-      <div className="bg-gradient-to-l from-emerald-950 via-slate-900 to-slate-900 rounded-3xl p-6 sm:p-8 text-white flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xl border border-emerald-800/40">
+      <div className="bg-gradient-to-l from-emerald-950 via-[#064e3b] to-emerald-900 rounded-3xl p-6 sm:p-8 text-white flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xl border-2 border-amber-400/40">
         <div>
           <div className="flex items-center gap-2.5 mb-2">
-            <div className="w-10 h-10 rounded-2xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center border border-emerald-500/30">
+            <div className="w-10 h-10 rounded-2xl bg-amber-400/20 text-amber-300 flex items-center justify-center border border-amber-400/40 shadow-xs">
               <LayoutDashboard className="w-5 h-5" />
             </div>
             <h1 className="text-xl sm:text-2xl font-extrabold text-white">
               لوحة الإدارة والتحكم المدرسية
             </h1>
           </div>
-          <p className="text-xs sm:text-sm text-slate-300 max-w-xl leading-relaxed">
+          <p className="text-xs sm:text-sm text-emerald-100/90 max-w-xl leading-relaxed font-normal">
             مرحباً بكِ، {profile?.name} ({profile?.school_role}). مركز المتابعة الميداني لإدارة محتوى منصة مدرسة صفية بنت عمر.
           </p>
         </div>
@@ -136,9 +136,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           {hasPerm('manageUsers') && (
             <button
               onClick={() => onNavigate('users_management')}
-              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md transition-all"
+              className="px-4 py-2 bg-amber-400 hover:bg-amber-300 text-slate-950 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md border border-amber-300 transition-transform hover:scale-105 cursor-pointer"
             >
-              <Users className="w-4 h-4" />
+              <Users className="w-4 h-4 text-emerald-950" />
               <span>إدارة الرتب والمستخدمين</span>
             </button>
           )}
@@ -146,9 +146,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           {hasPerm('viewActivityLogs') && (
             <button
               onClick={() => onNavigate('activity_logs')}
-              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all"
+              className="px-4 py-2 bg-emerald-900 hover:bg-emerald-800 text-white border border-emerald-700 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-xs"
             >
-              <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
+              <FileSpreadsheet className="w-4 h-4 text-amber-300" />
               <span>سجل العمليات</span>
             </button>
           )}
@@ -156,9 +156,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       </div>
 
       {/* Quick Publishing Bar */}
-      <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-md space-y-3">
-        <h3 className="text-sm font-extrabold text-white flex items-center gap-2">
-          <Plus className="w-4 h-4 text-emerald-400" />
+      <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-3">
+        <h3 className="text-sm font-extrabold text-emerald-950 flex items-center gap-2">
+          <Plus className="w-4 h-4 text-emerald-700" />
           <span>إجراءات الإضافة السريعة لمحتوى المنصة</span>
         </h3>
 
@@ -166,9 +166,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           {hasPerm('createPosts') && (
             <button
               onClick={onOpenCreatePost}
-              className="p-3 bg-emerald-950/50 hover:bg-emerald-900/60 border border-emerald-500/30 rounded-2xl text-center space-y-1 text-emerald-300 transition-all"
+              className="p-3 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 rounded-2xl text-center space-y-1 text-emerald-900 transition-all cursor-pointer shadow-xs"
             >
-              <BookOpen className="w-5 h-5 mx-auto" />
+              <BookOpen className="w-5 h-5 mx-auto text-emerald-700" />
               <span className="block text-xs font-bold">خبر جديد</span>
             </button>
           )}
@@ -176,9 +176,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           {hasPerm('createAnnouncements') && (
             <button
               onClick={onOpenCreateAnnouncement}
-              className="p-3 bg-rose-950/50 hover:bg-rose-900/60 border border-rose-500/30 rounded-2xl text-center space-y-1 text-rose-300 transition-all"
+              className="p-3 bg-amber-50 hover:bg-amber-100 border border-amber-300 rounded-2xl text-center space-y-1 text-amber-900 transition-all cursor-pointer shadow-xs"
             >
-              <Bell className="w-5 h-5 mx-auto" />
+              <Bell className="w-5 h-5 mx-auto text-amber-700" />
               <span className="block text-xs font-bold">إعلان هام</span>
             </button>
           )}
@@ -186,9 +186,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           {hasPerm('createEvents') && (
             <button
               onClick={onOpenAddEvent}
-              className="p-3 bg-teal-950/50 hover:bg-teal-900/60 border border-teal-500/30 rounded-2xl text-center space-y-1 text-teal-300 transition-all"
+              className="p-3 bg-teal-50 hover:bg-teal-100 border border-teal-300 rounded-2xl text-center space-y-1 text-teal-900 transition-all cursor-pointer shadow-xs"
             >
-              <Calendar className="w-5 h-5 mx-auto" />
+              <Calendar className="w-5 h-5 mx-auto text-teal-700" />
               <span className="block text-xs font-bold">فعالية</span>
             </button>
           )}
@@ -196,9 +196,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           {hasPerm('createAchievements') && (
             <button
               onClick={onOpenAddAchievement}
-              className="p-3 bg-purple-950/50 hover:bg-purple-900/60 border border-purple-500/30 rounded-2xl text-center space-y-1 text-purple-300 transition-all"
+              className="p-3 bg-purple-50 hover:bg-purple-100 border border-purple-300 rounded-2xl text-center space-y-1 text-purple-900 transition-all cursor-pointer shadow-xs"
             >
-              <Award className="w-5 h-5 mx-auto" />
+              <Award className="w-5 h-5 mx-auto text-purple-700" />
               <span className="block text-xs font-bold">إنجاز</span>
             </button>
           )}
@@ -206,9 +206,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           {hasPerm('createPhotos') && (
             <button
               onClick={onOpenAddPhoto}
-              className="p-3 bg-blue-950/50 hover:bg-blue-900/60 border border-blue-500/30 rounded-2xl text-center space-y-1 text-blue-300 transition-all"
+              className="p-3 bg-blue-50 hover:bg-blue-100 border border-blue-300 rounded-2xl text-center space-y-1 text-blue-900 transition-all cursor-pointer shadow-xs"
             >
-              <ImageIcon className="w-5 h-5 mx-auto" />
+              <ImageIcon className="w-5 h-5 mx-auto text-blue-700" />
               <span className="block text-xs font-bold">رفع صورة</span>
             </button>
           )}
@@ -216,9 +216,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           {hasPerm('createAlbums') && (
             <button
               onClick={onOpenCreateAlbum}
-              className="p-3 bg-indigo-950/50 hover:bg-indigo-900/60 border border-indigo-500/30 rounded-2xl text-center space-y-1 text-indigo-300 transition-all"
+              className="p-3 bg-indigo-50 hover:bg-indigo-100 border border-indigo-300 rounded-2xl text-center space-y-1 text-indigo-900 transition-all cursor-pointer shadow-xs"
             >
-              <ImageIcon className="w-5 h-5 mx-auto" />
+              <ImageIcon className="w-5 h-5 mx-auto text-indigo-700" />
               <span className="block text-xs font-bold">ألبوم صور</span>
             </button>
           )}
@@ -226,9 +226,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           {hasPerm('createDailyMessage') && (
             <button
               onClick={onOpenDailyMessageModal}
-              className="p-3 bg-orange-950/50 hover:bg-orange-900/60 border border-orange-500/30 rounded-2xl text-center space-y-1 text-orange-300 transition-all"
+              className="p-3 bg-orange-50 hover:bg-orange-100 border border-orange-300 rounded-2xl text-center space-y-1 text-orange-900 transition-all cursor-pointer shadow-xs"
             >
-              <MessageSquare className="w-5 h-5 mx-auto" />
+              <MessageSquare className="w-5 h-5 mx-auto text-orange-700" />
               <span className="block text-xs font-bold">رسالة اليوم</span>
             </button>
           )}
@@ -243,15 +243,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <div
               key={idx}
               onClick={() => onNavigate(c.view)}
-              className={`p-5 rounded-2xl border ${c.color} shadow-md cursor-pointer hover:scale-102 transition-all flex flex-col justify-between space-y-3`}
+              className={`p-5 rounded-2xl border ${c.color} shadow-xs cursor-pointer hover:shadow-md hover:scale-102 transition-all flex flex-col justify-between space-y-3`}
             >
               <div className="flex items-center justify-between">
                 <Icon className="w-5 h-5" />
                 <span className="text-2xl font-extrabold font-serif">{c.count}</span>
               </div>
               <div>
-                <h4 className="text-xs font-bold text-white">{c.title}</h4>
-                <span className="text-[10px] text-slate-400 flex items-center gap-1 mt-1">
+                <h4 className="text-xs font-bold text-slate-900">{c.title}</h4>
+                <span className="text-[10px] text-slate-500 flex items-center gap-1 mt-1 font-medium">
                   <span>إدارة القسم</span>
                   <ArrowLeft className="w-3 h-3" />
                 </span>
@@ -262,16 +262,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       </div>
 
       {/* Recent Activity Log Preview */}
-      <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-md space-y-4">
+      <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <FileSpreadsheet className="w-5 h-5 text-emerald-400" />
-            <h3 className="text-sm font-extrabold text-white">آخر العمليات والتعديلات المسجلة</h3>
+            <FileSpreadsheet className="w-5 h-5 text-emerald-700" />
+            <h3 className="text-sm font-extrabold text-emerald-950">آخر العمليات والتعديلات المسجلة</h3>
           </div>
           {hasPerm('viewActivityLogs') && (
             <button
               onClick={() => onNavigate('activity_logs')}
-              className="text-xs font-bold text-emerald-400 hover:underline"
+              className="text-xs font-bold text-emerald-800 hover:underline cursor-pointer"
             >
               عرض السجل الكامل
             </button>
@@ -279,16 +279,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
 
         {recentLogs.length > 0 ? (
-          <div className="divide-y divide-slate-800 text-xs">
+          <div className="divide-y divide-slate-100 text-xs">
             {recentLogs.map((log) => (
               <div key={log.id} className="py-3 flex items-center justify-between gap-3">
                 <div className="space-y-0.5">
-                  <p className="font-bold text-white">{log.details}</p>
-                  <p className="text-[11px] text-slate-400">
+                  <p className="font-bold text-slate-900">{log.details}</p>
+                  <p className="text-[11px] text-slate-500">
                     بواسطة: {log.actorName} ({log.actorEmail}) • قسم: {log.entity}
                   </p>
                 </div>
-                <span className="text-[11px] text-slate-500 whitespace-nowrap font-mono">
+                <span className="text-[11px] text-slate-400 whitespace-nowrap font-mono">
                   {new Date(log.timestamp).toLocaleTimeString('ar-SA')}
                 </span>
               </div>

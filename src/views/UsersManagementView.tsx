@@ -203,55 +203,55 @@ export const UsersManagementView: React.FC = () => {
     switch (role) {
       case 'owner':
         return (
-          <span className="px-2.5 py-1 bg-amber-500/20 text-amber-300 border border-amber-500/40 rounded-full text-xs font-bold">
+          <span className="px-2.5 py-1 bg-amber-100 text-amber-950 border border-amber-400 rounded-full text-xs font-bold shadow-xs">
             {label}
           </span>
         );
       case 'director':
         return (
-          <span className="px-2.5 py-1 bg-purple-500/20 text-purple-300 border border-purple-500/40 rounded-full text-xs font-bold">
+          <span className="px-2.5 py-1 bg-emerald-100 text-emerald-950 border border-emerald-400 rounded-full text-xs font-bold shadow-xs">
             {label}
           </span>
         );
       case 'supervisor':
         return (
-          <span className="px-2.5 py-1 bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 rounded-full text-xs font-bold">
+          <span className="px-2.5 py-1 bg-teal-100 text-teal-950 border border-teal-300 rounded-full text-xs font-bold">
             {label}
           </span>
         );
       case 'administrator':
         return (
-          <span className="px-2.5 py-1 bg-blue-500/20 text-blue-300 border border-blue-500/40 rounded-full text-xs font-bold">
+          <span className="px-2.5 py-1 bg-blue-100 text-blue-950 border border-blue-300 rounded-full text-xs font-bold">
             {label}
           </span>
         );
       case 'counselor':
         return (
-          <span className="px-2.5 py-1 bg-teal-500/20 text-teal-300 border border-teal-500/40 rounded-full text-xs font-bold">
+          <span className="px-2.5 py-1 bg-purple-100 text-purple-950 border border-purple-300 rounded-full text-xs font-bold">
             {label}
           </span>
         );
       case 'teacher':
         return (
-          <span className="px-2.5 py-1 bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 rounded-full text-xs font-bold">
+          <span className="px-2.5 py-1 bg-emerald-50 text-emerald-900 border border-emerald-300 rounded-full text-xs font-bold">
             {label}
           </span>
         );
       case 'parent':
         return (
-          <span className="px-2.5 py-1 bg-amber-500/20 text-amber-300 border border-amber-500/40 rounded-full text-xs font-bold">
+          <span className="px-2.5 py-1 bg-amber-50 text-amber-900 border border-amber-200 rounded-full text-xs font-bold">
             {label}
           </span>
         );
       case 'student':
         return (
-          <span className="px-2.5 py-1 bg-slate-800 text-slate-300 border border-slate-700 rounded-full text-xs font-bold">
+          <span className="px-2.5 py-1 bg-slate-100 text-slate-700 border border-slate-300 rounded-full text-xs font-bold">
             {label}
           </span>
         );
       default:
         return (
-          <span className="px-2.5 py-1 bg-slate-800 text-slate-400 rounded-full text-xs font-bold">
+          <span className="px-2.5 py-1 bg-slate-100 text-slate-600 rounded-full text-xs font-bold">
             {label}
           </span>
         );
@@ -261,12 +261,12 @@ export const UsersManagementView: React.FC = () => {
   if (!canManage) {
     return (
       <div
-        className="p-8 text-center bg-slate-900 border border-rose-800 rounded-3xl max-w-lg mx-auto space-y-3"
+        className="p-8 text-center bg-white border border-rose-300 rounded-3xl max-w-lg mx-auto space-y-3 shadow-sm text-slate-900"
         dir="rtl"
       >
-        <Lock className="w-12 h-12 text-rose-500 mx-auto" />
-        <h2 className="text-lg font-bold text-white">غير مصرح لك بالدخول</h2>
-        <p className="text-xs text-slate-400">هذه اللوحة مخصصة لإدارة المستخدمين والصلاحيات فقط.</p>
+        <Lock className="w-12 h-12 text-rose-600 mx-auto" />
+        <h2 className="text-lg font-bold text-slate-900">غير مصرح لك بالدخول</h2>
+        <p className="text-xs text-slate-500">هذه اللوحة مخصصة لإدارة المستخدمين والصلاحيات فقط.</p>
       </div>
     );
   }
@@ -275,44 +275,44 @@ export const UsersManagementView: React.FC = () => {
     <div className="space-y-6 pb-16" dir="rtl">
       {/* Toast Alert */}
       {toastMessage && (
-        <div className="fixed top-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 bg-emerald-600 text-white rounded-2xl shadow-2xl text-xs font-bold flex items-center gap-2">
-          <UserCheck className="w-4 h-4 text-emerald-200" />
+        <div className="fixed top-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 bg-emerald-800 text-white rounded-2xl shadow-2xl text-xs font-bold flex items-center gap-2 border border-emerald-700 animate-in fade-in">
+          <UserCheck className="w-4 h-4 text-amber-300" />
           <span>{toastMessage}</span>
         </div>
       )}
 
       {/* Header Banner */}
-      <div className="bg-gradient-to-l from-emerald-950 via-slate-900 to-slate-900 rounded-3xl p-6 sm:p-8 text-white flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xl border border-emerald-800/40">
+      <div className="bg-gradient-to-l from-emerald-950 via-[#064e3b] to-emerald-900 rounded-3xl p-6 sm:p-8 text-white flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xl border-2 border-amber-400/40">
         <div>
           <div className="flex items-center gap-2.5 mb-2">
-            <div className="w-10 h-10 rounded-2xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center border border-emerald-500/30">
+            <div className="w-10 h-10 rounded-2xl bg-amber-400/20 text-amber-300 flex items-center justify-center border border-amber-400/40 shadow-xs">
               <Shield className="w-5 h-5" />
             </div>
             <h1 className="text-xl sm:text-2xl font-extrabold text-white">
               إدارة مستخدمي ورتب مدرسة صفية بنت عمر
             </h1>
           </div>
-          <p className="text-xs sm:text-sm text-slate-300 max-w-xl leading-relaxed">
+          <p className="text-xs sm:text-sm text-emerald-100/90 max-w-xl leading-relaxed font-normal">
             التحكم في أدوار المعلمات والإداريات والطالبات، ومنح الصلاحيات المخصصة والمؤقتة وتفعيل أو تعطيل الحسابات مع حظر تصعيد الرتب غير المصرح به.
           </p>
         </div>
 
-        <div className="text-left bg-slate-900/60 p-3 rounded-2xl border border-white/5">
-          <span className="text-[11px] text-slate-400 block">إجمالي المستخدمين</span>
-          <span className="text-xl font-extrabold text-emerald-400">{users.length} مستخدم</span>
+        <div className="text-left bg-white/10 p-3.5 rounded-2xl border border-white/15 shadow-sm">
+          <span className="text-[11px] text-emerald-200 block font-medium">إجمالي المستخدمين</span>
+          <span className="text-xl font-extrabold text-amber-300">{users.length} مستخدم</span>
         </div>
       </div>
 
       {/* Filters and Search Bar */}
-      <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 bg-slate-900 p-4 rounded-2xl border border-slate-800 shadow-md">
+      <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 bg-white p-4 rounded-2xl border border-slate-200 shadow-sm text-slate-900">
         <div className="sm:col-span-2 relative">
-          <Search className="absolute right-3.5 top-3 w-4 h-4 text-slate-500" />
+          <Search className="absolute right-3.5 top-2.5 w-4 h-4 text-slate-400" />
           <input
             type="text"
             placeholder="البحث بالاسم أو البريد الإلكتروني..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pr-10 pl-3 py-2 text-xs bg-slate-800 border border-slate-700 rounded-xl text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-500"
+            className="w-full pr-10 pl-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600"
           />
         </div>
 
@@ -320,7 +320,7 @@ export const UsersManagementView: React.FC = () => {
           <select
             value={roleFilter}
             onChange={(e) => setRoleFilter(e.target.value)}
-            className="w-full px-3 py-2 text-xs bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:border-emerald-500"
+            className="w-full px-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600"
           >
             <option value="all">كل الرتب والأدوار</option>
             <option value="owner">مالك النظام</option>
@@ -338,7 +338,7 @@ export const UsersManagementView: React.FC = () => {
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="w-full px-3 py-2 text-xs bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:border-emerald-500"
+            className="w-full px-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600"
           >
             <option value="all">كل الحالات</option>
             <option value="active">نشط فقط</option>
@@ -348,13 +348,13 @@ export const UsersManagementView: React.FC = () => {
       </div>
 
       {/* Users Table */}
-      <div className="bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden shadow-lg">
+      <div className="bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-sm">
         {loading ? (
-          <div className="p-12 text-center text-xs text-slate-400">جارٍ تحميل بيانات المستخدمين...</div>
+          <div className="p-12 text-center text-xs text-slate-500">جارٍ تحميل بيانات المستخدمين...</div>
         ) : filteredUsers.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="w-full text-right text-xs">
-              <thead className="bg-slate-800/80 text-slate-400 font-bold border-b border-slate-800">
+              <thead className="bg-slate-50 text-slate-700 font-extrabold border-b border-slate-200">
                 <tr>
                   <th className="p-4">المستخدم</th>
                   <th className="p-4">البريد الإلكتروني</th>
@@ -365,41 +365,41 @@ export const UsersManagementView: React.FC = () => {
                   <th className="p-4 text-center">الإجراءات</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-800 text-slate-300">
+              <tbody className="divide-y divide-slate-100 text-slate-700">
                 {filteredUsers.map((u) => {
                   const customCount = (u.customPermissions || []).length;
                   const tempCount = (u.temporaryPermissions || []).length;
                   const isUserActive = u.status !== 'disabled';
 
                   return (
-                    <tr key={u.id} className="hover:bg-slate-800/50 transition-colors">
-                      <td className="p-4 font-bold text-white flex items-center gap-2.5">
-                        <div className="w-8 h-8 rounded-xl bg-slate-800 text-emerald-400 flex items-center justify-center font-bold text-xs">
+                    <tr key={u.id} className="hover:bg-slate-50/70 transition-colors">
+                      <td className="p-4 font-bold text-slate-900 flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-900 border border-emerald-200 flex items-center justify-center font-bold text-xs">
                           {u.name?.charAt(0) || 'م'}
                         </div>
                         <div>
                           <span>{u.name}</span>
                           {u.id === currentUser?.uid && (
-                            <span className="text-[10px] text-emerald-400 block font-normal">
+                            <span className="text-[10px] text-emerald-700 block font-normal">
                               (حسابك الحالي)
                             </span>
                           )}
                         </div>
                       </td>
 
-                      <td className="p-4 text-slate-400 font-mono text-[11px]">{u.email}</td>
+                      <td className="p-4 text-slate-500 font-mono text-[11px]">{u.email}</td>
 
                       <td className="p-4">{getRoleBadge(u.school_role)}</td>
 
                       <td className="p-4">
                         {isUserActive ? (
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1 w-fit">
-                            <UserCheck className="w-3 h-3" />
+                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-900 border border-emerald-300 flex items-center gap-1 w-fit">
+                            <UserCheck className="w-3 h-3 text-emerald-600" />
                             <span>نشط</span>
                           </span>
                         ) : (
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40 flex items-center gap-1 w-fit">
-                            <UserX className="w-3 h-3" />
+                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-800 border border-rose-300 flex items-center gap-1 w-fit">
+                            <UserX className="w-3 h-3 text-rose-600" />
                             <span>معطل</span>
                           </span>
                         )}
@@ -407,31 +407,31 @@ export const UsersManagementView: React.FC = () => {
 
                       <td className="p-4">
                         {customCount > 0 ? (
-                          <span className="px-2 py-0.5 rounded-md bg-indigo-500/20 text-indigo-300 text-[11px] font-bold">
+                          <span className="px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-900 border border-indigo-200 text-[11px] font-bold">
                             {customCount} مخصصة
                           </span>
                         ) : (
-                          <span className="text-slate-500 text-[11px]">الافتراضية</span>
+                          <span className="text-slate-400 text-[11px]">الافتراضية</span>
                         )}
                       </td>
 
                       <td className="p-4">
                         {tempCount > 0 ? (
-                          <span className="px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 text-[11px] font-bold flex items-center gap-1 w-fit">
-                            <Calendar className="w-3 h-3" />
+                          <span className="px-2 py-0.5 rounded-md bg-amber-50 text-amber-900 border border-amber-300 text-[11px] font-bold flex items-center gap-1 w-fit">
+                            <Calendar className="w-3 h-3 text-amber-600" />
                             <span>{tempCount} مؤقتة</span>
                           </span>
                         ) : (
-                          <span className="text-slate-500 text-[11px]">لا يوجد</span>
+                          <span className="text-slate-400 text-[11px]">لا يوجد</span>
                         )}
                       </td>
 
                       <td className="p-4 text-center">
                         <button
                           onClick={() => openEditModal(u)}
-                          className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-xl text-xs font-bold transition-colors inline-flex items-center gap-1 border border-slate-700"
+                          className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-bold transition-colors inline-flex items-center gap-1 border border-slate-200 cursor-pointer"
                         >
-                          <Edit className="w-3.5 h-3.5 text-emerald-400" />
+                          <Edit className="w-3.5 h-3.5 text-emerald-700" />
                           <span>تعديل الصلاحيات</span>
                         </button>
                       </td>
@@ -442,7 +442,7 @@ export const UsersManagementView: React.FC = () => {
             </table>
           </div>
         ) : (
-          <div className="p-12 text-center text-xs text-slate-400">
+          <div className="p-12 text-center text-xs text-slate-500">
             لم يتم العثور على مستخدمين يطابقون شروط البحث.
           </div>
         )}
@@ -451,32 +451,32 @@ export const UsersManagementView: React.FC = () => {
       {/* EDIT USER PERMISSIONS MODAL */}
       {editingUser && (
         <div
-          className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto"
+          className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto"
           dir="rtl"
         >
-          <div className="bg-slate-900 border border-slate-700 rounded-3xl max-w-3xl w-full p-6 sm:p-7 shadow-2xl text-white my-8 max-h-[90vh] overflow-y-auto space-y-6">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+          <div className="bg-white border border-slate-200 rounded-3xl max-w-3xl w-full p-6 sm:p-7 shadow-2xl text-slate-900 my-8 max-h-[90vh] overflow-y-auto space-y-6">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center border border-emerald-500/30">
-                  <Shield className="w-5 h-5" />
+                <div className="w-10 h-10 rounded-2xl bg-amber-50 text-amber-800 border border-amber-300 flex items-center justify-center">
+                  <Shield className="w-5 h-5 text-amber-600" />
                 </div>
                 <div>
-                  <h3 className="text-base font-extrabold text-white">
+                  <h3 className="text-base font-extrabold text-slate-900">
                     تعديل صلاحيات ورتبة: {editingUser.name}
                   </h3>
-                  <p className="text-xs text-slate-400">{editingUser.email}</p>
+                  <p className="text-xs text-slate-500">{editingUser.email}</p>
                 </div>
               </div>
               <button
                 onClick={() => setEditingUser(null)}
-                className="p-1.5 rounded-xl bg-slate-800 text-slate-400 hover:text-white"
+                className="p-1.5 rounded-xl bg-slate-100 text-slate-400 hover:text-slate-700 cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             {errorMessage && (
-              <div className="p-3 bg-rose-500/20 border border-rose-500/40 rounded-xl text-xs text-rose-200">
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-800">
                 {errorMessage}
               </div>
             )}
@@ -484,7 +484,7 @@ export const UsersManagementView: React.FC = () => {
             {/* Role and Status Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1.5">
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">
                   الرتبة المدرسية الرسمية
                 </label>
                 <select
@@ -496,49 +496,49 @@ export const UsersManagementView: React.FC = () => {
                     setEditRole(selected);
                   }}
                   disabled={saving}
-                  className="w-full px-3.5 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:border-emerald-500 cursor-pointer"
+                  className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600 cursor-pointer"
                 >
                   {isOwner && (
-                    <option value="owner" className="bg-slate-800 text-white">
+                    <option value="owner">
                       مالك النظام (المديرة العامة)
                     </option>
                   )}
-                  <option value="director" className="bg-slate-800 text-white">المديرة</option>
-                  <option value="supervisor" className="bg-slate-800 text-white">المشرفة</option>
-                  <option value="administrator" className="bg-slate-800 text-white">الإدارية</option>
-                  <option value="counselor" className="bg-slate-800 text-white">المرشدة الطلابية</option>
-                  <option value="teacher" className="bg-slate-800 text-white">المعلمة</option>
-                  <option value="parent" className="bg-slate-800 text-white">ولي أمر</option>
-                  <option value="student" className="bg-slate-800 text-white">الطالبة</option>
+                  <option value="director">المديرة</option>
+                  <option value="supervisor">المشرفة</option>
+                  <option value="administrator">الإدارية</option>
+                  <option value="counselor">المرشدة الطلابية</option>
+                  <option value="teacher">المعلمة</option>
+                  <option value="parent">ولي أمر</option>
+                  <option value="student">الطالبة</option>
                 </select>
-                <p className="text-[11px] text-slate-400 mt-1">
+                <p className="text-[11px] text-slate-500 mt-1">
                   تحدد الصلاحيات التلقائية وفق مصفوفة أدوار مدرسة صفية بنت عمر المعتمدة.
                 </p>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1.5">
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">
                   حالة الحساب في المنصة
                 </label>
                 <select
                   value={editStatus}
                   onChange={(e) => setEditStatus(e.target.value as UserStatus)}
-                  className="w-full px-3.5 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:border-emerald-500"
+                  className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600 cursor-pointer"
                 >
                   <option value="active">حساب نشط ومفعل</option>
                   <option value="disabled">حساب معطل (ممنوع من الوصول)</option>
                 </select>
-                <p className="text-[11px] text-slate-400 mt-1">
+                <p className="text-[11px] text-slate-500 mt-1">
                   الحساب المعطل يتم حظره فوراً ولا يمكنه إجراء أي عملية كتابة أو قراءة خاصة.
                 </p>
               </div>
             </div>
 
             {/* Granular Custom Permissions */}
-            <div className="space-y-3 pt-3 border-t border-slate-800">
+            <div className="space-y-3 pt-3 border-t border-slate-100">
               <div>
-                <h4 className="text-xs font-extrabold text-white">الصلاحيات المخصصة (Custom Permissions)</h4>
-                <p className="text-[11px] text-slate-400">
+                <h4 className="text-xs font-extrabold text-slate-900">الصلاحيات المخصصة (Custom Permissions)</h4>
+                <p className="text-[11px] text-slate-500">
                   يمكنك منح صلاحيات استثنائية محددة للمستخدم تتجاوز رتبته الأساسية.
                 </p>
               </div>
@@ -552,15 +552,15 @@ export const UsersManagementView: React.FC = () => {
                       type="button"
                       key={key}
                       onClick={() => handleToggleCustomPerm(key)}
-                      className={`p-2.5 rounded-xl border text-right transition-all flex items-center justify-between text-xs ${
+                      className={`p-2.5 rounded-xl border text-right transition-all flex items-center justify-between text-xs cursor-pointer ${
                         isGranted
-                          ? 'bg-emerald-950/60 border-emerald-500 text-emerald-300'
-                          : 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-750'
+                          ? 'bg-emerald-50 border-emerald-400 text-emerald-950 font-bold'
+                          : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
                       }`}
                     >
                       <div>
                         <span className="block font-bold">{label}</span>
-                        <span className="font-mono text-[10px] text-slate-500">{key}</span>
+                        <span className="font-mono text-[10px] text-slate-400">{key}</span>
                       </div>
                       <span className="text-[10px] font-bold">
                         {isGranted ? 'ممنوحة' : 'افتراضي'}
@@ -572,21 +572,21 @@ export const UsersManagementView: React.FC = () => {
             </div>
 
             {/* Temporary Permissions */}
-            <div className="space-y-3 pt-3 border-t border-slate-800">
-              <h4 className="text-xs font-extrabold text-white">الصلاحيات المؤقتة (بفترة زمنية محددة)</h4>
-              <p className="text-[11px] text-slate-400">
+            <div className="space-y-3 pt-3 border-t border-slate-100">
+              <h4 className="text-xs font-extrabold text-slate-900">الصلاحيات المؤقتة (بفترة زمنية محددة)</h4>
+              <p className="text-[11px] text-slate-500">
                 تمنح المستخدم إذناً ينتهي مفعوله تلقائياً عند انقضاء التاريخ المحدد (مثل تكليف أسبوعي أو شهري).
               </p>
 
               {/* Add inline form */}
-              <div className="p-3 bg-slate-800/80 rounded-2xl border border-slate-700 space-y-2">
+              <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                   <div>
-                    <label className="block text-[10px] font-bold text-slate-400 mb-1">الصلاحية</label>
+                    <label className="block text-[10px] font-bold text-slate-600 mb-1">الصلاحية</label>
                     <select
                       value={newTempKey}
                       onChange={(e) => setNewTempKey(e.target.value as PermissionKey)}
-                      className="w-full px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-xs text-white"
+                      className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-800"
                     >
                       {ALL_PERMISSIONS.map((k) => (
                         <option key={k} value={k}>
@@ -597,22 +597,22 @@ export const UsersManagementView: React.FC = () => {
                   </div>
 
                   <div>
-                    <label className="block text-[10px] font-bold text-slate-400 mb-1">من تاريخ</label>
+                    <label className="block text-[10px] font-bold text-slate-600 mb-1">من تاريخ</label>
                     <input
                       type="date"
                       value={newTempStart}
                       onChange={(e) => setNewTempStart(e.target.value)}
-                      className="w-full px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-xs text-white"
+                      className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-800"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-[10px] font-bold text-slate-400 mb-1">إلى تاريخ</label>
+                    <label className="block text-[10px] font-bold text-slate-600 mb-1">إلى تاريخ</label>
                     <input
                       type="date"
                       value={newTempEnd}
                       onChange={(e) => setNewTempEnd(e.target.value)}
-                      className="w-full px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-xs text-white"
+                      className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-800"
                     />
                   </div>
                 </div>
@@ -621,7 +621,7 @@ export const UsersManagementView: React.FC = () => {
                   <button
                     type="button"
                     onClick={handleAddTempPerm}
-                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold flex items-center gap-1"
+                    className="px-4 py-2 bg-emerald-800 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer border border-emerald-900"
                   >
                     <Plus className="w-3.5 h-3.5" />
                     <span>إضافة تكليف مؤقت</span>
@@ -635,13 +635,13 @@ export const UsersManagementView: React.FC = () => {
                   {editTempPerms.map((t, idx) => (
                     <div
                       key={idx}
-                      className="p-2.5 bg-slate-800 rounded-xl border border-slate-700 flex items-center justify-between text-xs"
+                      className="p-2.5 bg-white rounded-xl border border-slate-200 flex items-center justify-between text-xs"
                     >
                       <div className="space-y-0.5">
-                        <span className="font-bold text-amber-300 font-mono">
+                        <span className="font-bold text-amber-900 font-mono">
                           {PERMISSION_LABELS_AR[t.permission] || t.permission}
                         </span>
-                        <div className="text-[11px] text-slate-400">
+                        <div className="text-[11px] text-slate-500">
                           من {t.startDate} حتى {t.endDate}
                         </div>
                       </div>
@@ -649,7 +649,7 @@ export const UsersManagementView: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => handleRemoveTempPerm(idx)}
-                        className="p-1 text-slate-400 hover:text-rose-400"
+                        className="p-1 text-slate-400 hover:text-rose-600 cursor-pointer"
                         title="إلغاء التكليف المؤقت"
                       >
                         <Trash2 className="w-4 h-4" />
@@ -661,12 +661,12 @@ export const UsersManagementView: React.FC = () => {
             </div>
 
             {/* Actions */}
-            <div className="pt-4 flex items-center justify-end gap-3 border-t border-slate-800">
+            <div className="pt-4 flex items-center justify-end gap-3 border-t border-slate-100">
               <button
                 type="button"
                 onClick={() => setEditingUser(null)}
                 disabled={saving}
-                className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-xl"
+                className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl cursor-pointer"
               >
                 إلغاء
               </button>
@@ -674,7 +674,7 @@ export const UsersManagementView: React.FC = () => {
                 type="button"
                 onClick={handleSaveUser}
                 disabled={saving}
-                className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-emerald-950/40 flex items-center gap-2 disabled:opacity-50"
+                className="px-6 py-2.5 bg-emerald-800 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-md border border-emerald-900 flex items-center gap-2 disabled:opacity-50 cursor-pointer"
               >
                 {saving ? (
                   <span>جارٍ الحفظ والتحقق من الخادم...</span>

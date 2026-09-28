@@ -202,30 +202,30 @@ export const EventsView: React.FC<EventsViewProps> = ({
       {/* Confirmation Modal */}
       {eventToDelete && (
         <div
-          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200"
+          className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200"
           dir="rtl"
           onClick={handleCloseModal}
         >
           <div
-            className="bg-slate-900 border border-slate-700/80 rounded-3xl max-w-md w-full shadow-2xl overflow-hidden p-6 space-y-5"
+            className="bg-white border border-slate-200 rounded-3xl max-w-md w-full shadow-2xl overflow-hidden p-6 space-y-5 text-slate-900"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
             <div className="flex items-start justify-between gap-3">
               <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-2xl bg-rose-500/20 text-rose-400 border border-rose-500/30 flex items-center justify-center shrink-0">
-                  <AlertTriangle className="w-6 h-6 text-rose-400" />
+                <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-700 border border-rose-200 flex items-center justify-center shrink-0">
+                  <AlertTriangle className="w-6 h-6 text-rose-600" />
                 </div>
                 <div>
-                  <h3 className="text-base font-extrabold text-white">تأكيد حذف الفعالية</h3>
-                  <p className="text-xs text-slate-400 mt-0.5">يرجى التأكيد قبل إزالة السجل من النظام</p>
+                  <h3 className="text-base font-extrabold text-slate-900">تأكيد حذف الفعالية</h3>
+                  <p className="text-xs text-slate-500 mt-0.5">يرجى التأكيد قبل إزالة السجل من النظام</p>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={handleCloseModal}
                 disabled={isDeleting}
-                className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition-colors cursor-pointer"
+                className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -233,20 +233,20 @@ export const EventsView: React.FC<EventsViewProps> = ({
 
             {/* Question and Event Details */}
             <div className="space-y-3">
-              <p className="text-sm font-bold text-white leading-relaxed">
+              <p className="text-sm font-bold text-slate-800 leading-relaxed">
                 هل أنتِ متأكدة من حذف هذه الفعالية؟
               </p>
 
-              <div className="bg-slate-800/80 border border-slate-700/70 rounded-2xl p-4 space-y-2 text-xs">
-                <div className="font-extrabold text-teal-300 text-sm">{eventToDelete.title}</div>
+              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-2 text-xs">
+                <div className="font-extrabold text-emerald-950 text-sm">{eventToDelete.title}</div>
                 {eventToDelete.description && (
-                  <p className="text-slate-300 line-clamp-2 leading-relaxed">
+                  <p className="text-slate-600 line-clamp-2 leading-relaxed">
                     {eventToDelete.description}
                   </p>
                 )}
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pt-1 text-slate-400 text-[11px]">
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pt-1 text-slate-500 text-[11px]">
                   <span className="flex items-center gap-1.5">
-                    <CalendarIcon className="w-3.5 h-3.5 text-teal-400" />
+                    <CalendarIcon className="w-3.5 h-3.5 text-emerald-700" />
                     <span>التاريخ: {eventToDelete.date}</span>
                   </span>
                   {eventToDelete.time && (
@@ -265,8 +265,8 @@ export const EventsView: React.FC<EventsViewProps> = ({
               </div>
 
               {/* Warning Notice */}
-              <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-start gap-2.5 text-xs text-amber-300/90 leading-relaxed">
-                <AlertTriangle className="w-4 h-4 shrink-0 text-amber-400 mt-0.5" />
+              <div className="p-3 bg-amber-50 border border-amber-300 rounded-xl flex items-start gap-2.5 text-xs text-amber-900 leading-relaxed">
+                <AlertTriangle className="w-4 h-4 shrink-0 text-amber-600 mt-0.5" />
                 <span>
                   تنبيه: سيتم حذف الفعالية نهائياً من قاعدة بيانات Supabase والنظام فور تأكيد الحذف، ولا يمكن التراجع عن هذه العملية.
                 </span>
@@ -274,8 +274,8 @@ export const EventsView: React.FC<EventsViewProps> = ({
 
               {/* Error Message Display */}
               {deleteError && (
-                <div className="p-3.5 bg-rose-500/15 border border-rose-500/40 rounded-xl flex items-start gap-2.5 text-xs text-rose-300 leading-relaxed animate-in fade-in duration-200">
-                  <ShieldAlert className="w-4 h-4 shrink-0 text-rose-400 mt-0.5" />
+                <div className="p-3.5 bg-rose-50 border border-rose-300 rounded-xl flex items-start gap-2.5 text-xs text-rose-800 leading-relaxed animate-in fade-in duration-200">
+                  <ShieldAlert className="w-4 h-4 shrink-0 text-rose-600 mt-0.5" />
                   <div className="space-y-1">
                     <span className="font-bold block">فشلت عملية الحذف:</span>
                     <span>{deleteError}</span>
@@ -290,7 +290,7 @@ export const EventsView: React.FC<EventsViewProps> = ({
                 type="button"
                 onClick={handleCloseModal}
                 disabled={isDeleting}
-                className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
               >
                 إلغاء
               </button>
@@ -299,7 +299,7 @@ export const EventsView: React.FC<EventsViewProps> = ({
                 type="button"
                 onClick={handleConfirmDelete}
                 disabled={isDeleting}
-                className="px-5 py-2.5 bg-rose-600 hover:bg-rose-500 disabled:bg-rose-800 text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-lg shadow-rose-950/50 transition-all cursor-pointer"
+                className="px-5 py-2.5 bg-rose-600 hover:bg-rose-500 disabled:bg-rose-400 text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-md transition-all cursor-pointer"
               >
                 {isDeleting ? (
                   <>
@@ -319,17 +319,17 @@ export const EventsView: React.FC<EventsViewProps> = ({
       )}
 
       {/* Banner */}
-      <div className="bg-gradient-to-l from-teal-950 via-slate-900 to-slate-900 rounded-3xl p-6 sm:p-8 text-white flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xl border border-teal-800/40">
+      <div className="bg-gradient-to-l from-emerald-950 via-[#064e3b] to-emerald-900 rounded-3xl p-6 sm:p-8 text-white flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xl border-2 border-amber-400/40">
         <div>
           <div className="flex items-center gap-2.5 mb-2">
-            <div className="w-10 h-10 rounded-2xl bg-teal-500/20 text-teal-400 flex items-center justify-center border border-teal-500/30">
+            <div className="w-10 h-10 rounded-2xl bg-amber-400/20 text-amber-300 flex items-center justify-center border border-amber-400/40 shadow-xs">
               <CalendarIcon className="w-5 h-5" />
             </div>
             <h1 className="text-xl sm:text-2xl font-extrabold text-white">
               تقويم الفعاليات والأنشطة المدرسية
             </h1>
           </div>
-          <p className="text-xs sm:text-sm text-slate-300 max-w-xl leading-relaxed">
+          <p className="text-xs sm:text-sm text-emerald-100/90 max-w-xl leading-relaxed font-normal">
             جدول البرامج التربوية، المعارض العلمية، الاختبارات الدورية، والمناسبات الوطنية بمدرسة صفية بنت عمر.
           </p>
         </div>
@@ -338,16 +338,16 @@ export const EventsView: React.FC<EventsViewProps> = ({
           <button
             type="button"
             onClick={onOpenNewEventModal}
-            className="px-5 py-2.5 bg-teal-600 hover:bg-teal-500 text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-lg shadow-teal-950/50 self-start md:self-auto transition-all cursor-pointer"
+            className="px-5 py-2.5 bg-amber-400 hover:bg-amber-300 text-slate-950 rounded-xl text-xs font-bold flex items-center gap-2 shadow-md border border-amber-300 self-start md:self-auto transition-transform hover:scale-105 cursor-pointer"
           >
-            <Plus className="w-4 h-4" />
+            <Plus className="w-4 h-4 text-emerald-950" />
             <span>إضافة فعالية جديدة</span>
           </button>
         )}
       </div>
 
       {/* Tabs and Search Bar */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-slate-900 p-3.5 rounded-2xl border border-slate-800 shadow-md">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white p-3.5 rounded-2xl border border-slate-200 shadow-sm text-slate-900">
         <div className="flex gap-1.5 overflow-x-auto pb-1 sm:pb-0">
           {[
             { id: 'all', label: 'الكل' },
@@ -362,8 +362,8 @@ export const EventsView: React.FC<EventsViewProps> = ({
               onClick={() => setFilterTab(tab.id as any)}
               className={`px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
                 filterTab === tab.id
-                  ? 'bg-teal-600 text-white shadow-md'
-                  : 'text-slate-400 hover:bg-slate-800'
+                  ? 'bg-emerald-800 text-white shadow-xs'
+                  : 'text-slate-600 hover:bg-slate-100'
               }`}
             >
               {tab.label}
@@ -372,13 +372,13 @@ export const EventsView: React.FC<EventsViewProps> = ({
         </div>
 
         <div className="relative min-w-[220px]">
-          <Search className="absolute right-3.5 top-3 w-4 h-4 text-slate-500" />
+          <Search className="absolute right-3.5 top-2.5 w-4 h-4 text-slate-400" />
           <input
             type="text"
             placeholder="البحث في الفعاليات..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pr-10 pl-3 py-2 text-xs bg-slate-800 border border-slate-700 rounded-xl text-white placeholder:text-slate-500 focus:outline-none focus:border-teal-500"
+            className="w-full pr-10 pl-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600"
           />
         </div>
       </div>
@@ -389,16 +389,16 @@ export const EventsView: React.FC<EventsViewProps> = ({
           {filtered.map((ev) => (
             <div
               key={ev.id}
-              className="bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden shadow-lg flex flex-col justify-between hover:border-teal-500/40 transition-all group"
+              className="bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-sm flex flex-col justify-between hover:border-amber-400/80 hover:shadow-md transition-all group"
             >
               {ev.image && (
-                <div className="h-44 w-full bg-slate-800 overflow-hidden relative">
-                  <img src={ev.image} alt={ev.title} className="w-full h-full object-cover" />
+                <div className="h-44 w-full bg-slate-100 overflow-hidden relative">
+                  <img src={ev.image} alt={ev.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                   <span
                     className={`absolute top-3 right-3 px-2.5 py-1 rounded-full text-[10px] font-bold shadow-md ${
                       ev.status === 'upcoming'
-                        ? 'bg-teal-600 text-white'
-                        : 'bg-slate-800 text-slate-300'
+                        ? 'bg-emerald-800 text-white'
+                        : 'bg-slate-700 text-white'
                     }`}
                   >
                     {ev.status === 'upcoming' ? 'قادمة' : 'مكتملة'}
@@ -408,7 +408,7 @@ export const EventsView: React.FC<EventsViewProps> = ({
 
               <div className="p-5 space-y-3 flex-1">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-teal-500/20 text-teal-300 border border-teal-500/30">
+                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-900 border border-emerald-300">
                     {ev.category || 'فعالية مدرسية'}
                   </span>
 
@@ -418,7 +418,7 @@ export const EventsView: React.FC<EventsViewProps> = ({
                       <button
                         type="button"
                         onClick={() => onEditEvent(ev)}
-                        className="p-1.5 text-slate-400 hover:text-teal-400 hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+                        className="p-1.5 text-slate-400 hover:text-emerald-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
                         title="تعديل الفعالية"
                         aria-label={`تعديل فعالية ${ev.title}`}
                       >
@@ -433,7 +433,7 @@ export const EventsView: React.FC<EventsViewProps> = ({
                           e.stopPropagation();
                           handleInitiateDelete(ev);
                         }}
-                        className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 active:scale-95 rounded-lg transition-all cursor-pointer"
+                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 active:scale-95 rounded-lg transition-all cursor-pointer"
                         title="حذف الفعالية"
                         aria-label={`حذف فعالية ${ev.title}`}
                       >
@@ -443,14 +443,14 @@ export const EventsView: React.FC<EventsViewProps> = ({
                   </div>
                 </div>
 
-                <h3 className="text-sm font-extrabold text-white leading-snug">{ev.title}</h3>
-                <p className="text-xs text-slate-300 leading-relaxed line-clamp-3">
+                <h3 className="text-sm sm:text-base font-extrabold text-emerald-950 leading-snug group-hover:text-emerald-700 transition-colors">{ev.title}</h3>
+                <p className="text-xs text-slate-600 leading-relaxed line-clamp-3">
                   {ev.description}
                 </p>
 
-                <div className="space-y-1.5 text-xs text-slate-400 bg-slate-800/60 p-3 rounded-2xl border border-slate-700/60">
-                  <div className="flex items-center gap-2 font-bold text-white">
-                    <CalendarIcon className="w-3.5 h-3.5 text-teal-400" />
+                <div className="space-y-1.5 text-xs text-slate-600 bg-slate-50 p-3 rounded-2xl border border-slate-200">
+                  <div className="flex items-center gap-2 font-bold text-slate-900">
+                    <CalendarIcon className="w-3.5 h-3.5 text-emerald-700" />
                     <span>التاريخ: {ev.date}</span>
                   </div>
                   {ev.time && (
@@ -468,18 +468,18 @@ export const EventsView: React.FC<EventsViewProps> = ({
                 </div>
               </div>
 
-              <div className="p-4 bg-slate-950/40 border-t border-slate-800 flex items-center justify-between text-[11px] text-slate-400">
-                <span>المشرفة: {ev.authorName || 'إدارة المدرسة'}</span>
-                <span className="text-teal-400 font-bold">مدرسة صفية بنت عمر</span>
+              <div className="p-4 bg-slate-50/80 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
+                <span>المشرفة: <strong className="text-slate-700">{ev.authorName || 'إدارة المدرسة'}</strong></span>
+                <span className="text-emerald-800 font-bold">مدرسة صفية بنت عمر</span>
               </div>
             </div>
           ))}
         </div>
       ) : (
-        <div className="text-center py-16 bg-slate-900 rounded-3xl border border-dashed border-slate-800 text-slate-400 space-y-2">
-          <CalendarIcon className="w-10 h-10 mx-auto text-slate-600 mb-2" />
-          <p className="text-sm font-bold text-slate-300">لا توجد فعاليات في هذا التبويب</p>
-          <p className="text-xs text-slate-500">جربي تغيير شروط البحث أو اختيار تبويب آخر.</p>
+        <div className="text-center py-16 bg-white rounded-3xl border border-dashed border-slate-300 text-slate-500 space-y-2">
+          <CalendarIcon className="w-10 h-10 mx-auto text-slate-300 mb-2" />
+          <p className="text-sm font-bold text-slate-700">لا توجد فعاليات في هذا التبويب</p>
+          <p className="text-xs text-slate-400">جربي تغيير شروط البحث أو اختيار تبويب آخر.</p>
         </div>
       )}
     </div>

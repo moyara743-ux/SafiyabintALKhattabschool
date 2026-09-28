@@ -51,17 +51,17 @@ export const PostDetailsModal: React.FC<PostDetailsModalProps> = ({ post, onClos
         className="w-full max-w-3xl bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden my-8"
       >
         {/* Header Ribbon */}
-        <div className="relative bg-slate-900 text-white p-6 sm:p-8 overflow-hidden">
-          <div className="absolute inset-0 opacity-10 bg-[radial-gradient(#10b981_1px,transparent_1px)] [background-size:16px_16px]" />
+        <div className="relative bg-gradient-to-l from-emerald-950 via-[#064e3b] to-emerald-900 text-white p-6 sm:p-8 overflow-hidden border-b-2 border-amber-400/40">
+          <div className="absolute inset-0 opacity-10 bg-[radial-gradient(#fde68a_1px,transparent_1px)] [background-size:16px_16px]" />
           
           <div className="relative z-10 flex items-center justify-between gap-4 mb-4">
             <div className="flex items-center gap-2">
-              <span className="px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
+              <span className="px-3 py-1 rounded-full text-xs font-bold bg-amber-400/20 text-amber-300 border border-amber-400/40">
                 {post.category}
               </span>
               {post.isPinned && (
-                <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-400/30 flex items-center gap-1">
-                  <Pin className="w-3 h-3" />
+                <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-amber-400 text-slate-950 border border-amber-300 flex items-center gap-1 shadow-xs">
+                  <Pin className="w-3 h-3 text-emerald-950" />
                   منشور مثبت
                 </span>
               )}
@@ -69,23 +69,23 @@ export const PostDetailsModal: React.FC<PostDetailsModalProps> = ({ post, onClos
 
             <button
               onClick={onClose}
-              className="p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors"
+              className="p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>
           </div>
 
-          <h2 className="relative z-10 text-xl sm:text-2xl font-extrabold font-serif leading-snug">
+          <h2 className="relative z-10 text-xl sm:text-2xl font-extrabold font-serif leading-snug text-white">
             {post.title}
           </h2>
 
-          <div className="relative z-10 flex items-center gap-4 mt-4 text-xs text-slate-300">
+          <div className="relative z-10 flex items-center gap-4 mt-4 text-xs text-emerald-100/90 font-medium">
             <div className="flex items-center gap-1.5">
-              <User className="w-3.5 h-3.5 text-emerald-400" />
-              <span>الناشر: <strong>{post.authorName}</strong></span>
+              <User className="w-3.5 h-3.5 text-amber-300" />
+              <span>الناشر: <strong className="text-white">{post.authorName}</strong></span>
             </div>
             <div className="flex items-center gap-1.5">
-              <Calendar className="w-3.5 h-3.5 text-emerald-400" />
+              <Calendar className="w-3.5 h-3.5 text-amber-300" />
               <span>{formatDate(post.createdAt)}</span>
             </div>
           </div>

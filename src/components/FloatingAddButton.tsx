@@ -141,9 +141,10 @@ export const FloatingAddButton: React.FC<FloatingAddButtonProps> = ({
     <div className="fixed bottom-6 left-6 z-50 flex flex-col items-start" dir="rtl">
       {/* Sub menu choices */}
       {isOpen && (
-        <div className="mb-3 flex flex-col items-start gap-2 bg-slate-900/95 backdrop-blur-md p-3 rounded-2xl border border-slate-700 shadow-2xl animate-in fade-in slide-in-from-bottom-4 duration-200">
-          <p className="text-[11px] font-bold text-slate-400 px-2 pb-1 border-b border-slate-800 w-full text-right">
-            العمليات المتاحة لصلاحياتك:
+        <div className="mb-3 flex flex-col items-start gap-2 bg-white/98 backdrop-blur-md p-3 rounded-2xl border border-slate-200 shadow-2xl animate-in fade-in slide-in-from-bottom-4 duration-200 min-w-[210px]">
+          <p className="text-[11px] font-extrabold text-emerald-900 px-2 pb-1.5 border-b border-slate-100 w-full text-right flex items-center justify-between">
+            <span>العمليات المتاحة لصلاحياتك:</span>
+            <span className="w-2 h-2 rounded-full bg-amber-400"></span>
           </p>
           <div className="flex flex-col gap-1.5 w-full">
             {actions.map((act) => {
@@ -166,18 +167,18 @@ export const FloatingAddButton: React.FC<FloatingAddButtonProps> = ({
       {/* Main trigger button */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 px-4 py-3.5 bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white rounded-full shadow-xl shadow-emerald-950/40 border border-emerald-400/30 transition-all transform hover:scale-105 active:scale-95"
+        className="flex items-center gap-2 px-4 py-3 bg-gradient-to-r from-emerald-950 via-[#064e3b] to-emerald-900 hover:from-emerald-900 hover:to-emerald-800 text-white rounded-full shadow-2xl border-2 border-amber-400/80 transition-all transform hover:scale-105 active:scale-95"
         title="إضافة محتوى جديد"
       >
         {isOpen ? (
           <>
-            <X className="w-5 h-5" />
-            <span className="text-xs font-bold">إغلاق</span>
+            <X className="w-5 h-5 text-amber-300" />
+            <span className="text-xs font-extrabold text-white">إغلاق</span>
           </>
         ) : (
           <>
-            <Plus className="w-5 h-5 stroke-[2.5]" />
-            <span className="text-xs font-bold">+ إضافة</span>
+            <Plus className="w-5 h-5 stroke-[2.5] text-amber-300" />
+            <span className="text-xs font-extrabold text-white">+ إضافة</span>
           </>
         )}
       </button>

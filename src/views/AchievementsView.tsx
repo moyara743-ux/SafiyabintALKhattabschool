@@ -83,17 +83,17 @@ export const AchievementsView: React.FC<AchievementsViewProps> = ({
   return (
     <div className="space-y-6 pb-16" dir="rtl">
       {/* Banner */}
-      <div className="bg-gradient-to-l from-purple-950 via-slate-900 to-slate-900 rounded-3xl p-6 sm:p-8 text-white flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xl border border-purple-800/40">
+      <div className="bg-gradient-to-l from-emerald-950 via-[#064e3b] to-emerald-900 rounded-3xl p-6 sm:p-8 text-white flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xl border-2 border-amber-400/40">
         <div>
           <div className="flex items-center gap-2.5 mb-2">
-            <div className="w-10 h-10 rounded-2xl bg-purple-500/20 text-purple-400 flex items-center justify-center border border-purple-500/30">
+            <div className="w-10 h-10 rounded-2xl bg-amber-400/20 text-amber-300 flex items-center justify-center border border-amber-400/40 shadow-xs">
               <Trophy className="w-5 h-5 text-amber-300" />
             </div>
             <h1 className="text-xl sm:text-2xl font-extrabold text-white">
               لوحة الشرف والإنجازات المدرسية
             </h1>
           </div>
-          <p className="text-xs sm:text-sm text-slate-300 max-w-xl leading-relaxed">
+          <p className="text-xs sm:text-sm text-emerald-100/90 max-w-xl leading-relaxed font-normal">
             توثيق إنجازات وجوائز طالبات ومعلمات مدرسة صفية بنت عمر، والتكريم في المحافل والمنافسات المحلية والوطنية.
           </p>
         </div>
@@ -101,25 +101,25 @@ export const AchievementsView: React.FC<AchievementsViewProps> = ({
         {canCreate && (
           <button
             onClick={onOpenCreateModal}
-            className="px-5 py-2.5 bg-purple-600 hover:bg-purple-500 text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-lg shadow-purple-950/50 self-start md:self-auto transition-all"
+            className="px-5 py-2.5 bg-amber-400 hover:bg-amber-300 text-slate-950 rounded-xl text-xs font-bold flex items-center gap-2 shadow-md border border-amber-300 self-start md:self-auto transition-transform hover:scale-105 cursor-pointer"
           >
-            <Plus className="w-4 h-4" />
+            <Plus className="w-4 h-4 text-emerald-950" />
             <span>توثيق إنجاز جديد</span>
           </button>
         )}
       </div>
 
       {/* Filter and Search */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-slate-900 p-3.5 rounded-2xl border border-slate-800 shadow-md">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white p-3.5 rounded-2xl border border-slate-200 shadow-sm text-slate-900">
         <div className="flex gap-1.5 overflow-x-auto pb-1 sm:pb-0">
           {categories.map((cat) => (
             <button
               key={cat}
               onClick={() => setSelectedCategory(cat)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
                 selectedCategory === cat
-                  ? 'bg-purple-600 text-white shadow-md'
-                  : 'text-slate-400 hover:bg-slate-800'
+                  ? 'bg-emerald-800 text-white shadow-xs'
+                  : 'text-slate-600 hover:bg-slate-100'
               }`}
             >
               {cat}
@@ -128,13 +128,13 @@ export const AchievementsView: React.FC<AchievementsViewProps> = ({
         </div>
 
         <div className="relative min-w-[220px]">
-          <Search className="absolute right-3.5 top-3 w-4 h-4 text-slate-500" />
+          <Search className="absolute right-3.5 top-2.5 w-4 h-4 text-slate-400" />
           <input
             type="text"
             placeholder="البحث في الإنجازات..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pr-10 pl-3 py-2 text-xs bg-slate-800 border border-slate-700 rounded-xl text-white placeholder:text-slate-500 focus:outline-none focus:border-purple-500"
+            className="w-full pr-10 pl-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600"
           />
         </div>
       </div>
@@ -145,13 +145,13 @@ export const AchievementsView: React.FC<AchievementsViewProps> = ({
           {filtered.map((ach) => (
             <div
               key={ach.id}
-              className="bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden shadow-lg flex flex-col justify-between hover:border-purple-500/40 transition-all"
+              className="bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-sm flex flex-col justify-between hover:border-amber-400/80 hover:shadow-md transition-all group"
             >
               {ach.image && (
-                <div className="h-44 w-full bg-slate-800 overflow-hidden relative">
-                  <img src={ach.image} alt={ach.title} className="w-full h-full object-cover" />
+                <div className="h-44 w-full bg-slate-100 overflow-hidden relative">
+                  <img src={ach.image} alt={ach.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                   <div className="absolute top-3 right-3">
-                    <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-slate-950/80 text-amber-300 border border-amber-500/30 backdrop-blur-sm">
+                    <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-50 text-amber-900 border border-amber-300 shadow-sm">
                       {ach.category || 'إنجاز'}
                     </span>
                   </div>
@@ -160,8 +160,8 @@ export const AchievementsView: React.FC<AchievementsViewProps> = ({
 
               <div className="p-5 space-y-3 flex-1">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-[11px] text-slate-400 flex items-center gap-1.5 font-medium">
-                    <Calendar className="w-3.5 h-3.5 text-purple-400" />
+                  <span className="text-[11px] text-slate-500 flex items-center gap-1.5 font-medium">
+                    <Calendar className="w-3.5 h-3.5 text-emerald-700" />
                     <span>{ach.date}</span>
                   </span>
 
@@ -169,7 +169,7 @@ export const AchievementsView: React.FC<AchievementsViewProps> = ({
                     {canEdit && (
                       <button
                         onClick={() => onEditAchievement(ach)}
-                        className="p-1.5 text-slate-400 hover:text-purple-400 hover:bg-slate-800 rounded-lg transition-colors"
+                        className="p-1.5 text-slate-400 hover:text-emerald-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
                         title="تعديل الإنجاز"
                       >
                         <Edit className="w-4 h-4" />
@@ -179,7 +179,7 @@ export const AchievementsView: React.FC<AchievementsViewProps> = ({
                       <button
                         onClick={() => handleDelete(ach)}
                         disabled={deletingId === ach.id}
-                        className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-slate-800 rounded-lg transition-colors"
+                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
                         title="حذف الإنجاز"
                       >
                         <Trash2 className="w-4 h-4" />
@@ -188,27 +188,27 @@ export const AchievementsView: React.FC<AchievementsViewProps> = ({
                   </div>
                 </div>
 
-                <h3 className="text-sm font-extrabold text-white leading-snug">{ach.title}</h3>
-                <p className="text-xs text-slate-300 leading-relaxed whitespace-pre-line line-clamp-4">
+                <h3 className="text-sm sm:text-base font-extrabold text-slate-900 group-hover:text-emerald-800 transition-colors leading-snug">{ach.title}</h3>
+                <p className="text-xs text-slate-600 leading-relaxed whitespace-pre-line line-clamp-4">
                   {ach.description}
                 </p>
               </div>
 
-              <div className="p-4 bg-slate-950/40 border-t border-slate-800 flex items-center justify-between text-[11px] text-slate-400">
-                <span className="flex items-center gap-1 text-amber-400">
-                  <Sparkles className="w-3.5 h-3.5" />
+              <div className="p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
+                <span className="flex items-center gap-1 text-amber-700 font-bold">
+                  <Sparkles className="w-3.5 h-3.5 text-amber-500" />
                   <span>تكريم معتمد</span>
                 </span>
-                <span>بواسطة: {ach.authorName || 'إدارة المدرسة'}</span>
+                <span>بواسطة: <strong className="text-slate-700">{ach.authorName || 'إدارة المدرسة'}</strong></span>
               </div>
             </div>
           ))}
         </div>
       ) : (
-        <div className="text-center py-16 bg-slate-900 rounded-3xl border border-dashed border-slate-800 text-slate-400 space-y-2">
-          <Award className="w-10 h-10 mx-auto text-slate-600 mb-2" />
-          <p className="text-sm font-bold text-slate-300">لا توجد إنجازات مسجلة في هذا التصنيف</p>
-          <p className="text-xs text-slate-500">
+        <div className="text-center py-16 bg-white rounded-3xl border border-dashed border-slate-300 text-slate-500 space-y-2">
+          <Award className="w-10 h-10 mx-auto text-slate-300 mb-2" />
+          <p className="text-sm font-bold text-slate-700">لا توجد إنجازات مسجلة في هذا التصنيف</p>
+          <p className="text-xs text-slate-400">
             يمكنك توثيق إنجازات وتكريمات الطالبات والمعلمات وإضافتها بكل سهولة.
           </p>
         </div>
