@@ -86,7 +86,18 @@ export const HomePage: React.FC<HomePageProps> = ({
   onOpenCreateAlbum,
   onOpenDailyMessageModal,
 }) => {
-  const { user, profile, hasPerm } = useAuth();
+  const { user, profile, hasPerm, isOwner } = useAuth();
+
+  // Strict permissions check for "+ إضافة" button in the statistics section ("أرقام وإحصائيات مباشرة")
+  // Requirement:
+  // - Hidden completely from students, teachers, parents, and unauthenticated visitors
+  // - Visible exclusively to users with Admin role (administrator, director) or System Owner (owner, isOwner)
+  const canManageStats = !!user && !!profile && (
+    isOwner ||
+    profile.school_role === 'owner' ||
+    profile.school_role === 'director' ||
+    profile.school_role === 'administrator'
+  );
 
   // Dynamic Date calculations
   const todayArabic = formatArabicFullDate(new Date());
@@ -1022,11 +1033,31 @@ export const HomePage: React.FC<HomePageProps> = ({
 
       {/* 9. SCHOOL STATISTICS */}
       <section className="bg-gradient-to-r from-emerald-950 via-[#064e3b] to-emerald-950 rounded-3xl p-8 sm:p-10 lg:p-12 text-white shadow-xl border-2 border-amber-400/40 space-y-8 sm:space-y-10">
-        <div className="text-center max-w-xl mx-auto space-y-2">
-          <span className="text-amber-300 text-xs sm:text-sm font-bold uppercase tracking-wider">
-            أرقام وإحصائيات مباشرة
-          </span>
-          <h2 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold">إحصائيات مدرسة صفية بنت عمر</h2>
+        <div className={`flex flex-col ${canManageStats ? 'sm:flex-row items-center justify-between' : 'items-center text-center'} gap-4`}>
+          <div className={`${canManageStats ? 'text-center sm:text-right' : 'text-center max-w-xl mx-auto'} space-y-2`}>
+            <span className="text-amber-300 text-xs sm:text-sm font-bold uppercase tracking-wider block">
+              أرقام وإحصائيات مباشرة
+            </span>
+            <h2 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold">إحصائيات مدرسة صفية بنت عمر</h2>
+            {!canManageStats && (
+              <p className="text-xs sm:text-sm text-emerald-200/80 font-normal">
+                مؤشرات وإحصاءات دقيقة ومحدثة تلقائياً تعكس واقع العمل والتميز المدرسي
+              </p>
+            )}
+          </div>
+
+          {canManageStats && (
+            <div className="flex items-center gap-2.5 shrink-0">
+              <button
+                onClick={() => onNavigate('admin_dashboard')}
+                className="px-4 py-2 sm:px-5 sm:py-2.5 bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold text-xs sm:text-sm rounded-xl flex items-center gap-1.5 shadow-md border border-amber-300 transition-all hover:scale-105 cursor-pointer"
+                title="إدارة وتحديث إحصائيات المنصة (خاص بالأدمن ومالك النظام)"
+              >
+                <Plus className="w-4 h-4 text-emerald-950" />
+                <span>+ إضافة</span>
+              </button>
+            </div>
+          )}
         </div>
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 lg:gap-8">

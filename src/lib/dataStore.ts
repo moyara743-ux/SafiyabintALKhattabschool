@@ -533,7 +533,17 @@ class LocalDataStore {
 
   // Settings
   public getSettings(): SiteSettings {
-    return this.getCollection<SiteSettings>('settings');
+    const raw = this.getCollection<SiteSettings>('settings');
+    if (raw && (raw.phone === '011-2345678' || raw.email === 'info@safiah-school.edu.sa')) {
+      const clean = {
+        ...raw,
+        phone: raw.phone === '011-2345678' ? '' : raw.phone,
+        email: raw.email === 'info@safiah-school.edu.sa' ? '' : raw.email,
+      };
+      this.setStorage('settings', clean);
+      return clean;
+    }
+    return raw;
   }
 
   public async updateSettings(settings: SiteSettings): Promise<void> {

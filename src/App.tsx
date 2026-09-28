@@ -62,8 +62,8 @@ function AppContent() {
     motto: 'صرح تعليمي رائد يصنع جيل المستقبل برؤية طموحة',
     aboutText:
       'مدرسة صفية بنت عمر صرح تعليمي رائد يهدف إلى تقديم تعليم نوعي وتنشئة أجيال واعدة متمكنة من مهارات المستقبل ومعتزة بهويتها الوطنية والقيم الإسلامية.',
-    phone: '011-2345678',
-    email: 'info@safiah-school.edu.sa',
+    phone: '',
+    email: '',
     address: 'المملكة العربية السعودية - الرياض',
     principalName: 'أ. هدى الغامدي',
   });
@@ -122,7 +122,15 @@ function AppContent() {
     const unsubPhotos = dataStore.subscribe<SchoolPhoto[]>('photos', (items) => setPhotos(items));
     const unsubAlbums = dataStore.subscribe<SchoolAlbum[]>('albums', (items) => setAlbums(items));
     const unsubDailyMessages = dataStore.subscribe<DailyMessage[]>('dailyMessages', (items) => setDailyMessages(items));
-    const unsubSettings = dataStore.subscribe<SiteSettings>('settings', (st) => setSettings(st));
+    const unsubSettings = dataStore.subscribe<SiteSettings>('settings', (st) => {
+      const cleanSt: SiteSettings = {
+        ...st,
+        phone: st.phone && st.phone !== '011-2345678' ? st.phone : '',
+        email: st.email && st.email !== 'info@safiah-school.edu.sa' ? st.email : '',
+        address: st.address || 'المملكة العربية السعودية - الرياض',
+      };
+      setSettings(cleanSt);
+    });
 
     return () => {
       unsubPosts();
@@ -544,28 +552,31 @@ function AppContent() {
             </div>
 
             {/* Contact Details */}
-            <div className="space-y-2.5 text-xs text-emerald-100/90">
+            <div className="space-y-3 text-xs text-emerald-100/90">
               <h4 className="text-xs font-bold text-amber-300 flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
                 <span>معلومات التواصل المعتمدة</span>
               </h4>
-              <div className="space-y-2 text-emerald-200/80">
-                {settings.phone && (
-                  <div className="flex items-center gap-2">
-                    <Phone className="w-3.5 h-3.5 text-amber-300" />
-                    <span>{settings.phone}</span>
+              <div className="space-y-2 text-emerald-200/90">
+                <div className="flex items-start gap-2.5 p-3 rounded-2xl bg-white/5 border border-white/10 shadow-xs">
+                  <MapPin className="w-4 h-4 text-amber-300 shrink-0 mt-0.5" />
+                  <div className="space-y-0.5">
+                    <span className="text-[10px] text-amber-300/80 block font-bold">الموقع الجغرافي</span>
+                    <span className="text-xs font-medium text-white block">
+                      {settings.address || 'المملكة العربية السعودية - الرياض'}
+                    </span>
+                  </div>
+                </div>
+                {settings.phone && settings.phone !== '011-2345678' && (
+                  <div className="flex items-center gap-2.5 p-2.5 rounded-xl bg-white/5 border border-white/10">
+                    <Phone className="w-3.5 h-3.5 text-amber-300 shrink-0" />
+                    <span className="text-xs font-medium text-white">{settings.phone}</span>
                   </div>
                 )}
-                {settings.email && (
-                  <div className="flex items-center gap-2">
-                    <Mail className="w-3.5 h-3.5 text-amber-300" />
-                    <span>{settings.email}</span>
-                  </div>
-                )}
-                {settings.address && (
-                  <div className="flex items-center gap-2">
-                    <MapPin className="w-3.5 h-3.5 text-amber-300" />
-                    <span>{settings.address}</span>
+                {settings.email && settings.email !== 'info@safiah-school.edu.sa' && (
+                  <div className="flex items-center gap-2.5 p-2.5 rounded-xl bg-white/5 border border-white/10">
+                    <Mail className="w-3.5 h-3.5 text-amber-300 shrink-0" />
+                    <span className="text-xs font-medium text-white">{settings.email}</span>
                   </div>
                 )}
               </div>

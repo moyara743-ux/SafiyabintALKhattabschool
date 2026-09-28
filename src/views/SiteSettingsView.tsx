@@ -25,8 +25,8 @@ export const SiteSettingsView: React.FC = () => {
   const [motto, setMotto] = useState('صرح تعليمي رائد يصنع جيل المستقبل برؤية طموحة');
   const [vision, setVision] = useState('بيئة تعليمية محفزة ومبتكرة تسهم في بناء جيل معرفي متميز');
   const [mission, setMission] = useState('تقديم تعليم متميز وشامل يعزز القيم الوطنية ويطور المهارات الحياتية');
-  const [phone, setPhone] = useState('011-2345678');
-  const [email, setEmail] = useState('info@safiah-school.edu.sa');
+  const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState('');
   const [address, setAddress] = useState('المملكة العربية السعودية - الرياض');
   const [twitter, setTwitter] = useState('@safiah_school');
 
@@ -41,8 +41,10 @@ export const SiteSettingsView: React.FC = () => {
         if (data.motto) setMotto(data.motto);
         if (data.vision) setVision(data.vision);
         if (data.mission) setMission(data.mission);
-        if (data.phone) setPhone(data.phone);
-        if (data.email) setEmail(data.email);
+        if (data.phone && data.phone !== '011-2345678') setPhone(data.phone);
+        else setPhone('');
+        if (data.email && data.email !== 'info@safiah-school.edu.sa') setEmail(data.email);
+        else setEmail('');
         if (data.address) setAddress(data.address);
         if (data.twitter) setTwitter(data.twitter);
       } catch (err) {
