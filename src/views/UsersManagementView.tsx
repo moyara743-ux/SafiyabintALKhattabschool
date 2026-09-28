@@ -27,6 +27,8 @@ import {
   Plus,
   Trash2,
   Lock,
+  RefreshCw,
+  Database,
 } from 'lucide-react';
 
 export const UsersManagementView: React.FC = () => {
@@ -55,34 +57,90 @@ export const UsersManagementView: React.FC = () => {
 
   const canManage = hasPerm('manageUsers') || isOwner;
 
-  // Load all users from Supabase users table
+  // Load all users exclusively from Supabase public.users table
   const loadUsers = async () => {
     setLoading(true);
+    setErrorMessage(null);
     try {
-      const list = await dataStore.getUsers();
-      // Sort by role hierarchy
-      list.sort((a, b) => (ROLE_LEVELS[b.school_role] || 0) - (ROLE_LEVELS[a.school_role] || 0));
-      setUsers(list);
+      console.log('[UsersManagementView] Fetching users exclusively from Supabase public.users table...');
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('[UsersManagementView] Supabase public.users query error:', error);
+        throw error;
+      }
+
+      if (data && Array.isArray(data)) {
+        const remoteUsers: UserProfile[] = data.map((d: any) => ({
+          id: d.id,
+          name: d.name || 'مستخدم',
+          email: (d.email || '').trim().toLowerCase(),
+          school_role: d.school_role || 'student',
+          status: d.status || 'active',
+          customPermissions: Array.isArray(d.custom_permissions) ? d.custom_permissions : [],
+          temporaryPermissions: Array.isArray(d.temporary_permissions) ? d.temporary_permissions : [],
+          createdAt: d.created_at || new Date().toISOString(),
+          updatedAt: d.updated_at,
+        }));
+
+        // Sort by role hierarchy
+        remoteUsers.sort((a, b) => (ROLE_LEVELS[b.school_role] || 0) - (ROLE_LEVELS[a.school_role] || 0));
+        setUsers(remoteUsers);
+        dataStore.setUsers(remoteUsers);
+      } else {
+        setUsers([]);
+        dataStore.setUsers([]);
+      }
     } catch (err: any) {
-      console.error('Error fetching users:', err);
-      setErrorMessage('فشل في جلب قائمة المستخدمين من الخادم');
+      console.error('[UsersManagementView] Error fetching users from Supabase:', err);
+      // Fallback only if offline, strictly filtering out any mock data
+      const cached = (await dataStore.getUsers()).filter(
+        (u) => u && u.id && !u.id.startsWith('00000000') && !u.id.startsWith('owner_') && !u.id.startsWith('user_')
+      );
+      setUsers(cached);
+      setErrorMessage(err?.message || 'تعذر الاتصال المباشر بقاعدة بيانات Supabase');
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
+    // Purge any legacy mock user data from localStorage
+    try {
+      if (typeof localStorage !== 'undefined') {
+        const stored = localStorage.getItem('safiah_users');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed)) {
+            const cleaned = parsed.filter(
+              (u: any) =>
+                u &&
+                u.id &&
+                !u.id.startsWith('00000000') &&
+                !u.id.startsWith('owner_') &&
+                !u.id.startsWith('user_')
+            );
+            localStorage.setItem('safiah_users', JSON.stringify(cleaned));
+          }
+        }
+      }
+    } catch (e) {
+      // ignore
+    }
+
     loadUsers();
 
-    // Subscribe to real-time updates from dataStore for instant reflection of new users
-    const unsub = dataStore.subscribe<UserProfile[]>('users', (updatedList) => {
-      if (updatedList && Array.isArray(updatedList) && updatedList.length > 0) {
-        const sorted = [...updatedList].sort(
-          (a, b) => (ROLE_LEVELS[b.school_role] || 0) - (ROLE_LEVELS[a.school_role] || 0)
-        );
-        setUsers(sorted);
-      }
-    });
+    // Subscribe to real-time postgres_changes directly on Supabase public.users table
+    const channel = supabase
+      .channel('realtime_public_users_management')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'users' }, () => {
+        console.log('[UsersManagementView] Live postgres_change detected on public.users. Refreshing...');
+        loadUsers();
+      })
+      .subscribe();
 
     const handleFocus = () => {
       loadUsers();
@@ -90,7 +148,7 @@ export const UsersManagementView: React.FC = () => {
     window.addEventListener('focus', handleFocus);
 
     return () => {
-      unsub();
+      supabase.removeChannel(channel);
       window.removeEventListener('focus', handleFocus);
     };
   }, []);
@@ -281,6 +339,22 @@ export const UsersManagementView: React.FC = () => {
         </div>
       )}
 
+      {/* Global Error Banner */}
+      {errorMessage && !editingUser && (
+        <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl text-xs text-rose-800 flex items-center justify-between gap-3 shadow-xs">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+            <span>{errorMessage}</span>
+          </div>
+          <button
+            onClick={() => loadUsers()}
+            className="px-3 py-1 bg-rose-100 hover:bg-rose-200 text-rose-900 rounded-lg font-bold transition-colors cursor-pointer text-[11px]"
+          >
+            إعادة المحاولة
+          </button>
+        </div>
+      )}
+
       {/* Header Banner */}
       <div className="bg-gradient-to-l from-emerald-950 via-[#064e3b] to-emerald-900 rounded-3xl p-6 sm:p-8 text-white flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xl border-2 border-amber-400/40">
         <div>
@@ -297,9 +371,25 @@ export const UsersManagementView: React.FC = () => {
           </p>
         </div>
 
-        <div className="text-left bg-white/10 p-3.5 rounded-2xl border border-white/15 shadow-sm">
-          <span className="text-[11px] text-emerald-200 block font-medium">إجمالي المستخدمين</span>
-          <span className="text-xl font-extrabold text-amber-300">{users.length} مستخدم</span>
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={() => loadUsers()}
+            disabled={loading}
+            className="text-xs bg-white/10 hover:bg-white/20 active:bg-white/30 text-white px-3.5 py-2.5 rounded-2xl border border-white/20 flex items-center gap-2 transition-all cursor-pointer shadow-xs disabled:opacity-50"
+            title="تحديث فوري من جدول public.users في Supabase"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-amber-300' : ''}`} />
+            <span>تحديث من Supabase</span>
+          </button>
+
+          <div className="text-left bg-white/10 p-3.5 rounded-2xl border border-white/15 shadow-sm">
+            <span className="text-[11px] text-emerald-200 block font-medium flex items-center gap-1">
+              <Database className="w-3 h-3 text-amber-300" />
+              <span>مستخدمو public.users</span>
+            </span>
+            <span className="text-xl font-extrabold text-amber-300">{users.length} مستخدم</span>
+          </div>
         </div>
       </div>
 
@@ -443,7 +533,9 @@ export const UsersManagementView: React.FC = () => {
           </div>
         ) : (
           <div className="p-12 text-center text-xs text-slate-500">
-            لم يتم العثور على مستخدمين يطابقون شروط البحث.
+            {users.length === 0
+              ? 'لا يوجد أي مستخدمين حالياً في جدول public.users بقاعدة بيانات Supabase.'
+              : 'لم يتم العثور على مستخدمين يطابقون شروط البحث الحالية.'}
           </div>
         )}
       </div>

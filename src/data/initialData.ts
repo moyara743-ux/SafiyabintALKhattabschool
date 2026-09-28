@@ -2,30 +2,7 @@ import { SiteSettings, Post, SchoolEvent, SchoolPhoto, UserProfile } from '../ty
 
 export const OWNER_EMAIL = 'moyara743@gmail.com';
 
-export const INITIAL_USERS: UserProfile[] = [
-  {
-    id: '00000000-0000-4000-8000-000000000001',
-    name: 'بارا محمد راشد - مالك النظام',
-    email: OWNER_EMAIL,
-    school_role: 'owner',
-    status: 'active',
-    customPermissions: [],
-    temporaryPermissions: [],
-    createdAt: '2026-09-01T08:00:00.000Z',
-    lastLoginAt: new Date().toISOString(),
-  },
-  {
-    id: '00000000-0000-4000-8000-000000000002',
-    name: 'منال علي',
-    email: 'yaradrashed@gmail.com',
-    school_role: 'student',
-    status: 'active',
-    customPermissions: [],
-    temporaryPermissions: [],
-    createdAt: '2026-09-26T12:00:00.000Z',
-    lastLoginAt: new Date().toISOString(),
-  },
-];
+export const INITIAL_USERS: UserProfile[] = [];
 
 export const DEFAULT_SETTINGS: SiteSettings = {
   schoolName: 'مدرسة صفية بنت عمر الابتدائية',
