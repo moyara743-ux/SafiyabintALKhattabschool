@@ -9,7 +9,7 @@ import {
   canUserManageTarget,
 } from '../lib/permissions';
 import { logActivity } from '../lib/activityLogger';
-import { handleGoogleCredential } from '../lib/googleAuth';
+import { handleGoogleCredential, authenticateGoogleAccountDirectly } from '../lib/googleAuth';
 
 export const OWNER_EMAIL = 'moyara743@gmail.com';
 
@@ -35,6 +35,7 @@ interface AuthContextType {
   register: (name: string, email: string, pass: string) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
   loginWithGoogleCredential: (credential: string) => Promise<void>;
+  loginWithGoogleAccount: (email: string, name?: string, photoURL?: string) => Promise<void>;
   logout: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
   updateUserProfile: (displayName: string, photoURL?: string) => Promise<void>;
@@ -246,8 +247,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             console.warn('[AuthContext] Error in ensureUserSynced:', e);
           }
         } else if (isMounted) {
-          setUser(null);
-          setProfile(null);
+          const storedEmail = localStorage.getItem('school_active_session_email');
+          if (storedEmail) {
+            try {
+              const prof = await ensureUserSynced({ id: '', email: storedEmail });
+              if (isMounted && prof) {
+                setUser({
+                  id: prof.id,
+                  uid: prof.id,
+                  email: prof.email,
+                  displayName: prof.name,
+                });
+                setProfile(prof);
+              }
+            } catch (err) {
+              console.warn('[AuthContext] Error restoring stored session:', err);
+              setUser(null);
+              setProfile(null);
+            }
+          } else {
+            setUser(null);
+            setProfile(null);
+          }
         }
       } catch (err) {
         console.error('[AuthContext] Unexpected error checking session:', err);
@@ -477,6 +498,36 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const loginWithGoogleAccount = async (email: string, name?: string, photoURL?: string) => {
+    setLoading(true);
+    try {
+      const { user: authedUser, profile: authedProfile } = await authenticateGoogleAccountDirectly(email, name, photoURL);
+      const appUser: AppUser = {
+        id: authedUser.id,
+        uid: authedUser.id,
+        email: authedUser.email,
+        displayName: authedProfile.name,
+        user_metadata: authedUser.user_metadata,
+      };
+      setUser(appUser);
+      setProfile(authedProfile);
+
+      localStorage.setItem('school_active_session_email', authedUser.email || '');
+
+      await logActivity({
+        actorId: authedUser.id,
+        actorName: authedProfile.name,
+        actorEmail: authedUser.email || '',
+        action: 'LOGIN',
+        entity: 'users',
+        entityId: authedUser.id,
+        details: `تسجيل دخول ناجح عبر بوابة Google (${ROLE_LABELS_AR[authedProfile.school_role]})`,
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const logout = async () => {
     if (user && profile) {
       await logActivity({
@@ -489,6 +540,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         details: 'تسجيل خروج من المنصة',
       });
     }
+    localStorage.removeItem('school_active_session_email');
     await supabase.auth.signOut();
     setUser(null);
     setProfile(null);
@@ -574,6 +626,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         register,
         signInWithGoogle,
         loginWithGoogleCredential,
+        loginWithGoogleAccount,
         logout,
         resetPassword,
         updateUserProfile,

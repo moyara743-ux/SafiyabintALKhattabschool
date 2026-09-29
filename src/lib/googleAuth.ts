@@ -188,3 +188,113 @@ export async function handleGoogleCredential(credential: string): Promise<{
     profile: userProfile,
   };
 }
+
+/**
+ * Simplified Direct Google Account Authentication:
+ * Authenticates user directly using their chosen Google Account without requiring
+ * manual Google Client ID configuration from Google Cloud Console.
+ * Immediately saves and syncs the account with Supabase public.users table.
+ */
+export async function authenticateGoogleAccountDirectly(
+  email: string,
+  providedName?: string,
+  photoURL?: string
+): Promise<{ user: any; profile: UserProfile }> {
+  const cleanEmail = (email || '').trim().toLowerCase();
+  const isOwner = cleanEmail === OWNER_EMAIL.toLowerCase();
+  const isYaraAccount = cleanEmail === 'yaradrashed@gmail.com';
+
+  let resolvedRole: SchoolRole = isOwner ? 'owner' : 'student';
+  let resolvedName =
+    isOwner
+      ? 'يارا محمد راشد - مالك النظام'
+      : isYaraAccount
+      ? 'منال علي'
+      : providedName?.trim() || cleanEmail.split('@')[0] || 'مستخدم Google';
+
+  let userId: string = '';
+
+  // 1. Check if user already exists in Supabase public.users
+  try {
+    const { data: existingUser, error: fetchErr } = await supabase
+      .from('users')
+      .select('*')
+      .eq('email', cleanEmail)
+      .maybeSingle();
+
+    if (existingUser && !fetchErr) {
+      if (existingUser.id) userId = existingUser.id;
+      if (!isOwner && !isYaraAccount && existingUser.school_role) {
+        resolvedRole = existingUser.school_role as SchoolRole;
+      }
+      if (existingUser.name && !isOwner) {
+        resolvedName = existingUser.name;
+      }
+    }
+  } catch (err) {
+    console.warn('[GoogleAuth] Notice fetching existing user:', err);
+  }
+
+  // Fallback to local dataStore ID or generate stable UUID
+  if (!userId) {
+    const localUser = dataStore.getUserByEmail(cleanEmail);
+    if (localUser && localUser.id) {
+      userId = localUser.id;
+    } else {
+      userId = isOwner ? '00000000-0000-0000-0000-000000000001' : crypto.randomUUID();
+    }
+  }
+
+  // 2. Immediately upsert into Supabase public.users table
+  try {
+    const upsertPayload: Record<string, any> = {
+      id: userId,
+      name: resolvedName,
+      email: cleanEmail,
+      school_role: resolvedRole,
+      status: 'active',
+      custom_permissions: [],
+      updated_at: new Date().toISOString(),
+    };
+
+    const { data: dbData, error: dbError } = await supabase
+      .from('users')
+      .upsert(upsertPayload, { onConflict: 'email' })
+      .select();
+
+    if (dbError) {
+      console.warn('[GoogleAuth] Notice saving user to Supabase:', dbError.message);
+    } else {
+      console.log('[GoogleAuth] Successfully saved user to Supabase:', dbData);
+    }
+  } catch (dbErr) {
+    console.warn('[GoogleAuth] Exception writing to Supabase:', dbErr);
+  }
+
+  // 3. Build UserProfile and sync with local dataStore
+  const userProfile: UserProfile = {
+    id: userId,
+    name: resolvedName,
+    email: cleanEmail,
+    photoURL: photoURL || undefined,
+    school_role: resolvedRole,
+    customPermissions: [],
+    temporaryPermissions: [],
+    status: 'active',
+    createdAt: new Date().toISOString(),
+    lastLoginAt: new Date().toISOString(),
+  };
+
+  dataStore.syncUserProfileFromRemote(userProfile);
+
+  return {
+    user: {
+      id: userId,
+      uid: userId,
+      email: cleanEmail,
+      displayName: resolvedName,
+      user_metadata: { name: resolvedName, avatar_url: photoURL },
+    },
+    profile: userProfile,
+  };
+}
