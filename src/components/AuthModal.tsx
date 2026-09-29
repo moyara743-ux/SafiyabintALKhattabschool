@@ -1,8 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { supabase } from '../supabaseClient';
 import { useAuth } from '../context/AuthContext';
-import { GraduationCap, Lock, Mail, User as UserIcon, Shield, ArrowRight, CheckCircle2, AlertCircle } from 'lucide-react';
+import { GraduationCap, Shield, AlertCircle, Lock, CheckCircle2, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { OWNER_EMAIL } from '../data/initialData';
+import { getGoogleClientId } from '../lib/googleAuth';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -13,270 +15,198 @@ interface AuthModalProps {
 export const AuthModal: React.FC<AuthModalProps> = ({
   isOpen,
   onClose,
-  defaultMode = 'login',
 }) => {
-  const [mode, setMode] = useState<'login' | 'register' | 'forgot'>(defaultMode);
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [name, setName] = useState('');
-  const [confirmPass, setConfirmPass] = useState('');
+  const { loginWithGoogleCredential } = useAuth();
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [successMsg, setSuccessMsg] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
+  const googleBtnContainerRef = useRef<HTMLDivElement>(null);
 
-  const { login, register, resetPassword } = useAuth();
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const clientId = getGoogleClientId();
+    if (clientId && window.google?.accounts?.id && googleBtnContainerRef.current) {
+      try {
+        window.google.accounts.id.initialize({
+          client_id: clientId,
+          callback: async (response: { credential: string }) => {
+            setLoading(true);
+            try {
+              await loginWithGoogleCredential(response.credential);
+              onClose();
+            } catch (err: any) {
+              setError(err?.message || 'تعذر إتمام تسجيل الدخول عبر Google.');
+              setLoading(false);
+            }
+          },
+          auto_select: false,
+        });
+
+        googleBtnContainerRef.current.innerHTML = '';
+        window.google.accounts.id.renderButton(googleBtnContainerRef.current, {
+          type: 'standard',
+          theme: 'outline',
+          size: 'large',
+          text: 'signin_with',
+          shape: 'pill',
+          width: 320,
+          locale: 'ar',
+        });
+      } catch (e) {
+        console.warn('[AuthModal] Google GSI initialization note:', e);
+      }
+    }
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleGoogleOAuthSignIn = async () => {
     setError(null);
-    setSuccessMsg(null);
-    setSubmitting(true);
+    setLoading(true);
 
     try {
-      if (mode === 'login') {
-        await login(email.trim(), password);
-        onClose();
-      } else if (mode === 'register') {
-        if (!name.trim()) {
-          throw new Error('يرجى إدخال الاسم الكريم');
-        }
-        if (password.length < 6) {
-          throw new Error('يجب ألا تقل كلمة المرور عن 6 أحرف');
-        }
-        if (password !== confirmPass) {
-          throw new Error('كلمتا المرور غير متطابقتين');
-        }
-        await register(name.trim(), email.trim(), password);
-        onClose();
-      } else if (mode === 'forgot') {
-        await resetPassword(email.trim());
-        setSuccessMsg('تم إرسال رابط استعادة كلمة المرور إلى بريدك الإلكتروني بنجاح.');
+      const { error: authError } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: window.location.origin,
+        },
+      });
+
+      if (authError) {
+        throw authError;
       }
     } catch (err: any) {
-      console.error(err);
-      // Display genuine error message directly from Supabase
+      console.error('Google Auth Modal Error:', err);
       const message =
         err?.message ||
-        (typeof err === 'string' ? err : 'حدث خطأ غير متوقع. يرجى المحاولة مرة أخرى.');
+        (typeof err === 'string'
+          ? err
+          : 'تعذر الاتصال بخدمة تسجيل الدخول عبر Google. يرجى المحاولة مرة أخرى.');
       setError(message);
-    } finally {
-      setSubmitting(false);
+      setLoading(false);
     }
   };
 
-  const handleFillDemoOwner = () => {
-    setEmail(OWNER_EMAIL);
-    setPassword('SafiyyahAdmin2026!');
-  };
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" dir="rtl">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm"
+      dir="rtl"
+    >
       <motion.div
         initial={{ opacity: 0, scale: 0.95, y: 10 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95 }}
-        className="relative w-full max-w-md overflow-hidden bg-white rounded-2xl shadow-2xl border border-emerald-100"
+        className="relative w-full max-w-md overflow-hidden bg-white rounded-3xl shadow-2xl border border-emerald-100"
       >
         {/* Header Ribbon */}
         <div className="bg-gradient-to-l from-emerald-800 to-teal-700 p-6 text-white text-center relative">
           <button
             onClick={onClose}
-            className="absolute left-4 top-4 text-emerald-100 hover:text-white p-1 rounded-full hover:bg-white/10 transition-colors"
-            aria-label="إغلاق"
+            className="absolute left-4 top-4 text-emerald-100 hover:text-white p-1 rounded-full hover:bg-white/10 transition-colors cursor-pointer"
+            aria-label="إغلاق النافذة"
           >
-            ✕
+            <X className="w-5 h-5" />
           </button>
-          
+
           <div className="w-14 h-14 mx-auto mb-3 bg-white/15 backdrop-blur-md rounded-2xl flex items-center justify-center border border-white/20 shadow-inner">
             <GraduationCap className="w-8 h-8 text-amber-300" />
           </div>
-          
-          <h2 className="text-xl font-bold font-serif tracking-wide">مدرسة صفية بنت عمر</h2>
-          <p className="text-emerald-100 text-xs mt-1">بوابة الحسابات والخدمات التعليمية الآمنة</p>
+
+          <h2 className="text-xl font-black tracking-wide">مدرسة صفية بنت عمر الابتدائية</h2>
+          <p className="text-emerald-100 text-xs mt-1">بوابة الدخول الموحد والتحقق الرسمي</p>
         </div>
 
-        {/* Tab Navigation */}
-        <div className="flex border-b border-slate-100 bg-slate-50/70 p-1">
-          <button
-            type="button"
-            onClick={() => { setMode('login'); setError(null); setSuccessMsg(null); }}
-            className={`flex-1 py-2.5 text-xs font-bold rounded-lg transition-all ${
-              mode === 'login'
-                ? 'bg-white text-emerald-800 shadow-sm'
-                : 'text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            تسجيل الدخول
-          </button>
-          <button
-            type="button"
-            onClick={() => { setMode('register'); setError(null); setSuccessMsg(null); }}
-            className={`flex-1 py-2.5 text-xs font-bold rounded-lg transition-all ${
-              mode === 'register'
-                ? 'bg-white text-emerald-800 shadow-sm'
-                : 'text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            إنشاء حساب جديد
-          </button>
-        </div>
+        {/* Modal Body */}
+        <div className="p-6 space-y-5">
+          <div className="text-center space-y-1.5">
+            <h3 className="text-base font-extrabold text-slate-800">
+              تسجيل الدخول إلى المنصة
+            </h3>
+            <p className="text-xs text-slate-500 leading-relaxed">
+              تسجيل الدخول معتمد حصرياً عبر حساب Google الرسمي للوصول الآمن إلى المحتوى المدرسي والخدمات.
+            </p>
+          </div>
 
-        {/* Form Body */}
-        <div className="p-6">
           <AnimatePresence mode="wait">
             {error && (
               <motion.div
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: 'auto' }}
                 exit={{ opacity: 0, height: 0 }}
-                className="mb-4 p-3 bg-rose-50 border border-rose-200 text-rose-800 text-xs rounded-xl flex items-start gap-2"
+                className="p-3 bg-rose-50 border border-rose-200 text-rose-800 text-xs rounded-xl flex items-start gap-2.5"
               >
                 <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-600" />
                 <span>{error}</span>
               </motion.div>
             )}
-
-            {successMsg && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                className="mb-4 p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs rounded-xl flex items-start gap-2"
-              >
-                <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5 text-emerald-600" />
-                <span>{successMsg}</span>
-              </motion.div>
-            )}
           </AnimatePresence>
 
-          <form onSubmit={handleSubmit} className="space-y-3.5">
-            {mode === 'register' && (
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  الاسم الثلاثي أو المستعار
-                </label>
-                <div className="relative">
-                  <UserIcon className="absolute right-3 top-2.5 w-4 h-4 text-slate-400" />
-                  <input
-                    type="text"
-                    required
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="مثال: نورة محمد العتيبي"
-                    className="w-full pr-10 pl-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:border-transparent transition-all"
-                  />
-                </div>
-              </div>
-            )}
+          {/* Official Google GSI Rendered Button */}
+          <div className="flex flex-col items-center justify-center w-full space-y-3">
+            <div ref={googleBtnContainerRef} className="flex items-center justify-center w-full" />
 
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                البريد الإلكتروني
-              </label>
-              <div className="relative">
-                <Mail className="absolute right-3 top-2.5 w-4 h-4 text-slate-400" />
-                <input
-                  type="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="name@example.com"
-                  className="w-full pr-10 pl-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:border-transparent transition-all"
-                />
-              </div>
-            </div>
-
-            {mode !== 'forgot' && (
-              <div>
-                <div className="flex justify-between items-center mb-1">
-                  <label className="block text-xs font-semibold text-slate-700">
-                    كلمة المرور
-                  </label>
-                  {mode === 'login' && (
-                    <button
-                      type="button"
-                      onClick={() => setMode('forgot')}
-                      className="text-xs text-emerald-700 hover:text-emerald-900 transition-colors"
-                    >
-                      نسيت كلمة المرور؟
-                    </button>
-                  )}
-                </div>
-                <div className="relative">
-                  <Lock className="absolute right-3 top-2.5 w-4 h-4 text-slate-400" />
-                  <input
-                    type="password"
-                    required
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="••••••••"
-                    className="w-full pr-10 pl-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:border-transparent transition-all"
-                  />
-                </div>
-              </div>
-            )}
-
-            {mode === 'register' && (
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  تأكيد كلمة المرور
-                </label>
-                <div className="relative">
-                  <Lock className="absolute right-3 top-2.5 w-4 h-4 text-slate-400" />
-                  <input
-                    type="password"
-                    required
-                    value={confirmPass}
-                    onChange={(e) => setConfirmPass(e.target.value)}
-                    placeholder="••••••••"
-                    className="w-full pr-10 pl-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:border-transparent transition-all"
-                  />
-                </div>
-              </div>
-            )}
-
+            {/* Primary Action Button: Google Sign-In */}
             <button
-              type="submit"
-              disabled={submitting}
-              className="w-full mt-2 py-2.5 px-4 bg-emerald-800 hover:bg-emerald-900 text-white text-sm font-bold rounded-xl shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+              type="button"
+              onClick={handleGoogleOAuthSignIn}
+              disabled={loading}
+              className="w-full group py-3.5 px-4 bg-white hover:bg-slate-50 active:scale-[0.99] text-slate-800 font-extrabold text-xs sm:text-sm rounded-2xl border-2 border-slate-200 hover:border-slate-300 shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-3 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+              aria-label="تسجيل الدخول باستخدام Google"
             >
-              {submitting ? (
-                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              ) : mode === 'login' ? (
-                <>
-                  <span>تسجيل الدخول</span>
-                  <ArrowRight className="w-4 h-4" />
-                </>
-              ) : mode === 'register' ? (
-                <>
-                  <span>إنشاء الحساب</span>
-                  <ArrowRight className="w-4 h-4" />
-                </>
+              {loading ? (
+                <div className="flex items-center gap-2 text-xs text-slate-600 font-bold">
+                  <div className="w-4 h-4 border-2 border-slate-400 border-t-emerald-600 rounded-full animate-spin" />
+                  <span>جارٍ التوجيه إلى Google...</span>
+                </div>
               ) : (
-                <span>إرسال رابط الاستعادة</span>
+                <>
+                  <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
+                    <path
+                      fill="#4285F4"
+                      d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z"
+                    />
+                    <path
+                      fill="#34A853"
+                      d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.24v3.15C3.26 21.36 7.33 24 12 24z"
+                    />
+                    <path
+                      fill="#FBBC05"
+                      d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.24C.45 8.16 0 9.97 0 12s.45 3.84 1.24 5.42l4.04-3.15z"
+                    />
+                    <path
+                      fill="#EA4335"
+                      d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.24 6.58l4.04 3.15c.95-2.83 3.6-4.98 6.72-4.98z"
+                    />
+                  </svg>
+                  <span className="font-black text-slate-800">
+                    تسجيل الدخول باستخدام Google
+                  </span>
+                  <span className="text-[11px] text-slate-500 font-semibold hidden sm:inline">
+                    (Sign in with Google)
+                  </span>
+                </>
               )}
             </button>
-          </form>
 
-          {/* Directrice / Owner Quick helper */}
-          <div className="mt-5 pt-4 border-t border-slate-100 text-center">
-            <div className="p-2.5 bg-amber-50/70 border border-amber-200/70 rounded-xl text-amber-900 text-[11px] flex items-center justify-between">
+            <p className="text-[11px] text-slate-500 text-center leading-relaxed">
+              سيتم نقلك لصفحة المصادقة الرسمية لدى Google، وبعد الموافقة يتم إرجاعك وتخزين بريدك تلقائياً في Supabase.
+            </p>
+          </div>
+
+          {/* Quick Info & Security Details */}
+          <div className="pt-3 border-t border-slate-100 space-y-2">
+            <div className="p-2.5 bg-emerald-50/70 border border-emerald-200/70 rounded-xl text-emerald-900 text-[11px] flex items-center justify-between">
               <div className="flex items-center gap-1.5 text-right">
-                <Shield className="w-4 h-4 text-amber-700 shrink-0" />
-                <span>حساب المديرة والمالكة الرئيسية ({OWNER_EMAIL})</span>
+                <Shield className="w-4 h-4 text-emerald-700 shrink-0" />
+                <span>حساب مالك النظام المعتمد:</span>
               </div>
-              <button
-                type="button"
-                onClick={handleFillDemoOwner}
-                className="px-2 py-1 bg-amber-200/80 hover:bg-amber-300 text-amber-950 font-bold rounded text-[10px] transition-colors"
-              >
-                تعبئة
-              </button>
+              <span className="font-mono font-bold text-[10px] text-emerald-800">
+                {OWNER_EMAIL}
+              </span>
             </div>
-            <p className="text-[10px] text-slate-400 mt-2">
-              جميع البيانات محمية بأعلى معايير الأمان والتشفير وفق نظام حماية البيانات.
+
+            <p className="text-[10px] text-slate-400 text-center">
+              جميع عمليات التحقق مشفرة بنظام الحماية OAuth 2.0 المعتمد عالمياً.
             </p>
           </div>
         </div>

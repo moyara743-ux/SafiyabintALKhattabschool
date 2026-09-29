@@ -9,6 +9,7 @@ import {
   canUserManageTarget,
 } from '../lib/permissions';
 import { logActivity } from '../lib/activityLogger';
+import { handleGoogleCredential } from '../lib/googleAuth';
 
 export const OWNER_EMAIL = 'moyara743@gmail.com';
 
@@ -32,6 +33,8 @@ interface AuthContextType {
   roleLabel: string;
   login: (email: string, pass: string) => Promise<void>;
   register: (name: string, email: string, pass: string) => Promise<void>;
+  signInWithGoogle: () => Promise<void>;
+  loginWithGoogleCredential: (credential: string) => Promise<void>;
   logout: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
   updateUserProfile: (displayName: string, photoURL?: string) => Promise<void>;
@@ -54,6 +57,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Strict rule: Only OWNER_EMAIL can ever be owner. yaradrashed@gmail.com is strictly student.
     const initialRole: SchoolRole = isOwnerEmail ? 'owner' : 'student';
     const initialName =
+      authUser.user_metadata?.full_name ||
       authUser.user_metadata?.name ||
       (isOwnerEmail ? 'يارا محمد راشد - مالك النظام' : isYaraAccount ? 'منال علي' : authUser.email?.split('@')[0] || 'مستخدم');
 
@@ -61,7 +65,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       id: authUser.id,
       name: initialName,
       email: cleanEmail,
-      photoURL: authUser.user_metadata?.avatar_url || undefined,
+      photoURL: authUser.user_metadata?.avatar_url || authUser.user_metadata?.picture || undefined,
       school_role: initialRole,
       customPermissions: [],
       temporaryPermissions: [],
@@ -78,6 +82,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const isOwner = currentEmail === OWNER_EMAIL.toLowerCase();
     const isYaraAccount = currentEmail === 'yaradrashed@gmail.com';
     const currentName =
+      authUser.user_metadata?.full_name ||
       authUser.user_metadata?.name ||
       (isOwner ? 'يارا محمد راشد - مالك النظام' : isYaraAccount ? 'منال علي' : currentEmail.split('@')[0] || 'مستخدم');
     const defaultRole: SchoolRole = isOwner ? 'owner' : 'student';
@@ -222,7 +227,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             id: authUser.id,
             uid: authUser.id,
             email: authUser.email,
-            displayName: authUser.user_metadata?.name,
+            displayName: authUser.user_metadata?.full_name || authUser.user_metadata?.name,
             user_metadata: authUser.user_metadata,
           };
           setUser(u);
@@ -273,7 +278,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             id: authUser.id,
             uid: authUser.id,
             email: authUser.email,
-            displayName: authUser.user_metadata?.name,
+            displayName: authUser.user_metadata?.full_name || authUser.user_metadata?.name,
             user_metadata: authUser.user_metadata,
           };
           setUser(u);
@@ -437,6 +442,47 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
   };
 
+  const signInWithGoogle = async () => {
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: window.location.origin,
+      },
+    });
+
+    if (error) {
+      throw error;
+    }
+  };
+
+  const loginWithGoogleCredential = async (credential: string) => {
+    setLoading(true);
+    try {
+      const { user: authedUser, profile: authedProfile } = await handleGoogleCredential(credential);
+      const appUser: AppUser = {
+        id: authedUser.id,
+        uid: authedUser.id,
+        email: authedUser.email,
+        displayName: authedProfile.name,
+        user_metadata: authedUser.user_metadata,
+      };
+      setUser(appUser);
+      setProfile(authedProfile);
+
+      await logActivity({
+        actorId: authedUser.id,
+        actorName: authedProfile.name,
+        actorEmail: authedUser.email || '',
+        action: 'LOGIN',
+        entity: 'users',
+        entityId: authedUser.id,
+        details: `تسجيل دخول ناجح عبر Google Auth SDK (${ROLE_LABELS_AR[authedProfile.school_role]})`,
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const logout = async () => {
     if (user && profile) {
       await logActivity({
@@ -532,6 +578,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         roleLabel,
         login,
         register,
+        signInWithGoogle,
+        loginWithGoogleCredential,
         logout,
         resetPassword,
         updateUserProfile,
