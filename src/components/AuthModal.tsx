@@ -60,30 +60,16 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
   if (!isOpen) return null;
 
-  const handleGoogleOAuthSignIn = async () => {
+  const handleGoogleSignInClick = () => {
     setError(null);
-    setLoading(true);
-
-    try {
-      const { error: authError } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: window.location.origin,
-        },
-      });
-
-      if (authError) {
-        throw authError;
+    if (window.google?.accounts?.id) {
+      window.google.accounts.id.prompt();
+      const iframeOrBtn = googleBtnContainerRef.current?.querySelector('div[role="button"], iframe');
+      if (iframeOrBtn) {
+        (iframeOrBtn as HTMLElement).click();
       }
-    } catch (err: any) {
-      console.error('Google Auth Modal Error:', err);
-      const message =
-        err?.message ||
-        (typeof err === 'string'
-          ? err
-          : 'تعذر الاتصال بخدمة تسجيل الدخول عبر Google. يرجى المحاولة مرة أخرى.');
-      setError(message);
-      setLoading(false);
+    } else {
+      setError('جاري تحميل مكتبة Google... يرجى الانتظار ثوانٍ.');
     }
   };
 
@@ -148,7 +134,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             {/* Primary Action Button: Google Sign-In */}
             <button
               type="button"
-              onClick={handleGoogleOAuthSignIn}
+              onClick={handleGoogleSignInClick}
               disabled={loading}
               className="w-full group py-3.5 px-4 bg-white hover:bg-slate-50 active:scale-[0.99] text-slate-800 font-extrabold text-xs sm:text-sm rounded-2xl border-2 border-slate-200 hover:border-slate-300 shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-3 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
               aria-label="تسجيل الدخول باستخدام Google"

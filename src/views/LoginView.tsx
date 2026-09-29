@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { supabase } from '../supabaseClient';
 import { useAuth } from '../context/AuthContext';
 import {
   GraduationCap,
@@ -10,8 +9,6 @@ import {
   Lock,
   ArrowRight,
   Settings,
-  HelpCircle,
-  ExternalLink,
   Key,
 } from 'lucide-react';
 import { OWNER_EMAIL } from '../data/initialData';
@@ -22,42 +19,41 @@ export const LoginView: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
-  const [sdkLoaded, setSdkLoaded] = useState(false);
-  const [oneTapPrompted, setOneTapPrompted] = useState(false);
+  const [sdkReady, setSdkReady] = useState(false);
   const [showConfigModal, setShowConfigModal] = useState(false);
   const [clientIdInput, setClientIdInput] = useState(getGoogleClientId());
 
   const googleBtnContainerRef = useRef<HTMLDivElement>(null);
 
-  // Initialize and mount Google Identity Services (Google One Tap / Google Auth SDK)
+  // Initialize Google Identity Services (GIS / Google One Tap)
   useEffect(() => {
-    let checkInterval: any = null;
+    let timer: any = null;
     let isMounted = true;
 
-    const initGoogleIdentityServices = () => {
+    const setupGIS = () => {
       if (typeof window === 'undefined' || !window.google?.accounts?.id) {
         return false;
       }
 
-      setSdkLoaded(true);
+      setSdkReady(true);
       const activeClientId = getGoogleClientId();
 
-      // Only initialize GSI if client_id is present
       if (activeClientId && activeClientId.trim()) {
         try {
           window.google.accounts.id.initialize({
             client_id: activeClientId.trim(),
             callback: async (response: { credential: string; select_by?: string }) => {
-              console.log('[Google GSI SDK] Received Google credential token:', response);
+              console.log('[Google GIS] Credential received:', response);
               setLoading(true);
               setError(null);
-              setSuccessMsg('تم التحقق بنجاح! جارٍ حفظ الحساب في Supabase والدخول للمنصة...');
+              setSuccessMsg('تم التحقق بنجاح من حساب Google! جارٍ التسجيل في Supabase والدخول للمنصة...');
 
               try {
+                // Pass ID token to Supabase signInWithIdToken and upsert to public.users
                 await loginWithGoogleCredential(response.credential);
               } catch (err: any) {
-                console.error('[Google GSI SDK] Error processing Google login:', err);
-                setError(err?.message || 'حدث خطأ أثناء مزامنة بيانات حساب Google مع Supabase.');
+                console.error('[Google GIS] Login error:', err);
+                setError(err?.message || 'حدث خطأ أثناء مزامنة بيانات حسابك مع Supabase.');
                 setLoading(false);
               }
             },
@@ -65,7 +61,7 @@ export const LoginView: React.FC = () => {
             cancel_on_tap_outside: true,
           });
 
-          // Render official Google button into the designated container
+          // Render official Google Sign-In Button
           if (googleBtnContainerRef.current) {
             googleBtnContainerRef.current.innerHTML = '';
             window.google.accounts.id.renderButton(googleBtnContainerRef.current, {
@@ -82,72 +78,67 @@ export const LoginView: React.FC = () => {
 
           // Trigger Google One Tap UI prompt
           window.google.accounts.id.prompt((notification: any) => {
-            console.log('[Google GSI SDK] Prompt status:', notification);
-            if (isMounted) {
-              setOneTapPrompted(true);
-            }
+            console.log('[Google GIS] One Tap prompt event:', notification);
           });
-        } catch (initErr) {
-          console.warn('[Google GSI SDK] Initialization notice:', initErr);
+        } catch (e) {
+          console.warn('[Google GIS] Initialization warning:', e);
         }
       }
 
       return true;
     };
 
-    // Attempt instant initialization
-    const loadedImmediately = initGoogleIdentityServices();
-
-    // If script is still loading asynchronously, poll for up to 5 seconds
-    if (!loadedImmediately) {
+    if (!setupGIS()) {
       let attempts = 0;
-      checkInterval = setInterval(() => {
+      timer = setInterval(() => {
         attempts++;
-        if (initGoogleIdentityServices() || attempts >= 25) {
-          clearInterval(checkInterval);
+        if (setupGIS() || attempts >= 30) {
+          clearInterval(timer);
         }
-      }, 200);
+      }, 150);
     }
 
     return () => {
       isMounted = false;
-      if (checkInterval) clearInterval(checkInterval);
+      if (timer) clearInterval(timer);
     };
   }, [clientIdInput]);
 
-  // Standard Google OAuth redirect via Supabase
-  const handleGoogleOAuthSignIn = async () => {
+  // Handle clicking the primary Google Sign In button
+  const handlePrimaryGoogleButtonClick = () => {
     setError(null);
-    setLoading(true);
+    const activeClientId = getGoogleClientId();
 
-    try {
-      const { error: authError } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: window.location.origin,
-        },
-      });
+    if (!activeClientId) {
+      setShowConfigModal(true);
+      setError('يرجى تحديد معرف عميل Google (Client ID) لتفعيل مكتبة Google Identity Services (GIS).');
+      return;
+    }
 
-      if (authError) {
-        throw authError;
+    if (window.google?.accounts?.id) {
+      // 1. Call prompt to show One Tap or account selector
+      window.google.accounts.id.prompt();
+
+      // 2. Also simulate click on the rendered official button if available
+      const iframeOrBtn = googleBtnContainerRef.current?.querySelector('div[role="button"], iframe');
+      if (iframeOrBtn) {
+        (iframeOrBtn as HTMLElement).click();
       }
-    } catch (err: any) {
-      console.error('Google Sign-In Error:', err);
-      const msg =
-        err?.message ||
-        (typeof err === 'string'
-          ? err
-          : 'تعذر الاتصال بخدمة تسجيل الدخول عبر Google. يرجى التحقق والمحاولة مرة أخرى.');
-      setError(msg);
-      setLoading(false);
+    } else {
+      setError('جاري تحميل مكتبة Google الرسمية... يرجى الانتظار ثوانٍ والمحاولة مجدداً.');
     }
   };
 
   const handleSaveClientId = (e: React.FormEvent) => {
     e.preventDefault();
-    setGoogleClientId(clientIdInput);
+    if (!clientIdInput.trim()) {
+      setError('يرجى إدخال معرّف Client ID صحيح.');
+      return;
+    }
+    setGoogleClientId(clientIdInput.trim());
     setShowConfigModal(false);
-    setSuccessMsg('تم حفظ معرّف عميل Google بنجاح. جارٍ إعادة تهيئة Google Auth SDK...');
+    setError(null);
+    setSuccessMsg('تم حفظ وتفعيل Google Client ID بنجاح! جارٍ تشغيل Google One Tap...');
     setTimeout(() => setSuccessMsg(null), 4000);
   };
 
@@ -184,10 +175,10 @@ export const LoginView: React.FC = () => {
             <button
               onClick={() => setShowConfigModal(true)}
               className="p-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-white border border-slate-700 transition-colors cursor-pointer text-xs flex items-center gap-1.5"
-              title="إعدادات معرف Google Client ID"
+              title="إعدادات Google Client ID"
             >
               <Settings className="w-3.5 h-3.5" />
-              <span className="hidden md:inline text-[11px]">إعدادات الربط</span>
+              <span className="text-[11px]">إعدادات Google GIS</span>
             </button>
           </div>
         </div>
@@ -204,7 +195,7 @@ export const LoginView: React.FC = () => {
 
             <div className="space-y-1">
               <span className="inline-block px-3 py-0.5 text-[11px] font-bold text-amber-300 bg-amber-500/10 border border-amber-400/30 rounded-full">
-                بوابة الدخول الموحد (Google Auth)
+                Google Identity Services (GIS)
               </span>
               <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight">
                 تسجيل الدخول إلى المنصة
@@ -212,16 +203,16 @@ export const LoginView: React.FC = () => {
             </div>
 
             <p className="text-xs text-slate-400 max-w-xs mx-auto leading-relaxed">
-              اختر حساب Google الرسمي للمتابعة؛ يتم التحقق بكلمة المرور وتخزين البريد وبياناتك فوراً في Supabase.
+              تسجيل الدخول بالكامل عبر مكتبة Google الرسمية المباشرة (One Tap / Google Auth SDK) مع الحفظ التلقائي في Supabase.
             </p>
           </div>
 
-          {/* Feedback Success / Error Alert */}
+          {/* Feedback Alerts */}
           {error && (
             <div className="p-4 bg-rose-500/15 border border-rose-500/30 text-rose-300 rounded-2xl text-xs flex items-start gap-3 animate-in fade-in">
               <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
               <div className="leading-relaxed">
-                <span className="font-bold block mb-0.5">تعذر إتمام الدخول:</span>
+                <span className="font-bold block mb-0.5">ملاحظة تسجيل الدخول:</span>
                 {error}
               </div>
             </div>
@@ -234,17 +225,17 @@ export const LoginView: React.FC = () => {
             </div>
           )}
 
-          {/* Official Google GSI Rendered Button Container (if Client ID configured) */}
+          {/* Official Google Button Container rendered by Google SDK */}
           <div className="flex flex-col items-center justify-center w-full space-y-3 pt-1">
             <div
               ref={googleBtnContainerRef}
               className="min-h-[44px] flex items-center justify-center w-full overflow-hidden"
             />
 
-            {/* Primary Action Button: Google Sign-In (Direct Supabase OAuth / Official SDK) */}
+            {/* Primary Action Button: Triggers Google Identity Services prompt */}
             <button
               type="button"
-              onClick={handleGoogleOAuthSignIn}
+              onClick={handlePrimaryGoogleButtonClick}
               disabled={loading}
               className="w-full group relative py-3.5 px-5 bg-white hover:bg-slate-100 active:scale-[0.99] text-slate-900 font-extrabold rounded-2xl shadow-xl shadow-black/40 border-2 border-slate-200 hover:border-slate-300 transition-all flex items-center justify-center gap-3 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
               aria-label="تسجيل الدخول باستخدام Google"
@@ -252,11 +243,10 @@ export const LoginView: React.FC = () => {
               {loading ? (
                 <div className="flex items-center gap-2.5 text-xs text-slate-700 font-bold">
                   <div className="w-4 h-4 border-2 border-slate-400 border-t-emerald-600 rounded-full animate-spin" />
-                  <span>جارٍ التوجيه إلى صفحة Google الرسمية والمزامنة...</span>
+                  <span>جارٍ التحقق وتخزين الحساب في Supabase...</span>
                 </div>
               ) : (
                 <>
-                  {/* Official Google 4-Color 'G' Logo SVG */}
                   <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
                     <path
                       fill="#4285F4"
@@ -278,7 +268,7 @@ export const LoginView: React.FC = () => {
                   <div className="flex items-center gap-1.5 text-xs sm:text-sm font-black text-slate-800 tracking-tight">
                     <span>تسجيل الدخول باستخدام Google</span>
                     <span className="text-[11px] text-slate-500 font-semibold hidden sm:inline">
-                      (Sign in with Google)
+                      (Google One Tap)
                     </span>
                   </div>
                 </>
@@ -286,7 +276,7 @@ export const LoginView: React.FC = () => {
             </button>
 
             <p className="text-[11px] text-slate-400 text-center leading-relaxed">
-              يتم توجيهك لصفحة Google الرسمية لاختيار حسابك وإدخال كلمة المرور، ثم حفظ بريدك تلقائياً في Supabase.
+              عند اختيار حسابك وتأكيد كلمة المرور لدى Google، يتم استلام رمز الهوية وتخزين بياناتك فوراً في Supabase عبر دالة <code className="text-emerald-400 font-mono text-[10px]">signInWithIdToken</code>.
             </p>
           </div>
 
@@ -295,11 +285,11 @@ export const LoginView: React.FC = () => {
             <div className="grid grid-cols-2 gap-2 text-[11px]">
               <div className="p-2.5 bg-slate-800/60 border border-slate-700/60 rounded-xl flex items-center gap-2 text-slate-300">
                 <Lock className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                <span>Google One Tap / SDK</span>
+                <span>Google GIS SDK مفعّل</span>
               </div>
               <div className="p-2.5 bg-slate-800/60 border border-slate-700/60 rounded-xl flex items-center gap-2 text-slate-300">
                 <CheckCircle2 className="w-3.5 h-3.5 text-teal-400 shrink-0" />
-                <span>مزامنة فورية في Supabase</span>
+                <span>signInWithIdToken مباشر</span>
               </div>
             </div>
 
@@ -339,14 +329,14 @@ export const LoginView: React.FC = () => {
               </div>
               <button
                 onClick={() => setShowConfigModal(false)}
-                className="text-slate-400 hover:text-white p-1"
+                className="text-slate-400 hover:text-white p-1 cursor-pointer"
               >
                 ✕
               </button>
             </div>
 
             <p className="text-xs text-slate-400 leading-relaxed">
-              لتفعيل نافذة Google One Tap التلقائية الخاصة بنطاق مدرستك، يمكنك إدخال معرّف العميل (Client ID) الصادر من Google Cloud Console:
+              لتفعيل مكتبة Google Identity Services ونافذة Google One Tap التلقائية، أدخل معرّف العميل (Client ID) الصادر من Google Cloud Console لمشروعكم:
             </p>
 
             <form onSubmit={handleSaveClientId} className="space-y-3">
@@ -356,9 +346,10 @@ export const LoginView: React.FC = () => {
                 </label>
                 <input
                   type="text"
+                  required
                   value={clientIdInput}
                   onChange={(e) => setClientIdInput(e.target.value)}
-                  placeholder="مثال: xxxxx-xxxxx.apps.googleusercontent.com"
+                  placeholder="مثال: 139726270592-xxxxx.apps.googleusercontent.com"
                   className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-500 font-mono"
                 />
               </div>
@@ -367,7 +358,7 @@ export const LoginView: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setShowConfigModal(false)}
-                  className="px-3.5 py-1.5 rounded-xl text-xs text-slate-400 hover:text-white"
+                  className="px-3.5 py-1.5 rounded-xl text-xs text-slate-400 hover:text-white cursor-pointer"
                 >
                   إلغاء
                 </button>
@@ -375,7 +366,7 @@ export const LoginView: React.FC = () => {
                   type="submit"
                   className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold shadow transition-colors cursor-pointer"
                 >
-                  حفظ وتفعيل
+                  حفظ وتفعيل فوري
                 </button>
               </div>
             </form>

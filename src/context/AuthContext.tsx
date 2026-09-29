@@ -443,15 +443,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const signInWithGoogle = async () => {
-    const { data, error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: window.location.origin,
-      },
-    });
-
-    if (error) {
-      throw error;
+    // Rely exclusively on Google Identity Services (GIS) prompt to avoid provider is not enabled error
+    if (typeof window !== 'undefined' && window.google?.accounts?.id) {
+      window.google.accounts.id.prompt();
     }
   };
 
