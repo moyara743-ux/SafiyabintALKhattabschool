@@ -67,6 +67,8 @@ export const PERMISSION_LABELS_AR: Record<PermissionKey, string> = {
 
   viewActivityLog: 'مشاهدة سجل النشاط والعمليات',
   manageSiteSettings: 'إدارة إعدادات ومعلومات الموقع',
+  manageParentRelationships: 'إدارة وربط أولياء الأمور بالطالبات',
+  viewOwnChildren: 'عرض ومتابعة بيانات الطالبات المرتبطات',
 };
 
 export const ALL_PERMISSIONS: PermissionKey[] = Object.keys(PERMISSION_LABELS_AR) as PermissionKey[];
@@ -84,6 +86,7 @@ export const ROLE_PERMISSIONS: Record<SchoolRole, PermissionKey[]> = {
     'viewAlbums', 'createAlbums', 'editAlbums', 'deleteAlbums',
     'viewDailyMessage', 'createDailyMessage', 'editDailyMessage',
     'manageUsers', 'changeRoles', 'managePermissions',
+    'manageParentRelationships',
     'viewActivityLog',
     'manageSiteSettings',
   ],
@@ -96,6 +99,7 @@ export const ROLE_PERMISSIONS: Record<SchoolRole, PermissionKey[]> = {
     'viewPhotos', 'createPhotos', 'editPhotos',
     'viewAlbums', 'createAlbums', 'editAlbums',
     'viewDailyMessage', 'createDailyMessage', 'editDailyMessage',
+    'manageParentRelationships',
   ],
 
   administrator: [
@@ -106,6 +110,7 @@ export const ROLE_PERMISSIONS: Record<SchoolRole, PermissionKey[]> = {
     'viewPhotos', 'createPhotos', 'editPhotos',
     'viewAlbums', 'createAlbums', 'editAlbums',
     'viewDailyMessage', 'createDailyMessage', 'editDailyMessage',
+    'manageParentRelationships',
   ],
 
   counselor: [
@@ -129,6 +134,7 @@ export const ROLE_PERMISSIONS: Record<SchoolRole, PermissionKey[]> = {
   ],
 
   parent: [
+    'viewOwnChildren',
     'viewAnnouncements',
     'viewPosts',
     'viewEvents',

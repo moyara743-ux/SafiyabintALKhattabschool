@@ -229,6 +229,16 @@ export const HomePage: React.FC<HomePageProps> = ({
       isDropdown: false,
     },
     {
+      id: 'parent_portal',
+      title: 'بوابة أولياء الأمور',
+      subtitle: 'متابعة المحتوى الإعلامي وبطاقات الطالبات',
+      icon: HeartHandshake,
+      action: () => (user ? onNavigate('parent_portal') : onOpenAuth()),
+      tag: user && profile?.school_role === 'parent' ? 'طالباتي' : 'بوابة الأسرة',
+      accent: 'hover:border-amber-500 hover:bg-amber-900/30',
+      isDropdown: false,
+    },
+    {
       id: 'staff_portal',
       title: 'بوابة المعلمات والإدارة',
       subtitle: 'لوحة التحكم والتوثيق اليومي',
@@ -285,7 +295,7 @@ export const HomePage: React.FC<HomePageProps> = ({
 
             <div className="space-y-2.5 pt-1">
               <h1 className="text-xl sm:text-2xl lg:text-3xl font-extrabold tracking-tight leading-snug text-white">
-                مدرسة صفية بنت عمر الابتدائية
+                مدرسة صفية بنت عمر الثانوية
                 <span className="block text-base sm:text-lg lg:text-xl font-bold text-amber-300 mt-1">
                   نصنع المعرفة... ونوثق الإنجاز
                 </span>

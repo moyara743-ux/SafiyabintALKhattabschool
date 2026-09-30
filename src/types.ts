@@ -44,7 +44,9 @@ export type PermissionKey =
   | 'changeRoles'
   | 'managePermissions'
   | 'viewActivityLog'
-  | 'manageSiteSettings';
+  | 'manageSiteSettings'
+  | 'manageParentRelationships'
+  | 'viewOwnChildren';
 
 // 3. Temporary Permissions
 export interface TemporaryPermission {
@@ -59,6 +61,10 @@ export interface UserProfile {
   name: string;
   email: string;
   photoURL?: string;
+  phone?: string;
+  gradeStage?: string;
+  linkedStudentIds?: string[];
+  linkedParentIds?: string[];
   school_role: SchoolRole;
   customPermissions?: PermissionKey[];
   temporaryPermissions?: TemporaryPermission[];
@@ -66,6 +72,69 @@ export interface UserProfile {
   createdAt: string;
   updatedAt?: string;
   lastLoginAt?: string;
+}
+
+// 4.1 Student Record (سجل الطالبة في قاعدة البيانات)
+export interface StudentRecord {
+  id: string; // Internal UUID
+  student_id_code: string; // Unique fixed ID e.g. STU-000251
+  name: string;
+  phone: string; // Registered mobile phone for parent linking
+  national_id?: string;
+  birth_date?: string;
+  grade_stage: string; // e.g. 'الأول الثانوي', 'الثاني الثانوي', 'الثالث الثانوي'
+  classroom?: string; // e.g. '1/1'
+  is_profile_complete: boolean;
+  blood_type?: string;
+  notes?: string;
+  emergency_contact_phone?: string;
+  account_user_id?: string; // If registered in users table
+  status: 'active' | 'graduated' | 'suspended';
+  created_at: string;
+  updated_at?: string;
+}
+
+// 4.2 Linking Code (رمز الربط)
+export type LinkingCodeStatus = 'active' | 'expired' | 'used' | 'revoked';
+
+export interface StudentLinkingCode {
+  id: string;
+  student_id: string; // StudentRecord.id
+  code: string; // Cryptographically secure random code
+  created_at: string;
+  expires_at: string; // exactly created_at + 3 days
+  is_used: boolean;
+  is_revoked: boolean;
+  used_at?: string;
+  used_by_parent_id?: string;
+  created_by?: string;
+}
+
+// 4.3 Student Linking States (حالات الربط الستة الدقيقة)
+export type StudentLinkingState =
+  | 'unlinked' // غير مرتبطة
+  | 'pending_link' // بانتظار الربط
+  | 'linked' // مرتبطة
+  | 'code_expired' // رمز الربط منتهي
+  | 'code_revoked' // رمز الربط ملغى
+  | 'code_used'; // رمز الربط مستخدم
+
+// 4.4 Parent-Student Relationship
+export type RelationshipType = 'father' | 'mother' | 'guardian';
+
+export interface ParentStudentRelationship {
+  id: string;
+  parent_user_id: string;
+  student_user_id: string;
+  student_record_id?: string;
+  relationship_type: RelationshipType;
+  is_active: boolean;
+  created_by?: string;
+  created_at: string;
+  updated_at?: string;
+  student?: UserProfile;
+  studentRecord?: StudentRecord;
+  parent?: UserProfile;
 }
 
 // 5. Announcements (الإعلانات)
@@ -191,7 +260,19 @@ export type ActivityAction =
   | 'DELETE'
   | 'UPDATE_ROLE'
   | 'UPDATE_PERMISSIONS'
-  | 'SETTINGS_UPDATE';
+  | 'SETTINGS_UPDATE'
+  | 'PARENT_RELATION_CREATE'
+  | 'PARENT_RELATION_UPDATE'
+  | 'PARENT_RELATION_DELETE'
+  | 'PARENT_RELATION_TOGGLE'
+  | 'STUDENT_CREATE'
+  | 'STUDENT_UPDATE'
+  | 'STUDENT_DELETE'
+  | 'LINKING_CODE_GENERATE'
+  | 'LINKING_CODE_REVOKE'
+  | 'PARENT_LINK_SUCCESS'
+  | 'PARENT_LINK_FAILURE'
+  | 'PARENT_UNLINK';
 
 export interface ActivityLog {
   id: string;
@@ -199,7 +280,7 @@ export interface ActivityLog {
   actorName: string;
   actorEmail: string;
   action: ActivityAction;
-  entity: string; // 'users', 'announcements', 'posts', 'events', 'achievements', 'photos', 'albums', 'dailyMessages', 'siteSettings'
+  entity: string; // 'users', 'announcements', 'posts', 'events', 'achievements', 'photos', 'albums', 'dailyMessages', 'siteSettings', 'parent_student_relationships'
   entityId: string;
   oldValue?: string;
   newValue?: string;
@@ -229,8 +310,12 @@ export type PageView =
   | 'achievements'
   | 'gallery'
   | 'daily_message'
+  | 'parent_portal'
   | 'admin_dashboard'
   | 'users_management'
+  | 'students_management'
+  | 'parent_link'
+  | 'complete_student_profile'
   | 'activity_log'
   | 'site_settings'
   | 'profile';

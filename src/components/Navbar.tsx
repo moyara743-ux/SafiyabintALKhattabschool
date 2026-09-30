@@ -22,6 +22,7 @@ import {
   Users,
   Settings as SettingsIcon,
   Activity,
+  HeartHandshake,
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -83,7 +84,37 @@ export const Navbar: React.FC<NavbarProps> = ({
     { view: 'daily_message', label: 'الرسالة اليومية', icon: MessageSquare },
   ];
 
+  const isLinkedParent =
+    profile?.school_role === 'parent' &&
+    ((Array.isArray(profile.linkedStudentIds) && profile.linkedStudentIds.length > 0) ||
+      (profile.customPermissions &&
+        profile.customPermissions.some(
+          (p) => typeof p === 'string' && p.startsWith('parent_of:') && !p.endsWith(':0')
+        )));
+
+  if (profile?.school_role === 'parent') {
+    if (isLinkedParent) {
+      navLinks.splice(1, 0, {
+        view: 'parent_portal',
+        label: 'طالباتي (أبنائي)',
+        icon: HeartHandshake,
+      });
+    } else {
+      navLinks.splice(1, 0, {
+        view: 'parent_link',
+        label: 'ربط حساب ولي الأمر',
+        icon: HeartHandshake,
+      });
+    }
+  }
+
   if (canAccessAdmin) {
+    navLinks.push({
+      view: 'students_management',
+      label: 'إدارة الطالبات',
+      icon: GraduationCap,
+      adminOnly: true,
+    });
     navLinks.push({
       view: 'admin_dashboard',
       label: 'لوحة الإدارة والإحصائيات',
@@ -140,7 +171,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               </div>
               <div className="flex flex-col justify-center text-right">
                 <h1 className="text-base sm:text-lg lg:text-xl font-extrabold tracking-tight text-white group-hover:text-amber-300 transition-colors whitespace-nowrap">
-                  مدرسة صفية بنت عمر
+                  مدرسة صفية بنت عمر الثانوية
                 </h1>
                 <p className="text-[11px] sm:text-xs text-emerald-200/80 font-medium hidden sm:block whitespace-nowrap mt-0.5">
                   بوابة الإعلام والتوثيق والأنشطة
@@ -217,6 +248,19 @@ export const Navbar: React.FC<NavbarProps> = ({
                     </div>
 
                     <div className="py-1">
+                      {profile?.school_role === 'parent' && (
+                        <button
+                          onClick={() => {
+                            onNavigate('parent_portal');
+                            setUserDropdownOpen(false);
+                          }}
+                          className="w-full px-4 py-2.5 text-right text-xs text-amber-950 bg-amber-50 hover:bg-amber-100/80 flex items-center gap-2.5 font-bold transition-colors cursor-pointer border-b border-amber-200/50"
+                        >
+                          <HeartHandshake className="w-4 h-4 text-amber-700" />
+                          <span>بوابة طالباتي (أبنائي)</span>
+                        </button>
+                      )}
+
                       <button
                         onClick={() => {
                           onNavigate('profile');
@@ -227,6 +271,19 @@ export const Navbar: React.FC<NavbarProps> = ({
                         <User className="w-4 h-4 text-emerald-700" />
                         <span>الملف الشخصي والصلاحيات</span>
                       </button>
+
+                      {canAccessAdmin && (
+                        <button
+                          onClick={() => {
+                            onNavigate('students_management');
+                            setUserDropdownOpen(false);
+                          }}
+                          className="w-full px-4 py-2.5 text-right text-xs text-emerald-800 hover:bg-emerald-50 flex items-center gap-2.5 font-bold transition-colors cursor-pointer"
+                        >
+                          <GraduationCap className="w-4 h-4 text-emerald-700" />
+                          <span>إدارة الطالبات ورموز الربط</span>
+                        </button>
+                      )}
 
                       {canAccessAdmin && (
                         <button

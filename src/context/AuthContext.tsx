@@ -60,7 +60,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const initialName =
       authUser.user_metadata?.full_name ||
       authUser.user_metadata?.name ||
-      (isOwnerEmail ? 'يارا محمد راشد - مالك النظام' : isYaraAccount ? 'منال علي' : authUser.email?.split('@')[0] || 'مستخدم');
+      (isOwnerEmail ? 'يارا محمد راشد - مالك النظام' : authUser.email?.split('@')[0] || 'مستخدم');
 
     return {
       id: authUser.id,
@@ -85,7 +85,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const currentName =
       authUser.user_metadata?.full_name ||
       authUser.user_metadata?.name ||
-      (isOwner ? 'يارا محمد راشد - مالك النظام' : isYaraAccount ? 'منال علي' : currentEmail.split('@')[0] || 'مستخدم');
+      (isOwner ? 'يارا محمد راشد - مالك النظام' : currentEmail.split('@')[0] || 'مستخدم');
     const defaultRole: SchoolRole = isOwner ? 'owner' : 'student';
 
     // 1. FRESH FETCH DIRECTLY FROM SUPABASE public.users TABLE (PRIMARY SOURCE OF TRUTH)

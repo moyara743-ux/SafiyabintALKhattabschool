@@ -39,6 +39,10 @@ import { UsersManagementView } from './views/UsersManagementView';
 import { ActivityLogView } from './views/ActivityLogView';
 import { SiteSettingsView } from './views/SiteSettingsView';
 import { ProfileView } from './views/ProfileView';
+import { ParentPortalView } from './views/ParentPortalView';
+import { StudentsManagementView } from './views/StudentsManagementView';
+import { ParentLinkView } from './views/ParentLinkView';
+import { CompleteStudentProfileView } from './views/CompleteStudentProfileView';
 import { LoginView } from './views/LoginView';
 
 import { GraduationCap, Shield, Phone, Mail, MapPin, Sparkles } from 'lucide-react';
@@ -58,7 +62,7 @@ function AppContent() {
   const [albums, setAlbums] = useState<SchoolAlbum[]>([]);
   const [dailyMessages, setDailyMessages] = useState<DailyMessage[]>([]);
   const [settings, setSettings] = useState<SiteSettings>({
-    schoolName: 'مدرسة صفية بنت عمر الابتدائية',
+    schoolName: 'مدرسة صفية بنت عمر الثانوية',
     motto: 'صرح تعليمي رائد يصنع جيل المستقبل برؤية طموحة',
     aboutText:
       'مدرسة صفية بنت عمر صرح تعليمي رائد يهدف إلى تقديم تعليم نوعي وتنشئة أجيال واعدة متمكنة من مهارات المستقبل ومعتزة بهويتها الوطنية والقيم الإسلامية.',
@@ -97,6 +101,21 @@ function AppContent() {
   const [selectedPostForDetails, setSelectedPostForDetails] = useState<Post | null>(null);
   const [showSkipButton, setShowSkipButton] = useState(false);
   const [bypassAuthLoading, setBypassAuthLoading] = useState(false);
+
+  // Check if parent account has an active verified student relationship
+  const isLinkedParent =
+    profile?.school_role === 'parent' &&
+    ((Array.isArray(profile.linkedStudentIds) && profile.linkedStudentIds.length > 0) ||
+      (profile.customPermissions &&
+        profile.customPermissions.some(
+          (p) => typeof p === 'string' && p.startsWith('parent_of:') && !p.endsWith(':0')
+        )));
+
+  // Check if student has completed basic required profile
+  const isStudentProfileComplete =
+    profile?.school_role === 'student' &&
+    (profile.customPermissions?.includes('profile_completed' as any) ||
+      profile.customPermissions?.some((p) => typeof p === 'string' && p.startsWith('nid:')));
 
   // Safety timer on authLoading screen
   useEffect(() => {
@@ -244,7 +263,7 @@ function AppContent() {
         <div className="w-16 h-16 bg-gradient-to-tr from-emerald-900 to-emerald-700 rounded-3xl flex items-center justify-center shadow-xl shadow-emerald-950/20 border-2 border-amber-400/50 animate-pulse mb-4">
           <GraduationCap className="w-9 h-9 text-amber-300" />
         </div>
-        <h2 className="text-lg font-extrabold text-emerald-950">مدرسة صفية بنت عمر الابتدائية</h2>
+        <h2 className="text-lg font-extrabold text-emerald-950">مدرسة صفية بنت عمر الثانوية</h2>
         <p className="text-xs text-slate-500 mt-1">جارٍ التحقق من جلسة الدخول...</p>
 
         {showSkipButton && (
@@ -298,110 +317,154 @@ function AppContent() {
           </div>
         )}
 
-        {/* Dynamic Views */}
-        {currentView === 'home' && (
-          <HomePage
-            posts={searchedPosts}
-            announcements={announcements}
-            events={events}
-            achievements={achievements}
-            photos={photos}
-            albums={albums}
-            dailyMessage={activeDailyMessage}
-            onNavigate={setCurrentView}
-            onSelectPost={setSelectedPostForDetails}
-            onOpenAuth={() => handleOpenAuth('login')}
-            onOpenCreatePost={handleOpenCreatePost}
-            onOpenCreateAnnouncement={handleOpenCreateAnnouncement}
-            onOpenAddEvent={handleOpenAddEvent}
-            onOpenAddAchievement={handleOpenAddAchievement}
-            onOpenAddPhoto={handleOpenAddPhoto}
-            onOpenCreateAlbum={handleOpenCreateAlbum}
-            onOpenDailyMessageModal={handleOpenDailyMessageModal}
-          />
+        {/* Parent Gatekeeper: Unlinked parent cannot access site before linking */}
+        {user && profile?.school_role === 'parent' && !isLinkedParent ? (
+          <div className="space-y-6">
+            <div className="p-4 bg-amber-500/15 border-2 border-amber-500/40 rounded-2xl flex items-center gap-3 text-amber-900">
+              <Shield className="w-5 h-5 text-amber-700 shrink-0" />
+              <div className="text-xs sm:text-sm font-bold">
+                تنبيه مدرسي: حساب ولي الأمر غير مفعل للدخول الكامل بعد. يُشترط ربط الحساب بطالبة مسجلة ومعتمدة في مدرسة صفية بنت عمر الثانوية بواسطة رمز الربط ورمز التحقق (OTP) لإتاحة الدخول الكامل.
+              </div>
+            </div>
+            <ParentLinkView
+              onSuccess={() => setCurrentView('parent_portal')}
+              onNavigateHome={() => setCurrentView('parent_portal')}
+            />
+          </div>
+        ) : user && profile?.school_role === 'student' && !isStudentProfileComplete ? (
+          /* Student Gatekeeper: Must complete student profile before accessing site */
+          <div className="space-y-6">
+            <div className="p-4 bg-emerald-500/15 border-2 border-emerald-500/40 rounded-2xl flex items-center gap-3 text-emerald-950">
+              <GraduationCap className="w-5 h-5 text-emerald-700 shrink-0" />
+              <div className="text-xs sm:text-sm font-bold">
+                مرحباً بكِ في مدرسة صفية بنت عمر الثانوية. يُرجى استكمال بياناتكِ الأساسية المعتمدة أولاً لتفعيل دخولكِ الكامل للمنصة.
+              </div>
+            </div>
+            <CompleteStudentProfileView onComplete={() => setCurrentView('home')} />
+          </div>
+        ) : (
+          <>
+            {/* Dynamic Views */}
+            {currentView === 'home' && (
+              <HomePage
+                posts={searchedPosts}
+                announcements={announcements}
+                events={events}
+                achievements={achievements}
+                photos={photos}
+                albums={albums}
+                dailyMessage={activeDailyMessage}
+                onNavigate={setCurrentView}
+                onSelectPost={setSelectedPostForDetails}
+                onOpenAuth={() => handleOpenAuth('login')}
+                onOpenCreatePost={handleOpenCreatePost}
+                onOpenCreateAnnouncement={handleOpenCreateAnnouncement}
+                onOpenAddEvent={handleOpenAddEvent}
+                onOpenAddAchievement={handleOpenAddAchievement}
+                onOpenAddPhoto={handleOpenAddPhoto}
+                onOpenCreateAlbum={handleOpenCreateAlbum}
+                onOpenDailyMessageModal={handleOpenDailyMessageModal}
+              />
+            )}
+
+            {currentView === 'announcements' && (
+              <AnnouncementsView
+                announcements={announcements}
+                onOpenCreateModal={handleOpenCreateAnnouncement}
+                onEditAnnouncement={handleEditAnnouncement}
+              />
+            )}
+
+            {currentView === 'news' && (
+              <NewsView
+                posts={searchedPosts}
+                onSelectPost={setSelectedPostForDetails}
+                onOpenNewPostModal={() => handleOpenCreatePost('news')}
+              />
+            )}
+
+            {currentView === 'today' && (
+              <TodayView
+                posts={searchedPosts}
+                events={events}
+                onSelectPost={setSelectedPostForDetails}
+                onOpenNewPostModal={() => handleOpenCreatePost('today_summary')}
+              />
+            )}
+
+            {currentView === 'events' && (
+              <EventsView
+                events={events}
+                onOpenNewEventModal={handleOpenAddEvent}
+                onEditEvent={handleEditEvent}
+                onDeleteEvent={(id) => setEvents((prev) => prev.filter((e) => e.id !== id))}
+              />
+            )}
+
+            {currentView === 'achievements' && (
+              <AchievementsView
+                achievements={achievements}
+                onOpenCreateModal={handleOpenAddAchievement}
+                onEditAchievement={handleEditAchievement}
+              />
+            )}
+
+            {currentView === 'gallery' && (
+              <GalleryView
+                photos={photos}
+                albums={albums}
+                onOpenUploadPhoto={handleOpenAddPhoto}
+                onOpenCreateAlbum={handleOpenCreateAlbum}
+                onEditPhoto={handleEditPhoto}
+                onEditAlbum={handleEditAlbum}
+              />
+            )}
+
+            {currentView === 'daily_message' && (
+              <DailyMessageView
+                messages={dailyMessages}
+                onOpenCreateModal={handleOpenDailyMessageModal}
+                onEditMessage={handleEditDailyMessage}
+              />
+            )}
+
+            {currentView === 'admin_dashboard' && (
+              <AdminDashboard
+                onNavigate={setCurrentView}
+                onOpenCreatePost={() => handleOpenCreatePost('news')}
+                onOpenCreateAnnouncement={handleOpenCreateAnnouncement}
+                onOpenAddEvent={handleOpenAddEvent}
+                onOpenAddAchievement={handleOpenAddAchievement}
+                onOpenAddPhoto={handleOpenAddPhoto}
+                onOpenCreateAlbum={handleOpenCreateAlbum}
+                onOpenDailyMessageModal={handleOpenDailyMessageModal}
+              />
+            )}
+
+            {currentView === 'students_management' && <StudentsManagementView />}
+
+            {currentView === 'parent_link' && (
+              <ParentLinkView
+                onSuccess={() => setCurrentView('parent_portal')}
+                onNavigateHome={() => setCurrentView('home')}
+              />
+            )}
+
+            {currentView === 'complete_student_profile' && (
+              <CompleteStudentProfileView onComplete={() => setCurrentView('home')} />
+            )}
+
+            {currentView === 'users_management' && <UsersManagementView />}
+
+            {currentView === 'activity_log' && <ActivityLogView />}
+
+            {currentView === 'site_settings' && <SiteSettingsView />}
+
+            {currentView === 'profile' && <ProfileView />}
+
+            {currentView === 'parent_portal' && <ParentPortalView onNavigate={setCurrentView} />}
+          </>
         )}
-
-        {currentView === 'announcements' && (
-          <AnnouncementsView
-            announcements={announcements}
-            onOpenCreateModal={handleOpenCreateAnnouncement}
-            onEditAnnouncement={handleEditAnnouncement}
-          />
-        )}
-
-        {currentView === 'news' && (
-          <NewsView
-            posts={searchedPosts}
-            onSelectPost={setSelectedPostForDetails}
-            onOpenNewPostModal={() => handleOpenCreatePost('news')}
-          />
-        )}
-
-        {currentView === 'today' && (
-          <TodayView
-            posts={searchedPosts}
-            events={events}
-            onSelectPost={setSelectedPostForDetails}
-            onOpenNewPostModal={() => handleOpenCreatePost('today_summary')}
-          />
-        )}
-
-        {currentView === 'events' && (
-          <EventsView
-            events={events}
-            onOpenNewEventModal={handleOpenAddEvent}
-            onEditEvent={handleEditEvent}
-            onDeleteEvent={(id) => setEvents((prev) => prev.filter((e) => e.id !== id))}
-          />
-        )}
-
-        {currentView === 'achievements' && (
-          <AchievementsView
-            achievements={achievements}
-            onOpenCreateModal={handleOpenAddAchievement}
-            onEditAchievement={handleEditAchievement}
-          />
-        )}
-
-        {currentView === 'gallery' && (
-          <GalleryView
-            photos={photos}
-            albums={albums}
-            onOpenUploadPhoto={handleOpenAddPhoto}
-            onOpenCreateAlbum={handleOpenCreateAlbum}
-            onEditPhoto={handleEditPhoto}
-            onEditAlbum={handleEditAlbum}
-          />
-        )}
-
-        {currentView === 'daily_message' && (
-          <DailyMessageView
-            messages={dailyMessages}
-            onOpenCreateModal={handleOpenDailyMessageModal}
-            onEditMessage={handleEditDailyMessage}
-          />
-        )}
-
-        {currentView === 'admin_dashboard' && (
-          <AdminDashboard
-            onNavigate={setCurrentView}
-            onOpenCreatePost={() => handleOpenCreatePost('news')}
-            onOpenCreateAnnouncement={handleOpenCreateAnnouncement}
-            onOpenAddEvent={handleOpenAddEvent}
-            onOpenAddAchievement={handleOpenAddAchievement}
-            onOpenAddPhoto={handleOpenAddPhoto}
-            onOpenCreateAlbum={handleOpenCreateAlbum}
-            onOpenDailyMessageModal={handleOpenDailyMessageModal}
-          />
-        )}
-
-        {currentView === 'users_management' && <UsersManagementView />}
-
-        {currentView === 'activity_log' && <ActivityLogView />}
-
-        {currentView === 'site_settings' && <SiteSettingsView />}
-
-        {currentView === 'profile' && <ProfileView />}
       </main>
 
       {/* Global Modals */}

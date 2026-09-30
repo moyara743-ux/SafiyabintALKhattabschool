@@ -68,7 +68,7 @@ export const AnnouncementDetailsModal: React.FC<AnnouncementDetailsModalProps> =
         .catch(() => {});
     } else {
       navigator.clipboard?.writeText(
-        `${announcement.title}\n\n${announcement.content}\n\n— مدرسة صفية بنت عمر الابتدائية`
+        `${announcement.title}\n\n${announcement.content}\n\n— مدرسة صفية بنت عمر الثانوية`
       );
     }
   };
@@ -178,7 +178,7 @@ export const AnnouncementDetailsModal: React.FC<AnnouncementDetailsModalProps> =
         <div className="p-4 sm:p-5 bg-slate-50 border-t border-slate-100 flex items-center justify-between gap-3 shrink-0">
           <div className="flex items-center gap-2 text-xs text-slate-500">
             <span className="w-2 h-2 rounded-full bg-emerald-600"></span>
-            <span>مدرسة صفية بنت عمر الابتدائية</span>
+            <span>مدرسة صفية بنت عمر الثانوية</span>
           </div>
 
           <button

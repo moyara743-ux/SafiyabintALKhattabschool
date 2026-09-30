@@ -134,7 +134,7 @@ export async function handleGoogleCredential(credential: string): Promise<{
   // 2. Immediately store and sync in Supabase public.users table
   try {
     const upsertPayload: Record<string, any> = {
-      name: isOwner ? 'يارا محمد راشد - مالك النظام' : isYaraAccount ? 'منال علي' : displayName,
+      name: isOwner ? 'يارا محمد راشد - مالك النظام' : displayName,
       email: cleanEmail,
       school_role: targetRole,
       status: 'active',
@@ -165,7 +165,7 @@ export async function handleGoogleCredential(credential: string): Promise<{
   // 3. Sync to local dataStore for immediate offline availability
   const userProfile: UserProfile = {
     id: userId,
-    name: isOwner ? 'يارا محمد راشد - مالك النظام' : isYaraAccount ? 'منال علي' : displayName,
+    name: isOwner ? 'يارا محمد راشد - مالك النظام' : displayName,
     email: cleanEmail,
     photoURL,
     school_role: targetRole,
@@ -208,8 +208,6 @@ export async function authenticateGoogleAccountDirectly(
   let resolvedName =
     isOwner
       ? 'يارا محمد راشد - مالك النظام'
-      : isYaraAccount
-      ? 'منال علي'
       : providedName?.trim() || cleanEmail.split('@')[0] || 'مستخدم Google';
 
   let userId: string = '';

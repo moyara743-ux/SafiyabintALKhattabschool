@@ -21,7 +21,7 @@ export const SiteSettingsView: React.FC = () => {
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const [schoolName, setSchoolName] = useState('مدرسة صفية بنت عمر الابتدائية');
+  const [schoolName, setSchoolName] = useState('مدرسة صفية بنت عمر الثانوية');
   const [motto, setMotto] = useState('صرح تعليمي رائد يصنع جيل المستقبل برؤية طموحة');
   const [vision, setVision] = useState('بيئة تعليمية محفزة ومبتكرة تسهم في بناء جيل معرفي متميز');
   const [mission, setMission] = useState('تقديم تعليم متميز وشامل يعزز القيم الوطنية ويطور المهارات الحياتية');

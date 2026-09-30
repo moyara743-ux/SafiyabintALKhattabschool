@@ -5,7 +5,7 @@ export const OWNER_EMAIL = 'moyara743@gmail.com';
 export const INITIAL_USERS: UserProfile[] = [];
 
 export const DEFAULT_SETTINGS: SiteSettings = {
-  schoolName: 'مدرسة صفية بنت عمر الابتدائية',
+  schoolName: 'مدرسة صفية بنت عمر الثانوية',
   motto: 'صرح تعليمي رائد يصنع جيل المستقبل برؤية طموحة',
   aboutText:
     'مدرسة صفية بنت عمر صرح تعليمي رائد يهدف إلى تقديم بيئة تعليمية محفزة ومبتكرة تضمن التفوق الأكاديمي وصقل المهارات الشخصية والقيادية لبناء جيل واعٍ ومبدع يساهم في نهضة وطنه ومجتمعه.',

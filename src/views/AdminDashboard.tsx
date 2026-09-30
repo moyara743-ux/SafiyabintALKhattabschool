@@ -18,6 +18,7 @@ import {
   ArrowLeft,
   CheckCircle2,
   Lock,
+  GraduationCap,
 } from 'lucide-react';
 
 interface AdminDashboardProps {
@@ -133,6 +134,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
 
         <div className="flex flex-wrap items-center gap-2 self-start md:self-auto">
+          <button
+            onClick={() => onNavigate('students_management')}
+            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md border border-emerald-400 transition-transform hover:scale-105 cursor-pointer"
+          >
+            <GraduationCap className="w-4 h-4 text-amber-300" />
+            <span>إدارة الطالبات والربط</span>
+          </button>
+
           {hasPerm('manageUsers') && (
             <button
               onClick={() => onNavigate('users_management')}
