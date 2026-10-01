@@ -111,11 +111,15 @@ function AppContent() {
           (p) => typeof p === 'string' && p.startsWith('parent_of:') && !p.endsWith(':0')
         )));
 
-  // Check if student has completed basic required profile
+  // Check if student has completed basic required profile with mandatory national ID
   const isStudentProfileComplete =
     profile?.school_role === 'student' &&
-    (profile.customPermissions?.includes('profile_completed' as any) ||
-      profile.customPermissions?.some((p) => typeof p === 'string' && p.startsWith('nid:')));
+    Boolean(profile.customPermissions?.includes('profile_completed' as any)) &&
+    Boolean(
+      profile.customPermissions?.some(
+        (p) => typeof p === 'string' && p.startsWith('nid:') && p.replace('nid:', '').trim().length === 10
+      )
+    );
 
   // Safety timer on authLoading screen
   useEffect(() => {

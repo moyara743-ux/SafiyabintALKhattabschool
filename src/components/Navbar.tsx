@@ -48,8 +48,6 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   const getRoleBadgeStyle = (role?: SchoolRole) => {
     switch (role) {
-      case 'owner':
-        return 'bg-amber-500/20 text-amber-300 border-amber-400/40';
       case 'director':
         return 'bg-purple-500/20 text-purple-200 border-purple-400/40';
       case 'supervisor':
@@ -70,7 +68,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   };
 
   const canAccessAdmin =
-    hasPerm('manageUsers') || isOwner || isDirector || hasPerm('viewActivityLog') || hasPerm('manageSiteSettings');
+    hasPerm('manageUsers') || isDirector || hasPerm('viewActivityLog') || hasPerm('manageSiteSettings');
 
   // Complete navigation links list
   const navLinks: { view: PageView; label: string; icon: any; adminOnly?: boolean }[] = [

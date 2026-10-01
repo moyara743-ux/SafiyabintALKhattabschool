@@ -1,6 +1,5 @@
-// 1. Roles definition (8 school roles)
+// 1. Roles definition (7 approved school roles - Director is top management, no owner)
 export type SchoolRole =
-  | 'owner'
   | 'director'
   | 'supervisor'
   | 'administrator'
@@ -80,7 +79,7 @@ export interface StudentRecord {
   student_id_code: string; // Unique fixed ID e.g. STU-000251
   name: string;
   phone: string; // Registered mobile phone for parent linking
-  national_id?: string;
+  national_id: string; // Mandatory, unique 10-digit national ID
   birth_date?: string;
   grade_stage: string; // e.g. 'الأول الثانوي', 'الثاني الثانوي', 'الثالث الثانوي'
   classroom?: string; // e.g. '1/1'

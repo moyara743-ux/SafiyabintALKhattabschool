@@ -136,6 +136,44 @@ export function normalizeArabicText(text: string): string {
 }
 
 /**
+ * Validates National ID format for Saudi students and residents.
+ * - Exactly 10 digits
+ * - Starts with 1 (Saudi citizen) or 2 (Resident / Iqama)
+ * - Digits only
+ * - Not repetitive digits (e.g. 1111111111)
+ */
+export function validateNationalIdFormat(id?: string): { isValid: boolean; message?: string } {
+  if (!id || typeof id !== 'string') {
+    return { isValid: false, message: 'رقم الهوية الوطنية مطلوب ولا يمكن تركه فارغاً.' };
+  }
+  const clean = id.trim();
+  if (!clean) {
+    return { isValid: false, message: 'رقم الهوية الوطنية مطلوب ولا يمكن تركه فارغاً.' };
+  }
+  if (!/^\d{10}$/.test(clean)) {
+    return { isValid: false, message: 'رقم الهوية الوطنية يجب أن يتكون من 10 أرقام تماماً وبدون مسافات أو أحرف.' };
+  }
+  if (!['1', '2'].includes(clean[0])) {
+    return { isValid: false, message: 'رقم الهوية الوطنية للمواطنات يبدأ بـ 1 وللمقيمات بـ 2.' };
+  }
+  if (/^(\d)\1{9}$/.test(clean)) {
+    return { isValid: false, message: 'رقم الهوية الوطنية المدخل غير صحيح (أرقام مكررة).' };
+  }
+  return { isValid: true };
+}
+
+/**
+ * Safely masks a National ID (e.g. 10******12)
+ * Ensures national ID is NEVER exposed fully in public views or plain activity logs.
+ */
+export function maskNationalId(nationalId?: string): string {
+  if (!nationalId) return '—';
+  const clean = nationalId.trim();
+  if (clean.length < 4) return '********';
+  return `${clean.slice(0, 2)}******${clean.slice(-2)}`;
+}
+
+/**
  * Computes human-readable remaining time until expiration.
  */
 export function formatRemainingTime(expiresAt: string): {
@@ -274,7 +312,7 @@ export async function getAllStudents(): Promise<StudentRecord[]> {
 
 /**
  * Adds a new student record to database.
- * Only Director (مديرة), Supervisor (مشرفة), Administrator (إدارية), or Owner can add students.
+ * Only Director (المديرة), Supervisor (المشرفة), or Administrator (الإدارية) can add students.
  */
 export async function addStudent(params: {
   name: string;
@@ -282,26 +320,61 @@ export async function addStudent(params: {
   studentIdCode?: string;
   gradeStage: string;
   classroom?: string;
-  nationalId?: string;
+  nationalId: string; // Required & Unique
   birthDate?: string;
   actor: UserProfile;
 }): Promise<StudentRecord> {
   const { name, phone, studentIdCode, gradeStage, classroom, nationalId, birthDate, actor } = params;
 
-  // Verify actor privileges
-  const allowedRoles = ['owner', 'director', 'supervisor', 'administrator'];
+  // Verify actor privileges (7 approved school roles)
+  const allowedRoles: SchoolRole[] = ['director', 'supervisor', 'administrator'];
   if (!allowedRoles.includes(actor.school_role) && actor.email !== 'moyara743@gmail.com') {
     throw new Error('عفواً، لا تملكين الصلاحية الإدارية لإضافة طالبة جديدة.');
   }
 
   const cleanName = name.trim();
   const cleanPhone = normalizePhoneNumber(phone);
+  const cleanNationalId = (nationalId || '').trim();
 
   if (!cleanName) {
     throw new Error('يرجى كتابة اسم الطالبة الرباعي.');
   }
   if (!cleanPhone || cleanPhone.length < 9) {
     throw new Error('يرجى إدخال رقم جوال صحيح للطالبة (مثال: 05XXXXXXXX).');
+  }
+
+  // 1. Mandatory National ID Validation
+  if (!cleanNationalId) {
+    throw new Error('رقم الهوية الوطنية مطلوب وإلزامي لجميع الطالبات ولا يمكن إنشاء سجل بدون رقم هوية.');
+  }
+
+  const idValidation = validateNationalIdFormat(cleanNationalId);
+  if (!idValidation.isValid) {
+    throw new Error(idValidation.message || 'صيغة رقم الهوية الوطنية غير صحيحة.');
+  }
+
+  // 2. Uniqueness Check in Local Database/Cache
+  const currentList = await getAllStudents();
+  const duplicate = currentList.find((s) => s.national_id === cleanNationalId);
+  if (duplicate) {
+    throw new Error('رقم الهوية الوطنية مسجل مسبقاً في النظام لطالبة أخرى. لا يمكن تكرار رقم الهوية.');
+  }
+
+  // 3. Uniqueness Check in Supabase Table
+  try {
+    const { data: dbCheck } = await supabase
+      .from('student_records')
+      .select('id, student_id_code')
+      .eq('national_id', cleanNationalId)
+      .limit(1);
+
+    if (dbCheck && dbCheck.length > 0) {
+      throw new Error('رقم الهوية الوطنية مسجل مسبقاً في قاعدة بيانات المدرسة لطالبة أخرى.');
+    }
+  } catch (checkErr: any) {
+    if (checkErr?.message && checkErr.message.includes('مسجل مسبقاً')) {
+      throw checkErr;
+    }
   }
 
   const newId = crypto.randomUUID();
@@ -312,17 +385,17 @@ export async function addStudent(params: {
     student_id_code: finalCode,
     name: cleanName,
     phone: cleanPhone,
-    national_id: nationalId?.trim() || undefined,
+    national_id: cleanNationalId,
     birth_date: birthDate || undefined,
     grade_stage: gradeStage || 'الأول الثانوي',
     classroom: classroom?.trim() || '1/1',
-    is_profile_complete: Boolean(nationalId && birthDate),
+    is_profile_complete: Boolean(cleanNationalId && birthDate),
     status: 'active',
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
   };
 
-  // 1. Save to Supabase
+  // 4. Save to Supabase
   try {
     const { error: dbError } = await supabase.from('student_records').insert([
       {
@@ -343,17 +416,23 @@ export async function addStudent(params: {
 
     if (dbError) {
       console.warn('[studentService] Notice inserting into student_records table:', dbError.message);
+      if (dbError.code === '23505' || dbError.message?.includes('duplicate key')) {
+        throw new Error('رقم الهوية الوطنية أو رمز الطالبة مسجل مسبقاً في قاعدة البيانات.');
+      }
     }
-  } catch (err) {
-    console.warn('[studentService] Exception inserting student_records:', err);
+  } catch (err: any) {
+    if (err?.message?.includes('مسجل مسبقاً')) {
+      throw err;
+    }
+    console.warn('[studentService] Notice saving student_records:', err);
   }
 
-  // 2. Save to local storage
+  // 5. Save to local storage
   const current = getCachedStudents();
   const updated = [newRecord, ...current.filter((s) => s.id !== newRecord.id)];
   setCachedStudents(updated);
 
-  // 3. Audit Log
+  // 6. Audit Log (Safely masked national ID - raw ID is never logged)
   await logActivity({
     actorId: actor.id,
     actorName: actor.name,
@@ -361,7 +440,7 @@ export async function addStudent(params: {
     action: 'STUDENT_CREATE',
     entity: 'student_records',
     entityId: newRecord.id,
-    details: `إضافة طالبة جديدة (${cleanName}) برقم معرّف (${finalCode}) ورقم جوال (${cleanPhone})`,
+    details: `إضافة طالبة جديدة (${cleanName}) برقم معرّف (${finalCode}) ورقم جوال (${cleanPhone}) ورقم هوية (${maskNationalId(cleanNationalId)})`,
   });
 
   return newRecord;
@@ -369,13 +448,14 @@ export async function addStudent(params: {
 
 /**
  * Updates student information.
+ * Only Director (المديرة), Supervisor (المشرفة), or Administrator (الإدارية) can update.
  */
 export async function updateStudent(
   studentId: string,
   updates: Partial<StudentRecord>,
   actor: UserProfile
 ): Promise<StudentRecord> {
-  const allowedRoles = ['owner', 'director', 'supervisor', 'administrator'];
+  const allowedRoles: SchoolRole[] = ['director', 'supervisor', 'administrator'];
   if (!allowedRoles.includes(actor.school_role) && actor.email !== 'moyara743@gmail.com') {
     throw new Error('عفواً، لا تملكين الصلاحية الإدارية لتعديل بيانات الطالبة.');
   }
@@ -386,11 +466,52 @@ export async function updateStudent(
     throw new Error('لم يتم العثور على سجل الطالبة المطلوب.');
   }
 
+  let finalNationalId = student.national_id;
+  if (updates.national_id !== undefined) {
+    const cleanUpdatedId = updates.national_id.trim();
+    if (!cleanUpdatedId) {
+      throw new Error('رقم الهوية الوطنية إلزامي للطالبة ولا يمكن حذفه أو تركه فارغاً.');
+    }
+    const val = validateNationalIdFormat(cleanUpdatedId);
+    if (!val.isValid) {
+      throw new Error(val.message || 'صيغة رقم الهوية الوطنية غير صحيحة.');
+    }
+
+    // Uniqueness check across other students
+    const dupLocal = currentList.find((s) => s.id !== studentId && s.national_id === cleanUpdatedId);
+    if (dupLocal) {
+      throw new Error('رقم الهوية الوطنية مسجل مسبقاً في النظام لطالبة أخرى. لا يمكن تكرار رقم الهوية.');
+    }
+
+    try {
+      const { data: dbCheck } = await supabase
+        .from('student_records')
+        .select('id')
+        .eq('national_id', cleanUpdatedId)
+        .neq('id', studentId)
+        .limit(1);
+
+      if (dbCheck && dbCheck.length > 0) {
+        throw new Error('رقم الهوية الوطنية مسجل مسبقاً في قاعدة بيانات المدرسة لطالبة أخرى.');
+      }
+    } catch (checkErr: any) {
+      if (checkErr?.message && checkErr.message.includes('مسجل مسبقاً')) {
+        throw checkErr;
+      }
+    }
+
+    finalNationalId = cleanUpdatedId;
+  }
+
   const cleanPhone = updates.phone ? normalizePhoneNumber(updates.phone) : student.phone;
+  const isProfileComplete = Boolean(finalNationalId && (updates.birth_date || student.birth_date));
+
   const updatedStudent: StudentRecord = {
     ...student,
     ...updates,
     phone: cleanPhone,
+    national_id: finalNationalId,
+    is_profile_complete: isProfileComplete,
     updated_at: new Date().toISOString(),
   };
 
@@ -412,16 +533,22 @@ export async function updateStudent(
 
     if (error) {
       console.warn('[studentService] Notice updating student_records:', error.message);
+      if (error.code === '23505' || error.message?.includes('duplicate key')) {
+        throw new Error('رقم الهوية الوطنية مسجل مسبقاً في قاعدة البيانات لطالبة أخرى.');
+      }
     }
-  } catch (err) {
-    console.warn('[studentService] Exception updating student:', err);
+  } catch (err: any) {
+    if (err?.message?.includes('مسجل مسبقاً')) {
+      throw err;
+    }
+    console.warn('[studentService] Notice updating student:', err);
   }
 
   // Update Cache
   const updatedList = currentList.map((s) => (s.id === studentId ? updatedStudent : s));
   setCachedStudents(updatedList);
 
-  // Audit Log
+  // Audit Log (Safely masked national ID - raw ID is never logged)
   await logActivity({
     actorId: actor.id,
     actorName: actor.name,
@@ -429,7 +556,7 @@ export async function updateStudent(
     action: 'STUDENT_UPDATE',
     entity: 'student_records',
     entityId: studentId,
-    details: `تحديث بيانات الطالبة (${updatedStudent.name}) معرّف (${updatedStudent.student_id_code})`,
+    details: `تحديث بيانات الطالبة (${updatedStudent.name}) معرّف (${updatedStudent.student_id_code}) ورقم الهوية (${maskNationalId(updatedStudent.national_id)})`,
   });
 
   return updatedStudent;
@@ -488,7 +615,7 @@ export async function generateLinkingCodeForStudent(
   studentId: string,
   actor: UserProfile
 ): Promise<StudentLinkingCode> {
-  const allowedRoles = ['owner', 'director', 'supervisor', 'administrator'];
+  const allowedRoles: SchoolRole[] = ['director', 'supervisor', 'administrator'];
   if (!allowedRoles.includes(actor.school_role) && actor.email !== 'moyara743@gmail.com') {
     throw new Error('عفواً، لا تملكين الصلاحية الإدارية لإنشاء رمز ربط.');
   }
@@ -587,7 +714,7 @@ export async function generateLinkingCodeForStudent(
  * Revokes an existing linking code.
  */
 export async function revokeLinkingCode(codeId: string, actor: UserProfile): Promise<void> {
-  const allowedRoles = ['owner', 'director', 'supervisor', 'administrator'];
+  const allowedRoles: SchoolRole[] = ['director', 'supervisor', 'administrator'];
   if (!allowedRoles.includes(actor.school_role) && actor.email !== 'moyara743@gmail.com') {
     throw new Error('عفواً، لا تملكين الصلاحية لإلغاء رمز الربط.');
   }
@@ -1082,7 +1209,7 @@ export async function unlinkParentFromStudent(
   studentId: string,
   actor: UserProfile
 ): Promise<void> {
-  const allowedRoles = ['owner', 'director', 'supervisor', 'administrator'];
+  const allowedRoles: SchoolRole[] = ['director', 'supervisor', 'administrator'];
   if (!allowedRoles.includes(actor.school_role) && actor.email !== 'moyara743@gmail.com') {
     throw new Error('عفواً، لا تملكين الصلاحية الإدارية لفك ربط ولي الأمر.');
   }
@@ -1118,4 +1245,34 @@ export async function unlinkParentFromStudent(
     entityId: studentId,
     details: `فك ربط ولي الأمر عن الطالبة (${studentName}) من قِبل الإدارة (${actor.name})`,
   });
+}
+
+/**
+ * Verifies student National ID against database securely without leaking details.
+ * Used for server-authoritative validations.
+ */
+export async function verifyStudentNationalId(
+  studentId: string,
+  inputNationalId: string
+): Promise<boolean> {
+  if (!studentId || !inputNationalId) return false;
+  const clean = inputNationalId.trim();
+
+  try {
+    const { data, error } = await supabase
+      .from('student_records')
+      .select('id, national_id')
+      .eq('id', studentId)
+      .maybeSingle();
+
+    if (!error && data?.national_id) {
+      return data.national_id.trim() === clean;
+    }
+  } catch (e) {
+    console.warn('[studentService] Notice during verifyStudentNationalId:', e);
+  }
+
+  const list = getCachedStudents();
+  const found = list.find((s) => s.id === studentId);
+  return Boolean(found && found.national_id && found.national_id.trim() === clean);
 }

@@ -1,21 +1,19 @@
 import { SchoolRole, PermissionKey, UserProfile, TemporaryPermission } from '../types';
 import { getTodayDateString } from './dateUtils';
 
-// 1. Role Levels hierarchy (used for management rules & escalation prevention)
+// 1. Role Levels hierarchy (7 approved school roles - Director is top executive, NO owner)
 export const ROLE_LEVELS: Record<SchoolRole, number> = {
-  owner: 100,
-  director: 90,
-  supervisor: 70,
-  administrator: 60,
+  director: 100,
+  supervisor: 80,
+  administrator: 70,
   counselor: 50,
   teacher: 40,
   parent: 20,
   student: 10,
 };
 
-// 2. Arabic Role Titles
+// 2. Arabic Role Titles (7 approved school roles)
 export const ROLE_LABELS_AR: Record<SchoolRole, string> = {
-  owner: 'مالك النظام',
   director: 'المديرة',
   supervisor: 'المشرفة',
   administrator: 'الإدارية',
@@ -75,8 +73,6 @@ export const ALL_PERMISSIONS: PermissionKey[] = Object.keys(PERMISSION_LABELS_AR
 
 // 4. Default Base Permissions by School Role
 export const ROLE_PERMISSIONS: Record<SchoolRole, PermissionKey[]> = {
-  owner: [...ALL_PERMISSIONS],
-
   director: [
     'viewAnnouncements', 'createAnnouncements', 'editAnnouncements', 'deleteAnnouncements',
     'viewPosts', 'createPosts', 'editPosts', 'deletePosts',
@@ -134,7 +130,6 @@ export const ROLE_PERMISSIONS: Record<SchoolRole, PermissionKey[]> = {
   ],
 
   parent: [
-    'viewOwnChildren',
     'viewAnnouncements',
     'viewPosts',
     'viewEvents',
@@ -142,6 +137,7 @@ export const ROLE_PERMISSIONS: Record<SchoolRole, PermissionKey[]> = {
     'viewPhotos',
     'viewAlbums',
     'viewDailyMessage',
+    'viewOwnChildren',
   ],
 
   student: [
@@ -155,9 +151,8 @@ export const ROLE_PERMISSIONS: Record<SchoolRole, PermissionKey[]> = {
   ],
 };
 
-// 5. Compute Effective Permissions: Base + Custom + Active Temporary
+// 5. Effective Permissions Computation
 export function computeEffectivePermissions(profile: UserProfile | null): Set<PermissionKey> {
-  // Public visitors have read-only access to published content
   if (!profile) {
     return new Set<PermissionKey>([
       'viewAnnouncements',
@@ -183,12 +178,7 @@ export function computeEffectivePermissions(profile: UserProfile | null): Set<Pe
     return new Set<PermissionKey>(studentPerms);
   }
 
-  // STRICT RULE: Only moyara743@gmail.com can possess the 'owner' role. Any other user with 'owner' is treated as 'student'.
-  const safeRole: SchoolRole =
-    profile.school_role === 'owner' && cleanEmail !== 'moyara743@gmail.com'
-      ? 'student'
-      : profile.school_role;
-
+  const safeRole: SchoolRole = profile.school_role || 'student';
   const effective = new Set<PermissionKey>();
 
   // 1. Base role permissions
@@ -197,7 +187,11 @@ export function computeEffectivePermissions(profile: UserProfile | null): Set<Pe
 
   // 2. Custom permissions
   if (profile.customPermissions && Array.isArray(profile.customPermissions)) {
-    profile.customPermissions.forEach((p) => effective.add(p));
+    profile.customPermissions.forEach((p) => {
+      if (typeof p === 'string' && !p.startsWith('nid:') && !p.startsWith('parent_of:') && p !== 'profile_completed' as any) {
+        effective.add(p as PermissionKey);
+      }
+    });
   }
 
   // 3. Temporary permissions (checked against real system date)
@@ -216,23 +210,17 @@ export function computeEffectivePermissions(profile: UserProfile | null): Set<Pe
 // Check if user has a specific permission
 export function hasPermission(profile: UserProfile | null, permission: PermissionKey): boolean {
   if (!profile) {
-    // Check if permission is a view permission
     return permission.startsWith('view');
   }
   if (profile.status === 'disabled') return false;
 
   const cleanEmail = (profile.email || '').trim().toLowerCase();
 
-  // STRICT RULE: Sole System Owner is moyara743@gmail.com
+  // Director moyara743@gmail.com has full access
   if (cleanEmail === 'moyara743@gmail.com') return true;
 
-  // STRICT RULE: yaradrashed@gmail.com is strictly a student with NO admin or owner permissions
+  // STRICT RULE: yaradrashed@gmail.com is strictly a student with NO admin permissions
   if (cleanEmail === 'yaradrashed@gmail.com') {
-    return permission.startsWith('view');
-  }
-
-  // Any non-owner email with 'owner' role is not recognized as owner
-  if (profile.school_role === 'owner' && cleanEmail !== 'moyara743@gmail.com') {
     return permission.startsWith('view');
   }
 
@@ -240,30 +228,24 @@ export function hasPermission(profile: UserProfile | null, permission: Permissio
   return permissions.has(permission);
 }
 
-// 6. Hierarchy & Management Rules (Privilege Escalation & Owner Protection)
-
-// Check if actor is allowed to manage a specific target user
+// 6. Hierarchy & Management Rules
 export function canUserManageTarget(actor: UserProfile, target: UserProfile): boolean {
   if (!actor || actor.status === 'disabled') return false;
 
   const actorEmail = (actor.email || '').trim().toLowerCase();
   const targetEmail = (target.email || '').trim().toLowerCase();
 
-  // yaradrashed@gmail.com has zero management permissions
   if (actorEmail === 'yaradrashed@gmail.com') return false;
 
-  // Owner account (moyara743@gmail.com) is immutable and protected from management by any other user
-  if (targetEmail === 'moyara743@gmail.com' || target.school_role === 'owner') {
+  // Target director account (moyara743@gmail.com) is protected from management by other users
+  if (targetEmail === 'moyara743@gmail.com') {
     return false;
   }
 
-  // Sole owner moyara743@gmail.com can manage other accounts
   if (actorEmail === 'moyara743@gmail.com') return true;
 
-  // Actor must have manageUsers permission
   if (!hasPermission(actor, 'manageUsers')) return false;
 
-  // Actor cannot manage anyone with equal or higher level
   const actorLevel = ROLE_LEVELS[actor.school_role] || 0;
   const targetLevel = ROLE_LEVELS[target.school_role] || 0;
 
@@ -274,21 +256,14 @@ export function canUserManageTarget(actor: UserProfile, target: UserProfile): bo
 export function canAssignRole(actor: UserProfile, newRole: SchoolRole): boolean {
   if (!actor || actor.status === 'disabled') return false;
 
-  // STRICT RULE: Absolute prohibition on assigning or promoting to 'owner' for any account.
-  // The owner role is permanent, fixed, and exclusively restricted to moyara743@gmail.com.
-  if (newRole === 'owner') {
-    return false;
-  }
-
   const actorEmail = (actor.email || '').trim().toLowerCase();
   if (actorEmail === 'yaradrashed@gmail.com') return false;
 
-  const isOwnerActor = actorEmail === 'moyara743@gmail.com';
-  if (isOwnerActor) return true;
+  const isDirectorActor = actorEmail === 'moyara743@gmail.com' || actor.school_role === 'director';
+  if (isDirectorActor) return true;
 
   if (!hasPermission(actor, 'changeRoles')) return false;
 
-  // Actor can only assign roles STRICTLY LOWER than their own role level
   const actorLevel = ROLE_LEVELS[actor.school_role] || 0;
   const targetRoleLevel = ROLE_LEVELS[newRole] || 0;
 
@@ -303,9 +278,8 @@ export function canGrantPermission(actor: UserProfile, permission: PermissionKey
   if (actorEmail === 'yaradrashed@gmail.com') return false;
 
   if (!hasPermission(actor, 'managePermissions')) return false;
-  if (actorEmail === 'moyara743@gmail.com') return true;
+  if (actorEmail === 'moyara743@gmail.com' || actor.school_role === 'director') return true;
 
-  // Actor cannot grant a permission that they themselves do not possess
   return hasPermission(actor, permission);
 }
 

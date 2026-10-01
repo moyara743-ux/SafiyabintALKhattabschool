@@ -28,7 +28,7 @@ export const INITIAL_POSTS: Omit<Post, 'id'>[] = [
     ],
     authorId: 'system_admin',
     authorName: 'إدارة المدرسة',
-    authorRole: 'owner',
+    authorRole: 'director',
     status: 'published',
     isPinned: true,
     likesCount: 24,

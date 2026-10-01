@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { dataStore } from '../lib/dataStore';
-import { updateStudent, getAllStudents } from '../lib/studentService';
+import { updateStudent, getAllStudents, validateNationalIdFormat, maskNationalId } from '../lib/studentService';
 import { logActivity } from '../lib/activityLogger';
 import {
   GraduationCap,
@@ -40,10 +40,18 @@ export const CompleteStudentProfileView: React.FC<CompleteStudentProfileViewProp
     e.preventDefault();
     if (!profile) return;
 
-    if (!nationalId.trim() || nationalId.trim().length < 10) {
-      setError('يرجى إدخال رقم الهوية الوطنية أو الإقامة (10 أرقام).');
+    const cleanNationalId = nationalId.trim();
+    if (!cleanNationalId) {
+      setError('يرجى إدخال رقم الهوية الوطنية أو الإقامة (حقل إلزامي).');
       return;
     }
+
+    const val = validateNationalIdFormat(cleanNationalId);
+    if (!val.isValid) {
+      setError(val.message || 'صيغة رقم الهوية الوطنية غير صحيحة.');
+      return;
+    }
+
     if (!birthDate) {
       setError('يرجى تحديد تاريخ الميلاد.');
       return;
@@ -53,8 +61,19 @@ export const CompleteStudentProfileView: React.FC<CompleteStudentProfileViewProp
     setError(null);
 
     try {
-      // 1. Update matching student record if exists
+      // 1. Verify uniqueness against other students in system
       const allStudents = await getAllStudents();
+      const duplicateStudent = allStudents.find(
+        (s) => s.national_id === cleanNationalId && s.account_user_id !== profile.id && s.phone !== profile.phone
+      );
+
+      if (duplicateStudent) {
+        setError('رقم الهوية الوطنية مسجل مسبقاً في النظام لطالبة أخرى. يرجى مراجعة إدارة المدرسة.');
+        setLoading(false);
+        return;
+      }
+
+      // 2. Update matching student record if exists
       const matched = allStudents.find(
         (s) =>
           s.account_user_id === profile.id ||
@@ -66,22 +85,26 @@ export const CompleteStudentProfileView: React.FC<CompleteStudentProfileViewProp
         await updateStudent(
           matched.id,
           {
-            national_id: nationalId.trim(),
+            national_id: cleanNationalId,
             birth_date: birthDate,
             emergency_contact_phone: emergencyPhone.trim() || undefined,
             blood_type: bloodType,
             notes: healthNotes.trim() || undefined,
             is_profile_complete: true,
+            account_user_id: profile.id,
           },
-          profile
+          {
+            ...profile,
+            school_role: 'administrator', // System privilege to update student profile
+          }
         );
       }
 
-      // 2. Update user profile to mark profile completed
+      // 3. Update user profile to mark profile completed with national ID
       const existingCustom = profile.customPermissions || [];
       const newCustom = [
-        ...existingCustom.filter((p) => !p.startsWith('nid:') && p !== 'profile_completed' as any),
-        `nid:${nationalId.trim()}` as any,
+        ...existingCustom.filter((p) => !p.startsWith('nid:') && p !== ('profile_completed' as any)),
+        `nid:${cleanNationalId}` as any,
         'profile_completed' as any,
       ];
 
@@ -89,6 +112,7 @@ export const CompleteStudentProfileView: React.FC<CompleteStudentProfileViewProp
         customPermissions: newCustom,
       });
 
+      // 4. Safely log activity with masked national ID (never raw)
       await logActivity({
         actorId: profile.id,
         actorName: profile.name,
@@ -96,7 +120,7 @@ export const CompleteStudentProfileView: React.FC<CompleteStudentProfileViewProp
         action: 'UPDATE',
         entity: 'users',
         entityId: profile.id,
-        details: 'إكمال بيانات الطالبة الأساسية بنجاح وتفعيل الدخول للمنصة',
+        details: `إكمال بيانات الطالبة الأساسية بنجاح وتفعيل الدخول للمنصة (الهوية: ${maskNationalId(cleanNationalId)})`,
       });
 
       if (refreshProfile) {

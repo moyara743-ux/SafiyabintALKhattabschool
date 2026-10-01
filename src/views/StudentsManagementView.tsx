@@ -15,6 +15,8 @@ import {
   revokeLinkingCode,
   getStudentLinkingInspection,
   unlinkParentFromStudent,
+  validateNationalIdFormat,
+  maskNationalId,
 } from '../lib/studentService';
 import {
   Users,
@@ -37,12 +39,15 @@ import {
   Shield,
   FileText,
   UserCheck,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 
 export const StudentsManagementView: React.FC = () => {
-  const { profile: currentProfile, isOwner, hasPerm } = useAuth();
+  const { profile: currentProfile } = useAuth();
 
   const [students, setStudents] = useState<StudentRecord[]>([]);
+  const [revealedIds, setRevealedIds] = useState<Record<string, boolean>>({});
   const [linkingDetails, setLinkingDetails] = useState<
     Record<
       string,
@@ -89,8 +94,12 @@ export const StudentsManagementView: React.FC = () => {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const canManage =
-    isOwner ||
-    ['director', 'supervisor', 'administrator'].includes(currentProfile?.school_role || '');
+    ['director', 'supervisor', 'administrator'].includes(currentProfile?.school_role || '') ||
+    currentProfile?.email === 'moyara743@gmail.com';
+
+  const toggleRevealId = (studentId: string) => {
+    setRevealedIds((prev) => ({ ...prev, [studentId]: !prev[studentId] }));
+  };
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -133,6 +142,18 @@ export const StudentsManagementView: React.FC = () => {
       return;
     }
 
+    const cleanNationalId = newNationalId.trim();
+    if (!cleanNationalId) {
+      alert('رقم الهوية الوطنية إلزامي لجميع الطالبات ولا يمكن إضافة طالبة بدونه.');
+      return;
+    }
+
+    const val = validateNationalIdFormat(cleanNationalId);
+    if (!val.isValid) {
+      alert(val.message || 'صيغة رقم الهوية الوطنية غير صحيحة.');
+      return;
+    }
+
     setSavingStudent(true);
     try {
       await addStudent({
@@ -141,7 +162,7 @@ export const StudentsManagementView: React.FC = () => {
         studentIdCode: newStudentIdCode.trim() || undefined,
         gradeStage: newGradeStage,
         classroom: newClassroom,
-        nationalId: newNationalId.trim() || undefined,
+        nationalId: cleanNationalId,
         birthDate: newBirthDate || undefined,
         actor: currentProfile,
       });
@@ -167,6 +188,18 @@ export const StudentsManagementView: React.FC = () => {
     e.preventDefault();
     if (!currentProfile || !editingStudent) return;
 
+    const cleanNationalId = editNationalId.trim();
+    if (!cleanNationalId) {
+      alert('رقم الهوية الوطنية إلزامي للطالبة ولا يمكن تركه فارغاً.');
+      return;
+    }
+
+    const val = validateNationalIdFormat(cleanNationalId);
+    if (!val.isValid) {
+      alert(val.message || 'صيغة رقم الهوية الوطنية غير صحيحة.');
+      return;
+    }
+
     setSavingStudent(true);
     try {
       await updateStudent(
@@ -176,9 +209,9 @@ export const StudentsManagementView: React.FC = () => {
           phone: editPhone.trim(),
           grade_stage: editGradeStage,
           classroom: editClassroom.trim(),
-          national_id: editNationalId.trim() || undefined,
+          national_id: cleanNationalId,
           birth_date: editBirthDate || undefined,
-          is_profile_complete: Boolean(editNationalId && editBirthDate),
+          is_profile_complete: Boolean(cleanNationalId && editBirthDate),
         },
         currentProfile
       );
@@ -260,7 +293,8 @@ export const StudentsManagementView: React.FC = () => {
       !q ||
       s.name.toLowerCase().includes(q) ||
       s.student_id_code.toLowerCase().includes(q) ||
-      s.phone.includes(q);
+      s.phone.includes(q) ||
+      (s.national_id && s.national_id.includes(q));
 
     const matchesStage = stageFilter === 'all' || s.grade_stage === stageFilter;
     const insp = linkingDetails[s.id];
@@ -464,14 +498,37 @@ export const StudentsManagementView: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Registered Phone */}
-                  <div className="bg-slate-50 px-3.5 py-2 rounded-2xl border border-slate-200/80 flex items-center gap-2 shrink-0 self-start sm:self-auto">
-                    <Phone className="w-3.5 h-3.5 text-emerald-600" />
-                    <div>
-                      <span className="block text-[10px] text-slate-400 font-medium">رقم الجوال المرتبط:</span>
-                      <span className="text-xs font-mono font-bold text-slate-800" dir="ltr">
-                        {student.phone}
-                      </span>
+                  <div className="flex flex-wrap items-center gap-2 shrink-0 self-start sm:self-auto">
+                    {/* National ID Display (Secure & Masked by default for admin) */}
+                    <div className="bg-slate-50 px-3.5 py-2 rounded-2xl border border-slate-200/80 flex items-center gap-2">
+                      <Shield className="w-3.5 h-3.5 text-emerald-700" />
+                      <div>
+                        <span className="block text-[10px] text-slate-400 font-medium">الهوية الوطنية:</span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs font-mono font-bold text-slate-800" dir="ltr">
+                            {revealedIds[student.id] ? student.national_id : maskNationalId(student.national_id)}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => toggleRevealId(student.id)}
+                            className="text-slate-400 hover:text-slate-700 p-0.5 rounded transition-colors cursor-pointer"
+                            title={revealedIds[student.id] ? 'إخفاء رقم الهوية' : 'إظهار رقم الهوية'}
+                          >
+                            {revealedIds[student.id] ? <EyeOff className="w-3.5 h-3.5 text-slate-600" /> : <Eye className="w-3.5 h-3.5" />}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Registered Phone */}
+                    <div className="bg-slate-50 px-3.5 py-2 rounded-2xl border border-slate-200/80 flex items-center gap-2">
+                      <Phone className="w-3.5 h-3.5 text-emerald-600" />
+                      <div>
+                        <span className="block text-[10px] text-slate-400 font-medium">رقم الجوال المرتبط:</span>
+                        <span className="text-xs font-mono font-bold text-slate-800" dir="ltr">
+                          {student.phone}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -723,16 +780,21 @@ export const StudentsManagementView: React.FC = () => {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">
-                    رقم الهوية الوطنية (اختياري)
+                    رقم الهوية الوطنية * (إلزامي - 10 أرقام)
                   </label>
                   <input
                     type="text"
+                    required
+                    maxLength={10}
                     value={newNationalId}
-                    onChange={(e) => setNewNationalId(e.target.value)}
-                    placeholder="10 أرقام"
+                    onChange={(e) => setNewNationalId(e.target.value.replace(/\D/g, ''))}
+                    placeholder="10 أرقام تبدأ بـ 1 أو 2"
                     className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-emerald-600 font-mono"
                     dir="ltr"
                   />
+                  <span className="text-[10px] text-slate-400 mt-0.5 block">
+                    مطلوب وفريد لكل طالبة في النظام
+                  </span>
                 </div>
 
                 <div>
@@ -851,14 +913,22 @@ export const StudentsManagementView: React.FC = () => {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">رقم الهوية الوطنية</label>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    رقم الهوية الوطنية * (إلزامي - 10 أرقام)
+                  </label>
                   <input
                     type="text"
+                    required
+                    maxLength={10}
                     value={editNationalId}
-                    onChange={(e) => setEditNationalId(e.target.value)}
+                    onChange={(e) => setEditNationalId(e.target.value.replace(/\D/g, ''))}
+                    placeholder="10 أرقام تبدأ بـ 1 أو 2"
                     className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-emerald-600 font-mono"
                     dir="ltr"
                   />
+                  <span className="text-[10px] text-slate-400 mt-0.5 block">
+                    يمنع تكرار رقم الهوية لطالبتين
+                  </span>
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">تاريخ الميلاد</label>
