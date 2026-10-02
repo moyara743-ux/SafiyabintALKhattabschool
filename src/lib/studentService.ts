@@ -1332,7 +1332,7 @@ export async function authenticateStudentByNameAndSecret(
   const cleanSecret = secret.trim();
 
   if (!cleanName || !cleanSecret) {
-    throw new Error('يرجى كتابة اسم الطالبة والسر الخاص بها.');
+    throw new Error('يرجى كتابة اسم الطالبة والرمز المخصص لها.');
   }
 
   const all = await getAllStudents();
@@ -1344,11 +1344,30 @@ export async function authenticateStudentByNameAndSecret(
   });
 
   if (!student) {
-    throw new Error('بيانات الدخول غير صحيحة. يرجى التأكد من اسم الطالبة والسر الخاص بها أو مراجعة إدارة المدرسة.');
+    throw new Error('بيانات الدخول غير صحيحة. يرجى التأكد من اسم الطالبة والرمز المخصص لها أو مراجعة إدارة المدرسة.');
   }
 
   if (student.status !== 'active') {
     throw new Error('سجل الطالبة غير نشط حالياً. يرجى مراجعة إدارة المدرسة.');
+  }
+
+  const isComplete = Boolean(
+    student.is_profile_complete &&
+    student.national_id &&
+    student.national_id.trim().length === 10 &&
+    student.phone &&
+    student.phone.trim().length >= 9
+  );
+
+  const customPerms: any[] = [];
+  if (student.national_id) {
+    customPerms.push(`nid:${student.national_id}`);
+  }
+  if (student.student_id_code) {
+    customPerms.push(`student_id:${student.student_id_code}`);
+  }
+  if (isComplete) {
+    customPerms.push('profile_completed');
   }
 
   // Create or resolve student UserProfile
@@ -1356,13 +1375,13 @@ export async function authenticateStudentByNameAndSecret(
     id: student.account_user_id || student.id,
     name: student.name,
     email: `${student.student_id_code.toLowerCase()}@safiah.edu.sa`,
-    phone: student.phone,
+    phone: student.phone || '',
+    studentIdCode: student.student_id_code,
+    gradeStage: student.grade_stage,
+    classroom: student.classroom,
     school_role: 'student',
     status: 'active',
-    customPermissions: [
-      `nid:${student.national_id}` as any,
-      'profile_completed' as any,
-    ],
+    customPermissions: customPerms,
     temporaryPermissions: [],
     createdAt: student.created_at,
     lastLoginAt: new Date().toISOString(),
@@ -1377,8 +1396,209 @@ export async function authenticateStudentByNameAndSecret(
     action: 'LOGIN',
     entity: 'student_records',
     entityId: student.id,
-    details: `تسجيل دخول ناجح للطالبة (${student.name}) باستخدام الاسم والسر الخاص (${student.student_id_code})`,
+    details: `تسجيل دخول ناجح للطالبة (${student.name}) باستخدام الاسم والرمز المخصص (${student.student_id_code})`,
   });
 
   return { student, profile: studentProfile };
+}
+
+/**
+ * Retrieves the authoritative StudentRecord corresponding to a logged-in student user.
+ * Looks up by studentIdCode, email, account_user_id, or name.
+ */
+export async function getStudentRecordForStudentProfile(
+  profile: UserProfile
+): Promise<StudentRecord | null> {
+  const all = await getAllStudents();
+
+  // 1. Check studentIdCode
+  if (profile.studentIdCode) {
+    const byCode = all.find(
+      (s) => s.student_id_code.toUpperCase() === profile.studentIdCode?.toUpperCase()
+    );
+    if (byCode) return byCode;
+  }
+
+  // 2. Check email prefix if formatted as stu-xxxxxx@safiah.edu.sa
+  if (profile.email && profile.email.includes('@')) {
+    const prefix = profile.email.split('@')[0].toUpperCase();
+    if (prefix.startsWith('STU-')) {
+      const byEmailCode = all.find((s) => s.student_id_code.toUpperCase() === prefix);
+      if (byEmailCode) return byEmailCode;
+    }
+  }
+
+  // 3. Check account_user_id or id
+  const byUser = all.find(
+    (s) => s.account_user_id === profile.id || s.id === profile.id
+  );
+  if (byUser) return byUser;
+
+  // 4. Check custom permission tag student_id:STU-XXXXXX
+  const customIdTag = profile.customPermissions?.find((p) =>
+    typeof p === 'string' && p.startsWith('student_id:')
+  );
+  if (customIdTag) {
+    const code = (customIdTag as string).replace('student_id:', '').trim().toUpperCase();
+    const byTag = all.find((s) => s.student_id_code.toUpperCase() === code);
+    if (byTag) return byTag;
+  }
+
+  // 5. Fallback match by normalized student name
+  const cleanName = normalizeArabicText(profile.name);
+  if (cleanName) {
+    const byName = all.find((s) => normalizeArabicText(s.name) === cleanName);
+    if (byName) return byName;
+  }
+
+  return null;
+}
+
+/**
+ * Completes student mandatory data (National ID + Mobile Phone) tied to her Student ID.
+ * - Enforces National ID format & uniqueness
+ * - Enforces Saudi phone format
+ * - Saves in student_records in database & local storage
+ * - Updates UserProfile and enables full platform access
+ */
+export async function completeStudentProfileByStudentId(params: {
+  studentIdCode: string;
+  nationalId: string;
+  phone: string;
+  actor: UserProfile;
+}): Promise<{ student: StudentRecord; updatedProfile: UserProfile }> {
+  const cleanCode = (params.studentIdCode || '').trim().toUpperCase();
+  const cleanNationalId = (params.nationalId || '').trim();
+  const cleanPhone = normalizePhoneNumber(params.phone);
+
+  if (!cleanCode) {
+    throw new Error('معرّف الطالبة (Student ID) مفقود في النظام.');
+  }
+
+  // 1. Validate National ID format
+  const nidVal = validateNationalIdFormat(cleanNationalId);
+  if (!nidVal.isValid) {
+    throw new Error(nidVal.message || 'صيغة رقم الهوية الوطنية / الإقامة غير صحيحة.');
+  }
+
+  // 2. Validate Phone format
+  if (!cleanPhone || cleanPhone.length < 10 || !cleanPhone.startsWith('05')) {
+    throw new Error('يرجى إدخال رقم جوال سعودي معتمد يبدأ بـ 05 ويتكون من 10 أرقام.');
+  }
+
+  const all = await getAllStudents();
+  const targetStudent = all.find((s) => s.student_id_code.toUpperCase() === cleanCode);
+  if (!targetStudent) {
+    throw new Error(`تعذر العثور على سجل الطالبة برقم المعرف (${cleanCode}) في قاعدة البيانات.`);
+  }
+
+  // 3. Check National ID uniqueness across students
+  const duplicate = all.find(
+    (s) =>
+      s.national_id === cleanNationalId &&
+      s.student_id_code.toUpperCase() !== cleanCode
+  );
+  if (duplicate) {
+    throw new Error(
+      'رقم الهوية الوطنية / الإقامة مسجل مسبقاً في النظام لطالبة أخرى. يرجى مراجعة إدارة المدرسة.'
+    );
+  }
+
+  // 4. Remote check in Supabase
+  try {
+    const { data: dupRemote } = await supabase
+      .from('student_records')
+      .select('id, student_id_code')
+      .eq('national_id', cleanNationalId)
+      .neq('student_id_code', cleanCode)
+      .maybeSingle();
+
+    if (dupRemote) {
+      throw new Error(
+        'رقم الهوية الوطنية / الإقامة مسجل مسبقاً في قاعدة البيانات لطالبة أخرى. يرجى مراجعة إدارة المدرسة.'
+      );
+    }
+  } catch (err: any) {
+    if (err?.message?.includes('مسجل مسبقاً')) throw err;
+  }
+
+  // 5. Update student record in Supabase
+  const updatedStudent: StudentRecord = {
+    ...targetStudent,
+    national_id: cleanNationalId,
+    phone: cleanPhone,
+    is_profile_complete: true,
+    account_user_id: params.actor.id,
+    updated_at: new Date().toISOString(),
+  };
+
+  try {
+    await supabase
+      .from('student_records')
+      .update({
+        national_id: cleanNationalId,
+        phone: cleanPhone,
+        is_profile_complete: true,
+        account_user_id: params.actor.id,
+        updated_at: updatedStudent.updated_at,
+      })
+      .eq('student_id_code', cleanCode);
+  } catch (dbErr) {
+    console.warn('[studentService] Supabase student update notice:', dbErr);
+  }
+
+  // 6. Update local cache
+  const cachedList = getCachedStudents();
+  const updatedList = cachedList.map((s) =>
+    s.student_id_code.toUpperCase() === cleanCode ? updatedStudent : s
+  );
+  setCachedStudents(updatedList);
+
+  // 7. Update User Profile
+  const existingCustom = params.actor.customPermissions || [];
+  const updatedCustom = [
+    ...existingCustom.filter(
+      (p) =>
+        typeof p === 'string' &&
+        !p.startsWith('nid:') &&
+        !p.startsWith('student_id:') &&
+        p !== ('profile_completed' as any)
+    ),
+    `nid:${cleanNationalId}` as any,
+    `student_id:${cleanCode}` as any,
+    'profile_completed' as any,
+  ];
+
+  const updatedProfile: UserProfile = {
+    ...params.actor,
+    phone: cleanPhone,
+    studentIdCode: cleanCode,
+    gradeStage: targetStudent.grade_stage,
+    classroom: targetStudent.classroom,
+    customPermissions: updatedCustom,
+    updatedAt: new Date().toISOString(),
+  };
+
+  await dataStore.updateUser(params.actor.id, {
+    phone: cleanPhone,
+    studentIdCode: cleanCode,
+    gradeStage: targetStudent.grade_stage,
+    classroom: targetStudent.classroom,
+    customPermissions: updatedCustom,
+  });
+
+  dataStore.syncUserProfileFromRemote(updatedProfile);
+
+  // 8. Log activity safely (masked national ID)
+  await logActivity({
+    actorId: params.actor.id,
+    actorName: params.actor.name,
+    actorEmail: params.actor.email,
+    action: 'UPDATE',
+    entity: 'student_records',
+    entityId: targetStudent.id,
+    details: `إكمال بيانات الطالبة الأساسية بنجاح وتحديث رقم الجوال المعتمد والهوية الوطنية (${maskNationalId(cleanNationalId)}) - معرّف الطالبة: ${cleanCode}`,
+  });
+
+  return { student: updatedStudent, updatedProfile };
 }

@@ -148,12 +148,12 @@ export const LoginView: React.FC = () => {
       return;
     }
     if (!cleanSecret) {
-      setError('يرجى إدخال السر الخاص بالطالبة.');
+      setError('يرجى إدخال الرمز المخصص للطالبة.');
       return;
     }
 
     setLoading(true);
-    setSuccessMsg('جارٍ مطابقة اسم الطالبة والسر الخاص بها في السجلات المدرسية...');
+    setSuccessMsg('جارٍ مطابقة اسم الطالبة والرمز المخصص في السجلات المدرسية...');
 
     try {
       await loginStudent(cleanName, cleanSecret);
@@ -546,7 +546,7 @@ export const LoginView: React.FC = () => {
                   <div className="p-3.5 bg-emerald-500/10 border border-emerald-500/25 rounded-2xl flex items-center gap-2.5 text-emerald-300">
                     <GraduationCap className="w-5 h-5 text-emerald-400 shrink-0" />
                     <div className="text-[11px] leading-relaxed">
-                      دخول الطالبات المعتمد: سجّلي دخولكِ باستخدام اسمكِ الرباعي والسر الخاص المسلم لكِ من إدارة المدرسة.
+                      دخول الطالبات المعتمد: سجّلي دخولكِ باستخدام اسمكِ الرباعي والرمز المخصص لكِ من إدارة المدرسة.
                     </div>
                   </div>
 
@@ -560,7 +560,7 @@ export const LoginView: React.FC = () => {
                         required
                         value={studentName}
                         onChange={(e) => setStudentName(e.target.value)}
-                        placeholder="مثال: سارة محمد راشد العتيبي"
+                        placeholder="اسم الطالبة كاملاً"
                         className="w-full px-3.5 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-500"
                       />
                       <span className="text-[10px] text-slate-400 mt-1 block">
@@ -570,7 +570,7 @@ export const LoginView: React.FC = () => {
 
                     <div>
                       <label className="block text-xs font-bold text-slate-300 mb-1.5">
-                        السر الخاص بالطالبة *
+                        الرمز *
                       </label>
                       <div className="relative">
                         <input
@@ -578,7 +578,6 @@ export const LoginView: React.FC = () => {
                           required
                           value={studentSecret}
                           onChange={(e) => setStudentSecret(e.target.value)}
-                          placeholder="مثال: STU-9K8P4M"
                           className="w-full px-3.5 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-500 font-mono pr-9 pl-9"
                           dir="ltr"
                         />
@@ -593,7 +592,7 @@ export const LoginView: React.FC = () => {
                         </button>
                       </div>
                       <span className="text-[10px] text-slate-400 mt-1 block">
-                        رمز أمان عشوائي مشفر خاص بالطالبة صادر من إدارة المدرسة
+                        أدخل الرمز المخصص لك من إدارة المدرسة
                       </span>
                     </div>
 

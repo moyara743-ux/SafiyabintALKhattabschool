@@ -61,7 +61,9 @@ export interface UserProfile {
   email: string;
   photoURL?: string;
   phone?: string;
+  studentIdCode?: string;
   gradeStage?: string;
+  classroom?: string;
   linkedStudentIds?: string[];
   linkedParentIds?: string[];
   school_role: SchoolRole;

@@ -10,6 +10,9 @@ import {
   KeyRound,
   Calendar,
   Lock,
+  Phone,
+  GraduationCap,
+  BadgeCheck,
 } from 'lucide-react';
 
 export const ProfileView: React.FC = () => {
@@ -114,10 +117,73 @@ export const ProfileView: React.FC = () => {
                 type="email"
                 disabled
                 value={user?.email || ''}
-                className="w-full pr-10 pl-3.5 py-2.5 text-xs bg-slate-100 border border-slate-200 rounded-xl text-slate-500 cursor-not-allowed"
+                className="w-full pr-10 pl-3.5 py-2.5 text-xs bg-slate-100 border border-slate-200 rounded-xl text-slate-500 cursor-not-allowed font-mono"
+                dir="ltr"
               />
             </div>
           </div>
+
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1.5">
+              رقم الجوال الشخصي المعتمد
+            </label>
+            <div className="relative">
+              <Phone className="absolute right-3.5 top-3 w-4 h-4 text-slate-400" />
+              <input
+                type="tel"
+                disabled={profile?.school_role === 'student'}
+                value={profile?.phone || ''}
+                placeholder="05XXXXXXXX"
+                className={`w-full pr-10 pl-3.5 py-2.5 text-xs rounded-xl font-mono ${
+                  profile?.school_role === 'student'
+                    ? 'bg-slate-100 border border-slate-200 text-slate-700 cursor-not-allowed'
+                    : 'bg-slate-50 border border-slate-200 text-slate-900 focus:outline-none focus:border-emerald-600 focus:bg-white'
+                }`}
+                dir="ltr"
+              />
+            </div>
+            {profile?.school_role === 'student' && (
+              <span className="text-[11px] text-slate-400 mt-1 block">
+                * تم إدخاله بواسطة الطالبة، وهو الرقم المعتمد لعملية «ربط حساب ولي الأمر».
+              </span>
+            )}
+          </div>
+
+          {/* Student School Record Summary Card */}
+          {profile?.school_role === 'student' && (
+            <div className="p-4 bg-emerald-50/70 border border-emerald-200/80 rounded-2xl space-y-3">
+              <div className="flex items-center justify-between border-b border-emerald-200/60 pb-2">
+                <div className="flex items-center gap-2 text-xs font-extrabold text-emerald-950">
+                  <GraduationCap className="w-4 h-4 text-emerald-700" />
+                  <span>بيانات السجل المدرسي للطالبة</span>
+                </div>
+                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-800 bg-emerald-100/90 px-2 py-0.5 rounded-full border border-emerald-300">
+                  <BadgeCheck className="w-3 h-3 text-emerald-700" />
+                  <span>معتمد</span>
+                </span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs">
+                <div className="bg-white p-2.5 rounded-xl border border-emerald-100 shadow-2xs">
+                  <span className="block text-[10px] text-slate-400 font-medium">معرّف الطالبة (Student ID):</span>
+                  <span className="font-mono font-extrabold text-emerald-800" dir="ltr">
+                    {profile.studentIdCode || (profile.email.includes('@') ? profile.email.split('@')[0].toUpperCase() : 'STU-000251')}
+                  </span>
+                </div>
+                <div className="bg-white p-2.5 rounded-xl border border-emerald-100 shadow-2xs">
+                  <span className="block text-[10px] text-slate-400 font-medium">المرحلة الدراسية:</span>
+                  <span className="font-bold text-slate-800">
+                    {profile.gradeStage || 'المرحلة الثانوية'}
+                  </span>
+                </div>
+                <div className="bg-white p-2.5 rounded-xl border border-emerald-100 shadow-2xs">
+                  <span className="block text-[10px] text-slate-400 font-medium">الصف / الفصل:</span>
+                  <span className="font-bold text-slate-800">
+                    {profile.classroom || 'الفصل 1'}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="pt-2">
             <button

@@ -141,7 +141,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
       return;
     }
     if (!cleanSecret) {
-      setError('يرجى إدخال السر الخاص بالطالبة.');
+      setError('يرجى إدخال الرمز المخصص للطالبة.');
       return;
     }
 
@@ -320,20 +320,19 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
                 required
                 value={studentName}
                 onChange={(e) => setStudentName(e.target.value)}
-                placeholder="مثال: سارة محمد راشد العتيبي"
+                placeholder="اسم الطالبة كاملاً"
                 className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-emerald-600"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">السر الخاص بالطالبة *</label>
+              <label className="block text-xs font-bold text-slate-700 mb-1">الرمز *</label>
               <div className="relative">
                 <input
                   type={showStudentSecret ? 'text' : 'password'}
                   required
                   value={studentSecret}
                   onChange={(e) => setStudentSecret(e.target.value)}
-                  placeholder="STU-XXXXXX"
                   className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-emerald-600 font-mono pr-9 pl-9"
                   dir="ltr"
                 />
@@ -347,6 +346,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
                   {showStudentSecret ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
+              <span className="text-[10px] text-slate-400 mt-1 block">
+                أدخل الرمز المخصص لك من إدارة المدرسة
+              </span>
             </div>
 
             <button

@@ -1,19 +1,22 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { dataStore } from '../lib/dataStore';
-import { updateStudent, getAllStudents, validateNationalIdFormat, maskNationalId } from '../lib/studentService';
-import { logActivity } from '../lib/activityLogger';
+import {
+  getStudentRecordForStudentProfile,
+  completeStudentProfileByStudentId,
+  validateNationalIdFormat,
+} from '../lib/studentService';
+import { StudentRecord } from '../types';
 import {
   GraduationCap,
   Sparkles,
-  CheckCircle2,
   AlertCircle,
   FileCheck,
-  Calendar,
   Phone,
   Shield,
-  ArrowRight,
-  Heart,
+  BadgeCheck,
+  UserCheck,
+  School,
+  Lock,
 } from 'lucide-react';
 
 interface CompleteStudentProfileViewProps {
@@ -23,104 +26,104 @@ interface CompleteStudentProfileViewProps {
 export const CompleteStudentProfileView: React.FC<CompleteStudentProfileViewProps> = ({
   onComplete,
 }) => {
-  const { user, profile, refreshProfile } = useAuth();
+  const { profile, refreshProfile } = useAuth();
 
+  const [studentRecord, setStudentRecord] = useState<StudentRecord | null>(null);
+  const [loadingRecord, setLoadingRecord] = useState(true);
+
+  // Form Fields - Strictly the two required fields requested
   const [nationalId, setNationalId] = useState(
-    (profile?.customPermissions?.find((p) => p.startsWith('nid:')) || '').replace('nid:', '')
+    (profile?.customPermissions?.find((p) => typeof p === 'string' && p.startsWith('nid:')) as string || '')
+      .replace('nid:', '')
   );
-  const [birthDate, setBirthDate] = useState('');
-  const [emergencyPhone, setEmergencyPhone] = useState('');
-  const [bloodType, setBloodType] = useState('O+');
-  const [healthNotes, setHealthNotes] = useState('');
+  const [phone, setPhone] = useState(profile?.phone || '');
 
-  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Fetch authoritative student record from database tied to Student ID
+  useEffect(() => {
+    let isMounted = true;
+    const loadRecord = async () => {
+      if (!profile) return;
+      setLoadingRecord(true);
+      try {
+        const record = await getStudentRecordForStudentProfile(profile);
+        if (isMounted) {
+          setStudentRecord(record);
+          if (record?.national_id && !nationalId) {
+            setNationalId(record.national_id);
+          }
+          if (record?.phone && !phone) {
+            setPhone(record.phone);
+          }
+        }
+      } catch (err) {
+        console.warn('[CompleteStudentProfileView] Error loading student record:', err);
+      } finally {
+        if (isMounted) setLoadingRecord(false);
+      }
+    };
+
+    loadRecord();
+    return () => {
+      isMounted = false;
+    };
+  }, [profile]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!profile) return;
 
+    setError(null);
+
     const cleanNationalId = nationalId.trim();
+    const cleanPhone = phone.trim();
+
+    // 1. Validation of National ID / Iqama
     if (!cleanNationalId) {
       setError('يرجى إدخال رقم الهوية الوطنية أو الإقامة (حقل إلزامي).');
       return;
     }
 
-    const val = validateNationalIdFormat(cleanNationalId);
-    if (!val.isValid) {
-      setError(val.message || 'صيغة رقم الهوية الوطنية غير صحيحة.');
+    const valNid = validateNationalIdFormat(cleanNationalId);
+    if (!valNid.isValid) {
+      setError(valNid.message || 'صيغة رقم الهوية الوطنية / الإقامة غير صحيحة (يجب أن تتكون من 10 أرقام وتبدأ بـ 1 أو 2).');
       return;
     }
 
-    if (!birthDate) {
-      setError('يرجى تحديد تاريخ الميلاد.');
+    // 2. Validation of Mobile Phone
+    if (!cleanPhone) {
+      setError('يرجى إدخال رقم الجوال الخاص بالطالبة (حقل إلزامي).');
       return;
     }
 
-    setLoading(true);
-    setError(null);
+    if (!cleanPhone.startsWith('05') || cleanPhone.replace(/\D/g, '').length !== 10) {
+      setError('يرجى إدخال رقم جوال سعودي معتمد يبدأ بـ 05 ويتكون من 10 أرقام.');
+      return;
+    }
+
+    const studentIdCode =
+      studentRecord?.student_id_code ||
+      profile.studentIdCode ||
+      (profile.email.includes('@') && profile.email.split('@')[0].toUpperCase().startsWith('STU-')
+        ? profile.email.split('@')[0].toUpperCase()
+        : '');
+
+    if (!studentIdCode) {
+      setError('تعذر تحديد معرّف الطالبة (Student ID). يرجى مراجعة إدارة المدرسة.');
+      return;
+    }
+
+    setSaving(true);
 
     try {
-      // 1. Verify uniqueness against other students in system
-      const allStudents = await getAllStudents();
-      const duplicateStudent = allStudents.find(
-        (s) => s.national_id === cleanNationalId && s.account_user_id !== profile.id && s.phone !== profile.phone
-      );
-
-      if (duplicateStudent) {
-        setError('رقم الهوية الوطنية مسجل مسبقاً في النظام لطالبة أخرى. يرجى مراجعة إدارة المدرسة.');
-        setLoading(false);
-        return;
-      }
-
-      // 2. Update matching student record if exists
-      const matched = allStudents.find(
-        (s) =>
-          s.account_user_id === profile.id ||
-          s.phone === profile.phone ||
-          s.name.trim().toLowerCase() === profile.name.trim().toLowerCase()
-      );
-
-      if (matched) {
-        await updateStudent(
-          matched.id,
-          {
-            national_id: cleanNationalId,
-            birth_date: birthDate,
-            emergency_contact_phone: emergencyPhone.trim() || undefined,
-            blood_type: bloodType,
-            notes: healthNotes.trim() || undefined,
-            is_profile_complete: true,
-            account_user_id: profile.id,
-          },
-          {
-            ...profile,
-            school_role: 'administrator', // System privilege to update student profile
-          }
-        );
-      }
-
-      // 3. Update user profile to mark profile completed with national ID
-      const existingCustom = profile.customPermissions || [];
-      const newCustom = [
-        ...existingCustom.filter((p) => !p.startsWith('nid:') && p !== ('profile_completed' as any)),
-        `nid:${cleanNationalId}` as any,
-        'profile_completed' as any,
-      ];
-
-      await dataStore.updateUser(profile.id, {
-        customPermissions: newCustom,
-      });
-
-      // 4. Safely log activity with masked national ID (never raw)
-      await logActivity({
-        actorId: profile.id,
-        actorName: profile.name,
-        actorEmail: profile.email,
-        action: 'UPDATE',
-        entity: 'users',
-        entityId: profile.id,
-        details: `إكمال بيانات الطالبة الأساسية بنجاح وتفعيل الدخول للمنصة (الهوية: ${maskNationalId(cleanNationalId)})`,
+      // Save data strictly associated with the student's Student ID in database
+      await completeStudentProfileByStudentId({
+        studentIdCode,
+        nationalId: cleanNationalId,
+        phone: cleanPhone,
+        actor: profile,
       });
 
       if (refreshProfile) {
@@ -131,139 +134,189 @@ export const CompleteStudentProfileView: React.FC<CompleteStudentProfileViewProp
         onComplete();
       }
     } catch (err: any) {
-      console.error('[CompleteStudentProfile] Error:', err);
-      setError(err?.message || 'تعذر حفظ البيانات، يرجى المحاولة لاحقاً.');
+      console.error('[CompleteStudentProfileView] Submit error:', err);
+      setError(err?.message || 'تعذر حفظ البيانات، يرجى المحاولة لاحقاً أو مراجعة إدارة المدرسة.');
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
   };
 
+  const studentDisplayName = studentRecord?.name || profile?.name || 'الطالبة';
+  const studentCodeDisplay =
+    studentRecord?.student_id_code ||
+    profile?.studentIdCode ||
+    (profile?.email.includes('@') && profile.email.split('@')[0].toUpperCase().startsWith('STU-')
+      ? profile.email.split('@')[0].toUpperCase()
+      : 'STU-000000');
+  const gradeDisplay = studentRecord?.grade_stage || profile?.gradeStage || 'المرحلة الثانوية';
+  const classroomDisplay = studentRecord?.classroom || profile?.classroom || 'الفصل 1';
+
   return (
-    <div className="max-w-xl mx-auto py-8 sm:py-12 px-4" dir="rtl">
-      <div className="bg-white rounded-3xl border border-slate-200 shadow-xl p-6 sm:p-8 space-y-6">
-        <div className="text-center space-y-2 border-b border-slate-100 pb-5">
-          <div className="w-14 h-14 mx-auto bg-gradient-to-tr from-emerald-700 to-teal-500 rounded-2xl flex items-center justify-center text-white shadow-md">
-            <GraduationCap className="w-7 h-7" />
+    <div className="max-w-2xl mx-auto py-8 sm:py-12 px-4" dir="rtl">
+      <div className="bg-white rounded-3xl border border-slate-200/90 shadow-xl p-6 sm:p-9 space-y-7 relative overflow-hidden">
+        {/* Subtle decorative accent */}
+        <div className="absolute top-0 right-0 left-0 h-2 bg-gradient-to-r from-emerald-600 via-teal-500 to-emerald-700" />
+
+        {/* Top Header */}
+        <div className="text-center space-y-2.5 border-b border-slate-100 pb-6">
+          <div className="w-16 h-16 mx-auto bg-gradient-to-tr from-emerald-800 to-teal-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-emerald-950/20">
+            <GraduationCap className="w-8 h-8" />
           </div>
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 text-xs font-bold border border-emerald-200">
             <Sparkles className="w-3.5 h-3.5 text-amber-500" />
             <span>مدرسة صفية بنت عمر الثانوية</span>
           </div>
-          <h1 className="text-lg sm:text-xl font-black text-slate-900">
+          <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
             إكمال البيانات الأساسية للطالبة
           </h1>
-          <p className="text-xs text-slate-500 max-w-sm mx-auto leading-relaxed">
-            مرحباً بكِ {profile?.name}. لاستكمال تسجيل دخولكِ إلى المنصة المدرسية، يُرجى تعبئة بياناتكِ الأساسية المعتمدة.
+          <p className="text-xs sm:text-sm text-slate-500 max-w-md mx-auto leading-relaxed">
+            مرحباً بكِ <strong className="text-slate-800 font-bold">{studentDisplayName}</strong>. لاستكمال وتفعيل دخولكِ الرسمي إلى المنصة المدرسية، يرجى استكمال البيانات الإلزامية أدناه.
           </p>
         </div>
 
+        {/* Error Alert */}
         {error && (
-          <div className="p-3.5 bg-rose-50 border border-rose-200 text-rose-800 rounded-2xl text-xs flex items-start gap-2.5">
-            <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
-            <div className="leading-relaxed">{error}</div>
+          <div className="p-4 bg-rose-50 border border-rose-200 text-rose-800 rounded-2xl text-xs sm:text-sm flex items-start gap-3 animate-in fade-in">
+            <AlertCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+            <div className="leading-relaxed font-semibold">{error}</div>
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">
-              رقم الهوية الوطنية / الإقامة *
-            </label>
-            <input
-              type="text"
-              required
-              maxLength={10}
-              value={nationalId}
-              onChange={(e) => setNationalId(e.target.value.replace(/\D/g, ''))}
-              placeholder="10 أرقام تبدأ بـ 1 أو 2"
-              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-emerald-600 font-mono"
-              dir="ltr"
-            />
+        {/* 1. Pre-existing School Data (Read-only / Automatic from School Records) */}
+        <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-5 space-y-3.5">
+          <div className="flex items-center justify-between border-b border-slate-200/60 pb-3">
+            <div className="flex items-center gap-2">
+              <School className="w-4 h-4 text-emerald-700" />
+              <h2 className="text-xs sm:text-sm font-extrabold text-slate-900">
+                البيانات المدرسية المعتمدة (للقراءة فقط)
+              </h2>
+            </div>
+            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+              <BadgeCheck className="w-3 h-3 text-emerald-700" />
+              <span>معتمدة من السجل المدرسي</span>
+            </span>
           </div>
 
-          <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">تاريخ الميلاد *</label>
-            <div className="relative">
-              <input
-                type="date"
-                required
-                value={birthDate}
-                onChange={(e) => setBirthDate(e.target.value)}
-                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-emerald-600 font-mono"
-              />
-              <Calendar className="w-4 h-4 text-slate-400 absolute right-3 top-3 pointer-events-none" />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 text-xs">
+            <div className="bg-white p-3 rounded-xl border border-slate-200/70">
+              <span className="block text-[11px] text-slate-400 font-medium mb-1">اسم الطالبة:</span>
+              <span className="font-extrabold text-slate-900 text-sm block">
+                {studentDisplayName}
+              </span>
+            </div>
+
+            <div className="bg-white p-3 rounded-xl border border-slate-200/70">
+              <span className="block text-[11px] text-slate-400 font-medium mb-1">معرّف الطالبة (Student ID):</span>
+              <div className="flex items-center gap-1.5">
+                <span className="font-mono font-extrabold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 text-xs" dir="ltr">
+                  {studentCodeDisplay}
+                </span>
+                <span className="text-[10px] text-slate-400">ثابت في النظام</span>
+              </div>
+            </div>
+
+            <div className="bg-white p-3 rounded-xl border border-slate-200/70">
+              <span className="block text-[11px] text-slate-400 font-medium mb-1">المرحلة الدراسية:</span>
+              <span className="font-bold text-slate-800 block">
+                {gradeDisplay}
+              </span>
+            </div>
+
+            <div className="bg-white p-3 rounded-xl border border-slate-200/70">
+              <span className="block text-[11px] text-slate-400 font-medium mb-1">الصف / الفصل:</span>
+              <span className="font-bold text-slate-800 block">
+                {classroomDisplay}
+              </span>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <p className="text-[10px] text-slate-400 leading-relaxed pt-1">
+            * هذه البيانات مسجلة تلقائياً من إدارة المدرسة ولا تتطلب منكِ إعادة إدخالها، وتُعدل حصراً عبر لوحة الإدارة.
+          </p>
+        </div>
+
+        {/* 2. Completion Form - Strictly National ID and Student Mobile Phone */}
+        <form onSubmit={handleSubmit} className="space-y-5">
+          <div className="space-y-4">
+            {/* Field 1: National ID / Iqama */}
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                رقم التواصل في حالات الطوارئ
+              <label className="block text-xs sm:text-sm font-bold text-slate-800 mb-1.5">
+                رقم الهوية الوطنية / الإقامة *
+              </label>
+              <div className="relative">
+                <input
+                  type="text"
+                  required
+                  maxLength={10}
+                  value={nationalId}
+                  onChange={(e) => setNationalId(e.target.value.replace(/\D/g, ''))}
+                  placeholder="10 أرقام تبدأ بـ 1 أو 2"
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-emerald-600 focus:bg-white font-mono transition-colors"
+                  dir="ltr"
+                />
+                <Shield className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5 pointer-events-none" />
+              </div>
+              <p className="text-[11px] text-slate-500 mt-1.5 leading-relaxed">
+                رقم الهوية الوطنية للمواطنات أو الإقامة النظامية للمقيمات (10 أرقام). حقل إلزامي يتم التحقق من صحة تنسيقه وعدم تكراره في قاعدة بيانات المدرسة.
+              </p>
+            </div>
+
+            {/* Field 2: Student Mobile Phone */}
+            <div>
+              <label className="block text-xs sm:text-sm font-bold text-slate-800 mb-1.5">
+                رقم الجوال الخاص بالطالبة *
               </label>
               <div className="relative">
                 <input
                   type="tel"
-                  value={emergencyPhone}
-                  onChange={(e) => setEmergencyPhone(e.target.value)}
+                  required
+                  maxLength={10}
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value.replace(/\D/g, ''))}
                   placeholder="05XXXXXXXX"
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-emerald-600 font-mono"
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-emerald-600 focus:bg-white font-mono transition-colors"
                   dir="ltr"
                 />
-                <Phone className="w-4 h-4 text-slate-400 absolute right-3 top-3 pointer-events-none" />
+                <Phone className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5 pointer-events-none" />
               </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">فصيلة الدم</label>
-              <select
-                value={bloodType}
-                onChange={(e) => setBloodType(e.target.value)}
-                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-emerald-600"
-              >
-                <option value="A+">A+</option>
-                <option value="A-">A-</option>
-                <option value="B+">B+</option>
-                <option value="B-">B-</option>
-                <option value="O+">O+</option>
-                <option value="O-">O-</option>
-                <option value="AB+">AB+</option>
-                <option value="AB-">AB-</option>
-              </select>
+              <p className="text-[11px] text-slate-500 mt-1.5 leading-relaxed">
+                رقم الجوال الخاص بكِ؛ سيظهر في حسابكِ تحت بياناتكِ الشخصية، وهو الرقم المعتمد الذي سيُستخدم لاحقاً للتحقق في عملية «ربط حساب ولي الأمر».
+              </p>
             </div>
           </div>
 
-          <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">
-              ملاحظات صحية أو إضافية (اختياري)
-            </label>
-            <textarea
-              rows={2}
-              value={healthNotes}
-              onChange={(e) => setHealthNotes(e.target.value)}
-              placeholder="أي ملاحظات تودين إبلاغ المرشدة الطلابية بها..."
-              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-emerald-600 resize-none"
-            />
+          {/* Submit Button */}
+          <div className="pt-3">
+            <button
+              type="submit"
+              disabled={saving || loadingRecord}
+              className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-emerald-700 via-teal-700 to-emerald-800 hover:from-emerald-800 hover:to-teal-800 text-xs sm:text-sm font-extrabold text-white shadow-lg shadow-emerald-950/20 transition-all flex items-center justify-center gap-2.5 cursor-pointer disabled:opacity-60"
+            >
+              {saving ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <span>جارٍ حفظ البيانات وتوثيق الحساب...</span>
+                </>
+              ) : (
+                <>
+                  <FileCheck className="w-5 h-5 text-emerald-200" />
+                  <span>حفظ البيانات وتفعيل الدخول للمنصة</span>
+                </>
+              )}
+            </button>
           </div>
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full py-3 px-4 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-xs sm:text-sm font-extrabold text-white shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
-          >
-            {loading ? (
-              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-            ) : (
-              <>
-                <FileCheck className="w-4 h-4" />
-                <span>حفظ البيانات ومتابعة الدخول</span>
-              </>
-            )}
-          </button>
         </form>
 
-        <div className="pt-2 text-center text-[11px] text-slate-400 flex items-center justify-center gap-1.5">
-          <Shield className="w-3.5 h-3.5 text-emerald-600" />
-          <span>البيانات سرية ومحمية وفق أنظمة وزارة التعليم</span>
+        {/* Security Assurance Footer */}
+        <div className="pt-2 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-2 text-[11px] text-slate-400">
+          <div className="flex items-center gap-1.5">
+            <Lock className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+            <span>البيانات محفوظة ومشفرة وفق أعلى معايير الخصوصية المدرسية</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <UserCheck className="w-3.5 h-3.5 text-slate-400" />
+            <span>ربط موثق بمعرّف: {studentCodeDisplay}</span>
+          </div>
         </div>
       </div>
     </div>

@@ -386,7 +386,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const cleanName = name.trim();
 
     if (!cleanName || !secret.trim()) {
-      throw new Error('يرجى كتابة اسم الطالبة والسر الخاص بها.');
+      throw new Error('يرجى كتابة اسم الطالبة والرمز المخصص لها.');
     }
 
     // Security check on student name/secret identifier
@@ -418,12 +418,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (err: any) {
       const { isLocked, remainingMinutes, attemptsLeft } = await recordFailedLoginAttempt(
         cleanName,
-        '(محاولة دخول طالبة بالاسم والسر)'
+        '(محاولة دخول طالبة بالاسم والرمز)'
       );
 
       if (isLocked) {
         throw new Error(
-          `تم قفل الدخول مؤقتاً لمدة ${remainingMinutes} دقيقة بعد 5 محاولات فاشلة. يرجى مراجعة إدارة المدرسة لاستلام السر الصحيح.`
+          `تم قفل الدخول مؤقتاً لمدة ${remainingMinutes} دقيقة بعد 5 محاولات فاشلة. يرجى مراجعة إدارة المدرسة لاستلام الرمز المخصص.`
         );
       }
 
