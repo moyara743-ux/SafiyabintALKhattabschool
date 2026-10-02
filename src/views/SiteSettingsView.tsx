@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 
 export const SiteSettingsView: React.FC = () => {
-  const { user, profile, hasPerm, isOwner } = useAuth();
+  const { user, profile, hasPerm, isDirector } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -30,7 +30,7 @@ export const SiteSettingsView: React.FC = () => {
   const [address, setAddress] = useState('المملكة العربية السعودية - الرياض');
   const [twitter, setTwitter] = useState('@safiah_school');
 
-  const canEdit = hasPerm('manageSettings') || isOwner;
+  const canEdit = hasPerm('manageSettings') || isDirector;
 
   useEffect(() => {
     const fetchSettings = () => {

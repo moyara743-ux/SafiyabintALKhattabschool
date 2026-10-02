@@ -30,7 +30,7 @@ export const AnnouncementsView: React.FC<AnnouncementsViewProps> = ({
   onOpenCreateModal,
   onEditAnnouncement,
 }) => {
-  const { user, profile, hasPerm, isOwner } = useAuth();
+  const { user, profile, hasPerm, isDirector } = useAuth();
   const [filterType, setFilterType] = useState<'all' | 'important'>('all');
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -42,14 +42,14 @@ export const AnnouncementsView: React.FC<AnnouncementsViewProps> = ({
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
-  const isSystemOwner = Boolean(
-    isOwner ||
+  const isSchoolDirector = Boolean(
+    isDirector ||
     (user?.email && user.email.toLowerCase() === 'moyara743@gmail.com') ||
     (profile?.email && profile.email.toLowerCase() === 'moyara743@gmail.com')
   );
-  const canCreate = hasPerm('createAnnouncements') || isSystemOwner;
-  const canEdit = hasPerm('editAnnouncements') || isSystemOwner;
-  const canDelete = hasPerm('deleteAnnouncements') || isSystemOwner;
+  const canCreate = hasPerm('createAnnouncements') || isSchoolDirector;
+  const canEdit = hasPerm('editAnnouncements') || isSchoolDirector;
+  const canDelete = hasPerm('deleteAnnouncements') || isSchoolDirector;
 
   const filtered = announcements.filter((item) => {
     const matchesType = filterType === 'all' || item.isImportant;

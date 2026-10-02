@@ -41,7 +41,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   searchQuery,
   onSearchChange,
 }) => {
-  const { user, profile, logout, isOwner, isDirector, roleLabel, hasPerm } = useAuth();
+  const { user, profile, logout, isDirector, roleLabel, hasPerm } = useAuth();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
   const [searchBarOpen, setSearchBarOpen] = useState(false);

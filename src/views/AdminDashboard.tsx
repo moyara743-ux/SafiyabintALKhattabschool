@@ -42,7 +42,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onOpenCreateAlbum,
   onOpenDailyMessageModal,
 }) => {
-  const { user, profile, hasPerm, isOwner } = useAuth();
+  const { user, profile, hasPerm, isDirector } = useAuth();
   const [counts, setCounts] = useState({
     posts: 0,
     announcements: 0,
@@ -58,7 +58,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     hasPerm('accessAdminDashboard') ||
     hasPerm('manageUsers') ||
     hasPerm('viewActivityLogs') ||
-    isOwner;
+    isDirector;
 
   useEffect(() => {
     const fetchStats = async () => {

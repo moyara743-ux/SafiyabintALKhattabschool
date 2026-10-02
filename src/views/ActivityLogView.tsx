@@ -14,14 +14,14 @@ import {
 } from 'lucide-react';
 
 export const ActivityLogView: React.FC = () => {
-  const { hasPerm, isOwner } = useAuth();
+  const { hasPerm, isDirector } = useAuth();
   const [logs, setLogs] = useState<ActivityLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionFilter, setActionFilter] = useState<string>('all');
   const [entityFilter, setEntityFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
 
-  const canView = hasPerm('viewActivityLogs') || isOwner;
+  const canView = hasPerm('viewActivityLogs') || isDirector;
 
   const loadLogs = async () => {
     setLoading(true);
@@ -69,7 +69,7 @@ export const ActivityLogView: React.FC = () => {
       <div className="p-8 text-center bg-slate-900 border border-rose-800 rounded-3xl max-w-lg mx-auto space-y-3" dir="rtl">
         <Lock className="w-12 h-12 text-rose-500 mx-auto" />
         <h2 className="text-lg font-bold text-white">غير مصرح لك بالدخول</h2>
-        <p className="text-xs text-slate-400">سجل العمليات مقتصر على إدارة المدرسة والمالك.</p>
+        <p className="text-xs text-slate-400">سجل العمليات مقتصر على إدارة المدرسة والمديرة.</p>
       </div>
     );
   }

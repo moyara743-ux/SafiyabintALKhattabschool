@@ -27,14 +27,14 @@ interface PostCardProps {
 }
 
 export const PostCard: React.FC<PostCardProps> = ({ post, onEdit, onViewDetails }) => {
-  const { user, profile, isOwner, hasPerm } = useAuth();
+  const { user, profile, isDirector, hasPerm } = useAuth();
   const [likes, setLikes] = useState(post.likesCount || 0);
   const [isLiked, setIsLiked] = useState(user ? post.likedBy?.includes(user.uid) : false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
-  const canEdit = isOwner || (user && post.authorId === user.uid) || hasPerm('editPosts');
-  const canDelete = isOwner || (user && post.authorId === user.uid) || hasPerm('deletePosts');
+  const canEdit = isDirector || (user && post.authorId === user.uid) || hasPerm('editPosts');
+  const canDelete = isDirector || (user && post.authorId === user.uid) || hasPerm('deletePosts');
 
   const handleLikeToggle = async (e: React.MouseEvent) => {
     e.stopPropagation();

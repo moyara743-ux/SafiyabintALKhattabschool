@@ -1,76 +1,51 @@
 import { supabase } from '../supabaseClient';
-import { OWNER_EMAIL } from '../data/initialData';
-import { dataStore } from './dataStore';
 import { UserProfile, SchoolRole } from '../types';
+import { dataStore } from './dataStore';
+import { verifyGoogleEmailPreAuthorization } from './authSecurity';
+import { logActivity } from './activityLogger';
 
-declare global {
-  interface Window {
-    google?: {
-      accounts: {
-        id: {
-          initialize: (config: {
-            client_id: string;
-            callback: (response: { credential: string; select_by?: string }) => void;
-            auto_select?: boolean;
-            cancel_on_tap_outside?: boolean;
-            itp_support?: boolean;
-            context?: string;
-          }) => void;
-          renderButton: (
-            parent: HTMLElement,
-            options: {
-              type?: 'standard' | 'icon';
-              theme?: 'outline' | 'filled_blue' | 'filled_black';
-              size?: 'large' | 'medium' | 'small';
-              text?: 'signin_with' | 'signup_with' | 'continue_with' | 'signin';
-              shape?: 'rectangular' | 'pill' | 'circle' | 'square';
-              logo_alignment?: 'left' | 'center';
-              width?: number | string;
-              locale?: string;
-            }
-          ) => void;
-          prompt: (momentNotification?: (notification: any) => void) => void;
-          cancel: () => void;
-          disableAutoSelect: () => void;
-        };
-      };
-    };
-  }
-}
-
-const STORAGE_KEY_CLIENT_ID = 'school_google_client_id';
+export const DIRECTOR_EMAIL = 'moyara743@gmail.com';
+export const OWNER_EMAIL = DIRECTOR_EMAIL;
 
 /**
- * Retrieves the Google Client ID configured via Vite environment or localStorage.
+ * Returns Google OAuth client ID from environment
  */
 export function getGoogleClientId(): string {
-  const envId = ((import.meta as any).env?.VITE_GOOGLE_CLIENT_ID as string) || '';
-  if (envId.trim()) return envId.trim();
-
-  const saved = localStorage.getItem(STORAGE_KEY_CLIENT_ID) || '';
-  return saved.trim();
+  const envClientId = (((import.meta as any).env?.VITE_GOOGLE_CLIENT_ID) || '').trim();
+  return envClientId;
 }
 
 /**
- * Persists custom Google Client ID to localStorage.
+ * Initiates official Google OAuth Redirect Flow via Supabase Auth.
+ * When user returns, their email is strictly verified against pre-existing school accounts.
  */
-export function setGoogleClientId(id: string): void {
-  if (id.trim()) {
-    localStorage.setItem(STORAGE_KEY_CLIENT_ID, id.trim());
-  } else {
-    localStorage.removeItem(STORAGE_KEY_CLIENT_ID);
+export async function initiateGoogleOAuthLogin(): Promise<void> {
+  const redirectTo = typeof window !== 'undefined' ? window.location.origin : undefined;
+  const { error } = await supabase.auth.signInWithOAuth({
+    provider: 'google',
+    options: {
+      redirectTo,
+      queryParams: {
+        access_type: 'offline',
+        prompt: 'consent',
+      },
+    },
+  });
+
+  if (error) {
+    console.error('[GoogleAuth] signInWithOAuth error:', error);
+    throw new Error(error.message || 'تعذر بدء عملية تسجيل الدخول عبر Google');
   }
 }
 
 /**
- * Safely decodes a Google JWT ID Token without external dependencies.
+ * Decodes a JWT token without external libraries
  */
 export function decodeJwt(token: string): {
+  sub?: string;
   email?: string;
   name?: string;
   picture?: string;
-  sub?: string;
-  email_verified?: boolean;
   [key: string]: any;
 } {
   try {
@@ -91,26 +66,51 @@ export function decodeJwt(token: string): {
 }
 
 /**
- * Processes Google Credential from Google One Tap or Google Sign-In SDK,
- * authenticates with Supabase using signInWithIdToken, and immediately stores
- * the user record in the Supabase `users` table.
+ * Processes Google Credential from Google One Tap or Google Sign-In SDK.
+ * STRICT ENFORCEMENT:
+ * - Checks whether the Google email exists in the school database.
+ * - If not authorized: login is rejected, user is signed out, NO NEW ACCOUNT IS CREATED.
+ * - If authorized: user enters directly with their registered school role & permissions.
  */
 export async function handleGoogleCredential(credential: string): Promise<{
   user: any;
   profile: UserProfile;
 }> {
   const decoded = decodeJwt(credential);
-  console.log('[GoogleAuth] Decoded Google token payload:', decoded);
+  console.log('[GoogleAuth] Decoded Google token payload for verification:', decoded.email);
 
   const cleanEmail = (decoded.email || '').trim().toLowerCase();
-  const displayName = decoded.name || cleanEmail.split('@')[0] || 'مستخدم Google';
-  const photoURL = decoded.picture || undefined;
+  if (!cleanEmail) {
+    throw new Error('تعذر قراءة عنوان البريد الإلكتروني من حساب Google.');
+  }
 
-  const isOwner = cleanEmail === OWNER_EMAIL.toLowerCase();
-  const isYaraAccount = cleanEmail === 'yaradrashed@gmail.com';
-  const targetRole: SchoolRole = isOwner ? 'owner' : 'student';
+  // 1. Authoritative Pre-Authorization Check
+  const authCheck = await verifyGoogleEmailPreAuthorization(cleanEmail);
+  if (!authCheck.isAuthorized || !authCheck.profile) {
+    // Attempt signout from Supabase to prevent unauthorized dangling session
+    try {
+      await supabase.auth.signOut();
+    } catch (e) {
+      // ignore
+    }
 
-  // 1. Authenticate with Supabase Auth using the Google ID Token
+    await logActivity({
+      actorId: 'google_oauth_gate',
+      actorName: decoded.name || 'مستخدم غير مصرح',
+      actorEmail: cleanEmail,
+      action: 'UNAUTHORIZED_LOGIN_ATTEMPT',
+      entity: 'auth',
+      entityId: cleanEmail,
+      details: `رفض محاولة دخول عبر Google لبريد غير مصرح به (${cleanEmail})`,
+    });
+
+    throw new Error(
+      authCheck.reason ||
+        `عفواً، البريد الإلكتروني (${cleanEmail}) غير مسجل في المنصة المدرسية. التسجيل الذاتي غير متاح، ويجب اعتماد حسابك أولاً من قِبل إدارة المدرسة.`
+    );
+  }
+
+  // 2. Sign In to Supabase Auth using the Google ID Token if supported
   let authUser: any = null;
   try {
     const { data: authData, error: authError } = await supabase.auth.signInWithIdToken({
@@ -118,82 +118,49 @@ export async function handleGoogleCredential(credential: string): Promise<{
       token: credential,
     });
 
-    if (authError) {
-      console.warn('[GoogleAuth] signInWithIdToken error:', authError.message);
-      // Fallback: If Supabase project doesn't have Google provider ID token enabled,
-      // we still register/sync the user directly in Supabase DB
-    } else if (authData?.user) {
+    if (!authError && authData?.user) {
       authUser = authData.user;
     }
   } catch (err) {
-    console.warn('[GoogleAuth] Exception during signInWithIdToken:', err);
+    console.warn('[GoogleAuth] Notice during signInWithIdToken:', err);
   }
 
-  const userId = authUser?.id || `g_${decoded.sub || Math.random().toString(36).substring(2, 10)}`;
-
-  // 2. Immediately store and sync in Supabase public.users table
-  try {
-    const upsertPayload: Record<string, any> = {
-      name: isOwner ? 'يارا محمد راشد - مالك النظام' : displayName,
-      email: cleanEmail,
-      school_role: targetRole,
-      status: 'active',
-      custom_permissions: [],
-      updated_at: new Date().toISOString(),
-    };
-
-    // Only supply ID if it is a valid UUID
-    const isValidUuid = Boolean(authUser?.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(authUser.id));
-    if (isValidUuid) {
-      upsertPayload.id = authUser.id;
-    }
-
-    const { data: dbData, error: dbError } = await supabase
-      .from('users')
-      .upsert(upsertPayload, { onConflict: 'email' })
-      .select();
-
-    if (dbError) {
-      console.warn('[GoogleAuth] Notice storing user in Supabase users table:', dbError.message);
-    } else {
-      console.log('[GoogleAuth] Successfully stored user in Supabase table:', dbData);
-    }
-  } catch (dbErr) {
-    console.warn('[GoogleAuth] Exception writing user to Supabase:', dbErr);
-  }
-
-  // 3. Sync to local dataStore for immediate offline availability
-  const userProfile: UserProfile = {
-    id: userId,
-    name: isOwner ? 'يارا محمد راشد - مالك النظام' : displayName,
-    email: cleanEmail,
-    photoURL,
-    school_role: targetRole,
-    customPermissions: [],
-    temporaryPermissions: [],
-    status: 'active',
-    createdAt: new Date().toISOString(),
+  const preExistingProfile = authCheck.profile;
+  const finalProfile: UserProfile = {
+    ...preExistingProfile,
+    photoURL: decoded.picture || preExistingProfile.photoURL,
     lastLoginAt: new Date().toISOString(),
   };
 
-  dataStore.syncUserProfileFromRemote(userProfile);
+  // Sync with local store
+  dataStore.syncUserProfileFromRemote(finalProfile);
+
+  // Success audit log
+  await logActivity({
+    actorId: finalProfile.id,
+    actorName: finalProfile.name,
+    actorEmail: finalProfile.email,
+    action: 'LOGIN',
+    entity: 'users',
+    entityId: finalProfile.id,
+    details: `تسجيل دخول ناجح عبر Google بحساب معتمد (${finalProfile.name}) - الدور: (${finalProfile.school_role})`,
+  });
 
   return {
     user: authUser || {
-      id: userId,
+      id: finalProfile.id,
       email: cleanEmail,
-      displayName,
-      user_metadata: { name: displayName, avatar_url: photoURL },
+      displayName: finalProfile.name,
+      user_metadata: { name: finalProfile.name, avatar_url: finalProfile.photoURL },
     },
-    profile: userProfile,
+    profile: finalProfile,
   };
 }
 
 /**
- * Simplified Direct Google Account Authentication:
- * Authenticates user directly using their chosen Google Account without requiring
- * manual Google Client ID configuration from Google Cloud Console.
- * Immediately saves and syncs the account with Supabase public.users table.
+ * Direct Google Email Verification Login:
+ * Authenticates user by their Google Email ONLY IF PRE-AUTHORIZED in school database.
+ * Never creates new unapproved accounts.
  */
 export async function authenticateGoogleAccountDirectly(
   email: string,
@@ -201,98 +168,52 @@ export async function authenticateGoogleAccountDirectly(
   photoURL?: string
 ): Promise<{ user: any; profile: UserProfile }> {
   const cleanEmail = (email || '').trim().toLowerCase();
-  const isOwner = cleanEmail === OWNER_EMAIL.toLowerCase();
-  const isYaraAccount = cleanEmail === 'yaradrashed@gmail.com';
 
-  let resolvedRole: SchoolRole = isOwner ? 'owner' : 'student';
-  let resolvedName =
-    isOwner
-      ? 'يارا محمد راشد - مالك النظام'
-      : providedName?.trim() || cleanEmail.split('@')[0] || 'مستخدم Google';
+  // 1. Authoritative Pre-Authorization Check
+  const authCheck = await verifyGoogleEmailPreAuthorization(cleanEmail);
+  if (!authCheck.isAuthorized || !authCheck.profile) {
+    await logActivity({
+      actorId: 'google_direct_gate',
+      actorName: providedName || 'مستخدم غير مصرح',
+      actorEmail: cleanEmail,
+      action: 'UNAUTHORIZED_LOGIN_ATTEMPT',
+      entity: 'auth',
+      entityId: cleanEmail,
+      details: `رفض محاولة دخول بالبريد (${cleanEmail}) لعدم وجود حساب مدرسي مسبق`,
+    });
 
-  let userId: string = '';
-
-  // 1. Check if user already exists in Supabase public.users
-  try {
-    const { data: existingUser, error: fetchErr } = await supabase
-      .from('users')
-      .select('*')
-      .eq('email', cleanEmail)
-      .maybeSingle();
-
-    if (existingUser && !fetchErr) {
-      if (existingUser.id) userId = existingUser.id;
-      if (!isOwner && !isYaraAccount && existingUser.school_role) {
-        resolvedRole = existingUser.school_role as SchoolRole;
-      }
-      if (existingUser.name && !isOwner) {
-        resolvedName = existingUser.name;
-      }
-    }
-  } catch (err) {
-    console.warn('[GoogleAuth] Notice fetching existing user:', err);
+    throw new Error(
+      authCheck.reason ||
+        `عفواً، البريد الإلكتروني (${cleanEmail}) غير مسجل في المنصة المدرسية. التسجيل الذاتي غير متاح، ويجب اعتماد حسابك أولاً من قِبل إدارة المدرسة.`
+    );
   }
 
-  // Fallback to local dataStore ID or generate stable UUID
-  if (!userId) {
-    const localUser = dataStore.getUserByEmail(cleanEmail);
-    if (localUser && localUser.id) {
-      userId = localUser.id;
-    } else {
-      userId = isOwner ? '00000000-0000-0000-0000-000000000001' : crypto.randomUUID();
-    }
-  }
-
-  // 2. Immediately upsert into Supabase public.users table
-  try {
-    const upsertPayload: Record<string, any> = {
-      id: userId,
-      name: resolvedName,
-      email: cleanEmail,
-      school_role: resolvedRole,
-      status: 'active',
-      custom_permissions: [],
-      updated_at: new Date().toISOString(),
-    };
-
-    const { data: dbData, error: dbError } = await supabase
-      .from('users')
-      .upsert(upsertPayload, { onConflict: 'email' })
-      .select();
-
-    if (dbError) {
-      console.warn('[GoogleAuth] Notice saving user to Supabase:', dbError.message);
-    } else {
-      console.log('[GoogleAuth] Successfully saved user to Supabase:', dbData);
-    }
-  } catch (dbErr) {
-    console.warn('[GoogleAuth] Exception writing to Supabase:', dbErr);
-  }
-
-  // 3. Build UserProfile and sync with local dataStore
-  const userProfile: UserProfile = {
-    id: userId,
-    name: resolvedName,
-    email: cleanEmail,
-    photoURL: photoURL || undefined,
-    school_role: resolvedRole,
-    customPermissions: [],
-    temporaryPermissions: [],
-    status: 'active',
-    createdAt: new Date().toISOString(),
+  const authorizedProfile = authCheck.profile;
+  const updatedProfile: UserProfile = {
+    ...authorizedProfile,
+    photoURL: photoURL || authorizedProfile.photoURL,
     lastLoginAt: new Date().toISOString(),
   };
 
-  dataStore.syncUserProfileFromRemote(userProfile);
+  dataStore.syncUserProfileFromRemote(updatedProfile);
+
+  await logActivity({
+    actorId: updatedProfile.id,
+    actorName: updatedProfile.name,
+    actorEmail: updatedProfile.email,
+    action: 'LOGIN',
+    entity: 'users',
+    entityId: updatedProfile.id,
+    details: `تسجيل دخول ناجح بحساب Google المعتمد (${updatedProfile.name}) - الدور: (${updatedProfile.school_role})`,
+  });
 
   return {
     user: {
-      id: userId,
-      uid: userId,
+      id: updatedProfile.id,
       email: cleanEmail,
-      displayName: resolvedName,
-      user_metadata: { name: resolvedName, avatar_url: photoURL },
+      displayName: updatedProfile.name,
+      user_metadata: { name: updatedProfile.name, avatar_url: updatedProfile.photoURL },
     },
-    profile: userProfile,
+    profile: updatedProfile,
   };
 }

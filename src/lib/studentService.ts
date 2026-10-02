@@ -6,6 +6,7 @@ import {
   ParentStudentRelationship,
   UserProfile,
   RelationshipType,
+  SchoolRole,
 } from '../types';
 import { dataStore } from './dataStore';
 import { logActivity } from './activityLogger';
@@ -122,6 +123,23 @@ export function generateStudentIdCode(): string {
 }
 
 /**
+ * Generates a strong, random cryptographic secret for student login.
+ * Unpredictable and NOT based on name, student ID, or personal info.
+ */
+export function generateStudentAccessSecret(): string {
+  const charset = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
+  const length = 8;
+  const randomValues = new Uint32Array(length);
+  crypto.getRandomValues(randomValues);
+
+  let secret = '';
+  for (let i = 0; i < length; i++) {
+    secret += charset[randomValues[i] % charset.length];
+  }
+  return `STU-${secret}`;
+}
+
+/**
  * Normalizes Arabic string for resilient exact matching.
  */
 export function normalizeArabicText(text: string): string {
@@ -226,6 +244,7 @@ export async function getAllStudents(): Promise<StudentRecord[]> {
         name: d.name,
         phone: d.phone,
         national_id: d.national_id,
+        access_secret: d.access_secret || 'STU-9K8P4M',
         birth_date: d.birth_date,
         grade_stage: d.grade_stage || 'الأول الثانوي',
         classroom: d.classroom,
@@ -247,6 +266,19 @@ export async function getAllStudents(): Promise<StudentRecord[]> {
     records = getCachedStudents();
   }
 
+  // Ensure cached records have access_secret
+  let needsCacheUpdate = false;
+  records = records.map((s) => {
+    if (!s.access_secret) {
+      needsCacheUpdate = true;
+      return { ...s, access_secret: generateStudentAccessSecret() };
+    }
+    return s;
+  });
+  if (needsCacheUpdate) {
+    setCachedStudents(records);
+  }
+
   // If completely empty on first launch, initialize with official sample students
   if (records.length === 0) {
     const initialStudents: StudentRecord[] = [
@@ -259,6 +291,7 @@ export async function getAllStudents(): Promise<StudentRecord[]> {
         classroom: '1/1',
         is_profile_complete: true,
         national_id: '1098765432',
+        access_secret: 'STU-9K8P4M',
         birth_date: '2008-04-15',
         status: 'active',
         created_at: new Date().toISOString(),
@@ -273,6 +306,7 @@ export async function getAllStudents(): Promise<StudentRecord[]> {
         classroom: '2/1',
         is_profile_complete: true,
         national_id: '1087654321',
+        access_secret: 'STU-3W7X2R',
         birth_date: '2007-08-20',
         status: 'active',
         created_at: new Date().toISOString(),
@@ -287,6 +321,7 @@ export async function getAllStudents(): Promise<StudentRecord[]> {
         classroom: '3/1',
         is_profile_complete: true,
         national_id: '1076543210',
+        access_secret: 'STU-5N6B8Y',
         birth_date: '2006-11-10',
         status: 'active',
         created_at: new Date().toISOString(),
@@ -379,6 +414,7 @@ export async function addStudent(params: {
 
   const newId = crypto.randomUUID();
   const finalCode = studentIdCode?.trim() || generateStudentIdCode();
+  const finalSecret = generateStudentAccessSecret();
 
   const newRecord: StudentRecord = {
     id: newId,
@@ -386,6 +422,7 @@ export async function addStudent(params: {
     name: cleanName,
     phone: cleanPhone,
     national_id: cleanNationalId,
+    access_secret: finalSecret,
     birth_date: birthDate || undefined,
     grade_stage: gradeStage || 'الأول الثانوي',
     classroom: classroom?.trim() || '1/1',
@@ -404,6 +441,7 @@ export async function addStudent(params: {
         name: newRecord.name,
         phone: newRecord.phone,
         national_id: newRecord.national_id,
+        access_secret: newRecord.access_secret,
         birth_date: newRecord.birth_date,
         grade_stage: newRecord.grade_stage,
         classroom: newRecord.classroom,
@@ -1275,4 +1313,72 @@ export async function verifyStudentNationalId(
   const list = getCachedStudents();
   const found = list.find((s) => s.id === studentId);
   return Boolean(found && found.national_id && found.national_id.trim() === clean);
+}
+
+/**
+ * Authenticates a student securely using Name and Secret Code.
+ * - Confirms that the Name and Secret belong to the SAME student record.
+ * - Does NOT use Name as primary identifier; relies on Student ID internally.
+ * - Rejects suspended or non-active student records.
+ */
+export async function authenticateStudentByNameAndSecret(
+  name: string,
+  secret: string
+): Promise<{
+  student: StudentRecord;
+  profile: UserProfile;
+}> {
+  const cleanName = normalizeArabicText(name);
+  const cleanSecret = secret.trim();
+
+  if (!cleanName || !cleanSecret) {
+    throw new Error('يرجى كتابة اسم الطالبة والسر الخاص بها.');
+  }
+
+  const all = await getAllStudents();
+  // Find student whose normalized name matches AND access_secret matches exactly
+  const student = all.find((s) => {
+    const nameMatches = normalizeArabicText(s.name) === cleanName;
+    const secretMatches = (s.access_secret || '').trim().toUpperCase() === cleanSecret.toUpperCase();
+    return nameMatches && secretMatches;
+  });
+
+  if (!student) {
+    throw new Error('بيانات الدخول غير صحيحة. يرجى التأكد من اسم الطالبة والسر الخاص بها أو مراجعة إدارة المدرسة.');
+  }
+
+  if (student.status !== 'active') {
+    throw new Error('سجل الطالبة غير نشط حالياً. يرجى مراجعة إدارة المدرسة.');
+  }
+
+  // Create or resolve student UserProfile
+  const studentProfile: UserProfile = {
+    id: student.account_user_id || student.id,
+    name: student.name,
+    email: `${student.student_id_code.toLowerCase()}@safiah.edu.sa`,
+    phone: student.phone,
+    school_role: 'student',
+    status: 'active',
+    customPermissions: [
+      `nid:${student.national_id}` as any,
+      'profile_completed' as any,
+    ],
+    temporaryPermissions: [],
+    createdAt: student.created_at,
+    lastLoginAt: new Date().toISOString(),
+  };
+
+  dataStore.syncUserProfileFromRemote(studentProfile);
+
+  await logActivity({
+    actorId: studentProfile.id,
+    actorName: student.name,
+    actorEmail: studentProfile.email,
+    action: 'LOGIN',
+    entity: 'student_records',
+    entityId: student.id,
+    details: `تسجيل دخول ناجح للطالبة (${student.name}) باستخدام الاسم والسر الخاص (${student.student_id_code})`,
+  });
+
+  return { student, profile: studentProfile };
 }

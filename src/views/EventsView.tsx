@@ -33,7 +33,7 @@ export const EventsView: React.FC<EventsViewProps> = ({
   onEditEvent,
   onDeleteEvent,
 }) => {
-  const { user, profile, hasPerm, isOwner } = useAuth();
+  const { user, profile, hasPerm, isDirector } = useAuth();
   const [filterTab, setFilterTab] = useState<'all' | 'today' | 'tomorrow' | 'upcoming' | 'completed'>('all');
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -44,14 +44,14 @@ export const EventsView: React.FC<EventsViewProps> = ({
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   // Determine permissions
-  const isSystemOwner = Boolean(
-    isOwner ||
+  const isSchoolDirector = Boolean(
+    isDirector ||
     (user?.email && user.email.toLowerCase() === 'moyara743@gmail.com') ||
     (profile?.email && profile.email.toLowerCase() === 'moyara743@gmail.com')
   );
-  const canCreate = hasPerm('createEvents') || isSystemOwner;
-  const canEdit = hasPerm('editEvents') || isSystemOwner;
-  const canDelete = hasPerm('deleteEvents') || isSystemOwner;
+  const canCreate = hasPerm('createEvents') || isSchoolDirector;
+  const canEdit = hasPerm('editEvents') || isSchoolDirector;
+  const canDelete = hasPerm('deleteEvents') || isSchoolDirector;
 
   const filtered = events.filter((ev) => {
     let matchesTab = true;
@@ -95,14 +95,14 @@ export const EventsView: React.FC<EventsViewProps> = ({
 
     // 1. Permission and Authentication verification
     if (!user || !profile) {
-      setDeleteError('يجب تسجيل الدخول بحساب مصرح له (مالك النظام أو المديرة) لتنفيذ عملية الحذف.');
+      setDeleteError('يجب تسجيل الدخول بحساب مصرح له (المديرة أو الإدارة المدرسية) لتنفيذ عملية الحذف.');
       setIsDeleting(false);
       return;
     }
 
     if (!canDelete) {
       setDeleteError(
-        'عذراً، حسابك لا يمتلك صلاحية حذف الفعاليات (DELETE). هذه العملية مقتصرة حصرياً على مالك النظام والإدارة المدرسية.'
+        'عذراً، حسابك لا يمتلك صلاحية حذف الفعاليات (DELETE). هذه العملية مقتصرة حصرياً على المديرة والإدارة المدرسية.'
       );
       setIsDeleting(false);
       return;
@@ -129,7 +129,7 @@ export const EventsView: React.FC<EventsViewProps> = ({
           supabaseError.message?.toLowerCase().includes('permission denied')
         ) {
           setDeleteError(
-            `فشل الحذف بسبب قيود سياسات الأمان (RLS) في Supabase (${supabaseError.code || '42501'}): لا تتوفر صلاحية DELETE على جدول events لهذا المستخدم. يرجى تفعيل سياسة RLS لمالك النظام (owner).`
+            `فشل الحذف بسبب قيود سياسات الأمان (RLS) في Supabase (${supabaseError.code || '42501'}): لا تتوفر صلاحية DELETE على جدول events لهذا المستخدم. يرجى تفعيل سياسة RLS لإدارة المدرسة (director).`
           );
           setIsDeleting(false);
           return;

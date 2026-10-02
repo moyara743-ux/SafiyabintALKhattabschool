@@ -48,7 +48,7 @@ import { LoginView } from './views/LoginView';
 import { GraduationCap, Shield, Phone, Mail, MapPin, Sparkles } from 'lucide-react';
 
 function AppContent() {
-  const { user, profile, hasPerm, isOwner, loading: authLoading } = useAuth();
+  const { user, profile, hasPerm, isDirector, loading: authLoading } = useAuth();
 
   const [currentView, setCurrentView] = useState<PageView>('home');
   const [searchQuery, setSearchQuery] = useState('');

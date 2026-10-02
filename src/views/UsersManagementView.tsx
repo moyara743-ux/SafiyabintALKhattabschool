@@ -54,7 +54,7 @@ import {
 } from 'lucide-react';
 
 export const UsersManagementView: React.FC = () => {
-  const { user: currentUser, profile: currentProfile, hasPerm, isOwner } = useAuth();
+  const { user: currentUser, profile: currentProfile, hasPerm, isDirector } = useAuth();
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [relationships, setRelationships] = useState<ParentStudentRelationship[]>([]);
   const [loading, setLoading] = useState(true);
@@ -93,7 +93,7 @@ export const UsersManagementView: React.FC = () => {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const canManage = hasPerm('manageUsers') || isOwner;
+  const canManage = hasPerm('manageUsers') || isDirector;
 
   // Load all users and relationships from Supabase
   const loadUsers = async () => {
@@ -114,13 +114,13 @@ export const UsersManagementView: React.FC = () => {
       if (data && Array.isArray(data)) {
         const remoteUsers: UserProfile[] = data.map((d: any) => {
           const email = (d.email || '').trim().toLowerCase();
-          const isOwnerAccount = email === 'moyara743@gmail.com';
+          const isDirectorAccount = email === 'moyara743@gmail.com';
           const isYaraAccount = email === 'yaradrashed@gmail.com';
 
-          let role: SchoolRole = d.school_role || 'student';
-          if (isOwnerAccount) {
-            role = 'owner';
-          } else if (role === 'owner' || isYaraAccount) {
+          let role: SchoolRole = (d.school_role === 'owner' ? 'director' : d.school_role) || 'student';
+          if (isDirectorAccount) {
+            role = 'director';
+          } else if (isYaraAccount) {
             role = 'student';
           }
 
@@ -196,7 +196,7 @@ export const UsersManagementView: React.FC = () => {
   const openEditModal = (target: UserProfile) => {
     if (!currentProfile) return;
     if (!canUserManageTarget(currentProfile, target)) {
-      alert('لا يمكنك تعديل هذا المستخدم لأن رتبته مساوية أو أعلى من رتبتك أو لأنه حساب مالك النظام المحمي');
+      alert('لا يمكنك تعديل هذا المستخدم لأن رتبته مساوية أو أعلى من رتبتك أو لأنه حساب المديرة المعتمد');
       return;
     }
 
@@ -207,7 +207,7 @@ export const UsersManagementView: React.FC = () => {
       setEditCustomPerms([]);
       setEditTempPerms([]);
     } else {
-      setEditRole(target.school_role === 'owner' && targetEmail !== 'moyara743@gmail.com' ? 'student' : target.school_role);
+      setEditRole((target.school_role as any) === 'owner' ? 'director' : target.school_role);
       setEditCustomPerms(target.customPermissions ? [...target.customPermissions] : []);
       setEditTempPerms(target.temporaryPermissions ? [...target.temporaryPermissions] : []);
     }
@@ -247,9 +247,9 @@ export const UsersManagementView: React.FC = () => {
     if (!editingUser || !currentUser || !currentProfile) return;
     const targetEmail = (editingUser.email || '').trim().toLowerCase();
 
-    // STRICT RULE: Absolute ban on owner promotion
-    if (editRole === 'owner' && targetEmail !== 'moyara743@gmail.com') {
-      setErrorMessage('يمنع منعاً باتاً ومطلقاً إتاحة رتبة مالك النظام أو الترقية إليها لأي حساب آخر في الموقع.');
+    // STRICT RULE: Director role is reserved for school director
+    if (editRole === 'director' && targetEmail !== 'moyara743@gmail.com' && currentProfile.school_role !== 'director') {
+      setErrorMessage('لا يمكن تعيين دور المديرة إلا عبر إدارة المدرسة المعتمدة.');
       return;
     }
 
@@ -312,11 +312,6 @@ export const UsersManagementView: React.FC = () => {
 
     if (!name || !email) {
       alert('يرجى كتابة الاسم والبريد الإلكتروني.');
-      return;
-    }
-
-    if (newUserRole === 'owner') {
-      alert('لا يمكن إنشاء حساب جديد برتبة مالك النظام.');
       return;
     }
 
@@ -490,12 +485,6 @@ export const UsersManagementView: React.FC = () => {
   const getRoleBadge = (role: SchoolRole) => {
     const label = ROLE_LABELS_AR[role] || role;
     switch (role) {
-      case 'owner':
-        return (
-          <span className="px-2.5 py-1 bg-amber-100 text-amber-950 border border-amber-400 rounded-full text-xs font-bold shadow-xs">
-            {label}
-          </span>
-        );
       case 'director':
         return (
           <span className="px-2.5 py-1 bg-emerald-100 text-emerald-950 border border-emerald-400 rounded-full text-xs font-bold shadow-xs">
@@ -654,7 +643,6 @@ export const UsersManagementView: React.FC = () => {
             className="w-full px-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600 cursor-pointer"
           >
             <option value="all">كل الرتب والأدوار</option>
-            <option value="owner">مالك النظام</option>
             <option value="director">المديرة</option>
             <option value="supervisor">المشرفة</option>
             <option value="administrator">الإدارية</option>
@@ -1170,8 +1158,8 @@ export const UsersManagementView: React.FC = () => {
                   رتبة ودور المستخدم (school_role)
                 </label>
                 {editingUser.email?.trim().toLowerCase() === 'moyara743@gmail.com' ? (
-                  <div className="p-2.5 bg-amber-50 border border-amber-300 rounded-xl text-xs font-bold text-amber-900">
-                    مالك النظام المحمي (لا يمكن تعديله)
+                  <div className="p-2.5 bg-emerald-50 border border-emerald-300 rounded-xl text-xs font-bold text-emerald-900">
+                    حساب المديرة المعتمد (لا يمكن تعديله)
                   </div>
                 ) : editingUser.email?.trim().toLowerCase() === 'yaradrashed@gmail.com' ? (
                   <div className="p-2.5 bg-slate-100 border border-slate-300 rounded-xl text-xs font-bold text-slate-700">

@@ -554,13 +554,13 @@ class LocalDataStore {
   // Users management (Exclusively fetched from Supabase public.users table)
   private sanitizeUserProfile(u: UserProfile): UserProfile {
     const email = (u.email || '').trim().toLowerCase();
-    const isOwnerAccount = email === OWNER_EMAIL.toLowerCase();
+    const isDirectorAccount = email === OWNER_EMAIL.toLowerCase();
     const isYaraAccount = email === 'yaradrashed@gmail.com';
 
-    let role: SchoolRole = u.school_role || 'student';
-    if (isOwnerAccount) {
-      role = 'owner';
-    } else if (role === 'owner' || isYaraAccount) {
+    let role: SchoolRole = ((u.school_role as any) === 'owner' ? 'director' : u.school_role) || 'student';
+    if (isDirectorAccount) {
+      role = 'director';
+    } else if (isYaraAccount) {
       role = 'student';
     }
 
@@ -592,13 +592,13 @@ class LocalDataStore {
       if (!error && Array.isArray(data)) {
         remoteUsers = data.map((d: any) => {
           const email = (d.email || '').trim().toLowerCase();
-          const isOwnerAccount = email === OWNER_EMAIL.toLowerCase();
+          const isDirectorAccount = email === OWNER_EMAIL.toLowerCase();
           const isYaraAccount = email === 'yaradrashed@gmail.com';
 
-          let role: SchoolRole = d.school_role || 'student';
-          if (isOwnerAccount) {
-            role = 'owner';
-          } else if (role === 'owner' || isYaraAccount) {
+          let role: SchoolRole = (d.school_role === 'owner' ? 'director' : d.school_role) || 'student';
+          if (isDirectorAccount) {
+            role = 'director';
+          } else if (isYaraAccount) {
             role = 'student';
           }
 
@@ -639,13 +639,13 @@ class LocalDataStore {
 
   public async addUser(user: UserProfile): Promise<UserProfile> {
     const cleanEmail = (user.email || '').trim().toLowerCase();
-    const isOwner = cleanEmail === OWNER_EMAIL.toLowerCase();
+    const isDirectorAccount = cleanEmail === OWNER_EMAIL.toLowerCase();
     const isYaraAccount = cleanEmail === 'yaradrashed@gmail.com';
 
-    let resolvedRole: SchoolRole = user.school_role || 'student';
-    if (isOwner) {
-      resolvedRole = 'owner';
-    } else if (resolvedRole === 'owner' || isYaraAccount) {
+    let resolvedRole: SchoolRole = ((user.school_role as any) === 'owner' ? 'director' : user.school_role) || 'student';
+    if (isDirectorAccount) {
+      resolvedRole = 'director';
+    } else if (isYaraAccount) {
       resolvedRole = 'student';
     }
 
@@ -720,13 +720,8 @@ class LocalDataStore {
       (updates.email ? list.find((u) => u.email?.trim().toLowerCase() === updates.email?.trim().toLowerCase()) : null);
 
     const targetEmail = (updates.email || existing?.email || '').trim().toLowerCase();
-    const isOwner = targetEmail === OWNER_EMAIL.toLowerCase();
+    const isDirectorAccount = targetEmail === OWNER_EMAIL.toLowerCase();
     const isYaraAccount = targetEmail === 'yaradrashed@gmail.com';
-
-    // Strict rule: Under NO circumstances can ANY account be promoted or assigned the 'owner' role
-    if (updates.school_role === 'owner' && !isOwner) {
-      throw new Error('يمنع منعاً باتاً ومطلقاً إتاحة رتبة مالك النظام أو الترقية إليها لأي حساب آخر في الموقع.');
-    }
 
     // Strict rule: yaradrashed@gmail.com is strictly locked to 'student'
     if (isYaraAccount && updates.school_role && updates.school_role !== 'student') {
@@ -738,7 +733,7 @@ class LocalDataStore {
       updated_at: new Date().toISOString(),
     };
     if (updates.school_role) {
-      payload.school_role = isOwner ? 'owner' : (isYaraAccount ? 'student' : (updates.school_role === 'owner' ? 'student' : updates.school_role));
+      payload.school_role = isDirectorAccount ? 'director' : (isYaraAccount ? 'student' : ((updates.school_role as any) === 'owner' ? 'director' : updates.school_role));
     }
     if (updates.status) payload.status = updates.status;
     if (updates.name) payload.name = updates.name;

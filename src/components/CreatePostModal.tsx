@@ -30,7 +30,7 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
   defaultType = 'news',
   onSuccess,
 }) => {
-  const { user, profile, hasPerm, isOwner } = useAuth();
+  const { user, profile, hasPerm, isDirector } = useAuth();
 
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
@@ -306,8 +306,8 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
               </select>
             </div>
 
-            {/* Pin Option (Admins / Owner only) */}
-            {isOwner && (
+            {/* Pin Option (Director / Admins only) */}
+            {(isDirector || hasPerm('createPosts')) && (
               <div className="flex items-center justify-between p-2.5 bg-amber-500/10 border border-amber-500/30 rounded-xl mt-4 sm:mt-0">
                 <div className="flex items-center gap-1.5 text-xs font-bold text-amber-300">
                   <Pin className="w-3.5 h-3.5 text-amber-400" />

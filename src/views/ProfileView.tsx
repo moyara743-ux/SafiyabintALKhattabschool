@@ -58,8 +58,7 @@ export const ProfileView: React.FC = () => {
           <p className="text-xs text-emerald-200 font-mono mt-0.5">{user?.email}</p>
           <div className="mt-2.5 flex items-center gap-2">
             <span className="px-3 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-950 border border-amber-400">
-              {profile?.school_role === 'owner' ? 'المديرة العامة (مالك النظام)' :
-               profile?.school_role === 'director' ? 'المديرة' :
+              {profile?.school_role === 'director' ? 'المديرة العامة' :
                profile?.school_role === 'supervisor' ? 'المشرفة' :
                profile?.school_role === 'administrator' ? 'الإدارية ومسؤولة النظام' :
                profile?.school_role === 'counselor' ? 'المرشدة الطلابية' :

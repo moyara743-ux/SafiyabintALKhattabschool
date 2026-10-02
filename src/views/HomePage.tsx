@@ -86,17 +86,16 @@ export const HomePage: React.FC<HomePageProps> = ({
   onOpenCreateAlbum,
   onOpenDailyMessageModal,
 }) => {
-  const { user, profile, hasPerm, isOwner } = useAuth();
+  const { user, profile, hasPerm, isDirector } = useAuth();
 
   // Strict permissions check for "+ إضافة" button in the statistics section ("أرقام وإحصائيات مباشرة")
   // Requirement:
   // - Hidden completely from students, teachers, parents, and unauthenticated visitors
-  // - Visible exclusively to users with Admin role (administrator, director) or System Owner (owner, isOwner)
+  // - Visible exclusively to users with Admin role (administrator, director)
   const canManageStats = !!user && !!profile && (
-    isOwner ||
-    (profile.school_role === 'owner' && profile.email?.toLowerCase() === 'moyara743@gmail.com') ||
     profile.school_role === 'director' ||
-    profile.school_role === 'administrator'
+    profile.school_role === 'administrator' ||
+    profile.email?.toLowerCase() === 'moyara743@gmail.com'
   );
 
   // Dynamic Date calculations
@@ -1061,7 +1060,7 @@ export const HomePage: React.FC<HomePageProps> = ({
               <button
                 onClick={() => onNavigate('admin_dashboard')}
                 className="px-4 py-2 sm:px-5 sm:py-2.5 bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold text-xs sm:text-sm rounded-xl flex items-center gap-1.5 shadow-md border border-amber-300 transition-all hover:scale-105 cursor-pointer"
-                title="إدارة وتحديث إحصائيات المنصة (خاص بالأدمن ومالك النظام)"
+                title="إدارة وتحديث إحصائيات المنصة (خاص بإدارة المدرسة والمديرة)"
               >
                 <Plus className="w-4 h-4 text-emerald-950" />
                 <span>+ إضافة</span>

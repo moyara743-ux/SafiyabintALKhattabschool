@@ -80,6 +80,7 @@ export interface StudentRecord {
   name: string;
   phone: string; // Registered mobile phone for parent linking
   national_id: string; // Mandatory, unique 10-digit national ID
+  access_secret?: string; // Strong cryptographic secret for student login
   birth_date?: string;
   grade_stage: string; // e.g. 'الأول الثانوي', 'الثاني الثانوي', 'الثالث الثانوي'
   classroom?: string; // e.g. '1/1'
@@ -271,7 +272,10 @@ export type ActivityAction =
   | 'LINKING_CODE_REVOKE'
   | 'PARENT_LINK_SUCCESS'
   | 'PARENT_LINK_FAILURE'
-  | 'PARENT_UNLINK';
+  | 'PARENT_UNLINK'
+  | 'ACCOUNT_LOCKED_TEMPORARY'
+  | 'FAILED_LOGIN_ATTEMPT'
+  | 'UNAUTHORIZED_LOGIN_ATTEMPT';
 
 export interface ActivityLog {
   id: string;
@@ -318,3 +322,10 @@ export type PageView =
   | 'activity_log'
   | 'site_settings'
   | 'profile';
+
+declare global {
+  interface Window {
+    google?: any;
+  }
+}
+

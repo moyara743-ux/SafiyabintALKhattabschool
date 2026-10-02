@@ -9,9 +9,23 @@ import {
   canUserManageTarget,
 } from '../lib/permissions';
 import { logActivity } from '../lib/activityLogger';
-import { handleGoogleCredential, authenticateGoogleAccountDirectly } from '../lib/googleAuth';
+import {
+  handleGoogleCredential,
+  authenticateGoogleAccountDirectly,
+  initiateGoogleOAuthLogin,
+} from '../lib/googleAuth';
+import {
+  checkLoginSecurityStatus,
+  recordFailedLoginAttempt,
+  resetLoginSecurityAttempts,
+  validateEmailFormat,
+  verifyStaffCredential,
+  verifyGoogleEmailPreAuthorization,
+} from '../lib/authSecurity';
+import { authenticateStudentByNameAndSecret } from '../lib/studentService';
 
-export const OWNER_EMAIL = 'moyara743@gmail.com';
+export const DIRECTOR_EMAIL = 'moyara743@gmail.com';
+export const OWNER_EMAIL = DIRECTOR_EMAIL;
 
 export interface AppUser {
   id: string;
@@ -32,7 +46,7 @@ interface AuthContextType {
   isDirector: boolean;
   roleLabel: string;
   login: (email: string, pass: string) => Promise<void>;
-  register: (name: string, email: string, pass: string) => Promise<void>;
+  loginStudent: (name: string, secret: string) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
   loginWithGoogleCredential: (credential: string) => Promise<void>;
   loginWithGoogleAccount: (email: string, name?: string, photoURL?: string) => Promise<void>;
@@ -49,51 +63,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Create instant fallback profile from auth user metadata to avoid blocking on DB queries
-  const createFallbackProfile = (authUser: { id: string; email?: string; user_metadata?: any }): UserProfile => {
-    const cleanEmail = (authUser.email || '').trim().toLowerCase();
-    const isOwnerEmail = cleanEmail === OWNER_EMAIL.toLowerCase();
-    const isYaraAccount = cleanEmail === 'yaradrashed@gmail.com';
-
-    // Strict rule: Only OWNER_EMAIL can ever be owner. yaradrashed@gmail.com is strictly student.
-    const initialRole: SchoolRole = isOwnerEmail ? 'owner' : 'student';
-    const initialName =
-      authUser.user_metadata?.full_name ||
-      authUser.user_metadata?.name ||
-      (isOwnerEmail ? 'يارا محمد راشد - مالك النظام' : authUser.email?.split('@')[0] || 'مستخدم');
-
-    return {
-      id: authUser.id,
-      name: initialName,
-      email: cleanEmail,
-      photoURL: authUser.user_metadata?.avatar_url || authUser.user_metadata?.picture || undefined,
-      school_role: initialRole,
-      customPermissions: [],
-      temporaryPermissions: [],
-      status: 'active',
-      createdAt: new Date().toISOString(),
-      lastLoginAt: new Date().toISOString(),
-    };
-  };
-
   // Helper to ensure current session user exists in dataStore & sync with Supabase
   const ensureUserSynced = async (authUser: { id: string; email?: string; user_metadata?: any }): Promise<UserProfile> => {
     const currentId = authUser.id;
     const currentEmail = (authUser.email || '').trim().toLowerCase();
-    const isOwner = currentEmail === OWNER_EMAIL.toLowerCase();
+    const isDirectorEmail = currentEmail === OWNER_EMAIL.toLowerCase();
     const isYaraAccount = currentEmail === 'yaradrashed@gmail.com';
     const currentName =
       authUser.user_metadata?.full_name ||
       authUser.user_metadata?.name ||
-      (isOwner ? 'يارا محمد راشد - مالك النظام' : currentEmail.split('@')[0] || 'مستخدم');
-    const defaultRole: SchoolRole = isOwner ? 'owner' : 'student';
+      (isDirectorEmail ? 'يارا محمد راشد - مديرة المدرسة' : currentEmail.split('@')[0] || 'مستخدم');
+    const defaultRole: SchoolRole = isDirectorEmail ? 'director' : 'student';
 
-    // 1. FRESH FETCH DIRECTLY FROM SUPABASE public.users TABLE (PRIMARY SOURCE OF TRUTH)
+    // 1. FRESH FETCH DIRECTLY FROM SUPABASE public.users TABLE
     let dbUser: any = null;
     try {
       const isValidUuid = Boolean(currentId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(currentId));
 
-      // Attempt 1: Fetch by Auth UUID
       if (isValidUuid) {
         const { data, error } = await supabase.from('users').select('*').eq('id', currentId).maybeSingle();
         if (!error && data) {
@@ -101,7 +87,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
 
-      // Attempt 2: Fetch by exact lowercase email if not found by UUID
       if (!dbUser && currentEmail) {
         const { data, error } = await supabase.from('users').select('*').eq('email', currentEmail).maybeSingle();
         if (!error && data) {
@@ -115,13 +100,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     let activeProfile: UserProfile;
 
     if (dbUser) {
-      // The row exists in Supabase: USE EXACT DATABASE VALUES AS SOLE SOURCE OF TRUTH
-      console.log('[AuthContext] Synced fresh authoritative user profile from Supabase:', dbUser);
       let resolvedRole: SchoolRole = (dbUser.school_role as SchoolRole) || defaultRole;
-      if (isOwner) {
-        resolvedRole = 'owner';
-      } else if (resolvedRole === 'owner' || isYaraAccount) {
-        // Enforce restriction: No non-owner account can have 'owner', and yaradrashed@gmail.com is strictly student
+      if (isDirectorEmail) {
+        resolvedRole = 'director';
+      } else if (isYaraAccount) {
         resolvedRole = 'student';
       }
 
@@ -136,53 +118,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         createdAt: dbUser.created_at || new Date().toISOString(),
         lastLoginAt: new Date().toISOString(),
       };
-      
-      // Update local storage to match the database (WITHOUT overwriting Supabase!)
+
       dataStore.syncUserProfileFromRemote(activeProfile);
     } else {
-      // User row not found in Supabase yet -> Use local store or defaults, then insert into Supabase
-      const localExisting = dataStore.getUserByEmail(currentEmail) || dataStore.getUserById(currentId);
-      let resolvedRole: SchoolRole = isOwner ? 'owner' : (localExisting?.school_role || defaultRole);
-      if (!isOwner && resolvedRole === 'owner') resolvedRole = 'student';
+      // Check dataStore
+      const localUsers = await dataStore.getUsers();
+      const localExisting = localUsers.find((u) => u.email && u.email.trim().toLowerCase() === currentEmail);
+
+      let resolvedRole: SchoolRole = isDirectorEmail ? 'director' : (localExisting?.school_role || defaultRole);
       if (isYaraAccount) resolvedRole = 'student';
 
       activeProfile = {
-        id: currentId,
+        id: localExisting?.id || currentId,
         name: localExisting?.name || currentName,
         email: currentEmail,
         school_role: resolvedRole,
-        customPermissions: isYaraAccount ? [] : (localExisting?.customPermissions || []),
-        temporaryPermissions: isYaraAccount ? [] : (localExisting?.temporaryPermissions || []),
         status: localExisting?.status || 'active',
+        customPermissions: isYaraAccount ? [] : (localExisting?.customPermissions || []),
+        temporaryPermissions: [],
         createdAt: localExisting?.createdAt || new Date().toISOString(),
         lastLoginAt: new Date().toISOString(),
       };
-
-      // Attempt to insert/upsert new row in Supabase users table
-      try {
-        const isValidUuid = Boolean(currentId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(currentId));
-        const upsertPayload: Record<string, any> = {
-          name: activeProfile.name,
-          email: currentEmail,
-          school_role: activeProfile.school_role,
-          status: activeProfile.status,
-          custom_permissions: activeProfile.customPermissions,
-        };
-        if (isValidUuid) {
-          upsertPayload.id = currentId;
-        }
-        const insRes = await supabase.from('users').upsert(upsertPayload, { onConflict: 'email' }).select();
-        if (insRes.data && insRes.data[0]) {
-          const row = insRes.data[0];
-          activeProfile.id = row.id || activeProfile.id;
-          let roleAfterInsert: SchoolRole = (row.school_role as SchoolRole) || activeProfile.school_role;
-          if (isOwner) roleAfterInsert = 'owner';
-          else if (roleAfterInsert === 'owner' || isYaraAccount) roleAfterInsert = 'student';
-          activeProfile.school_role = roleAfterInsert;
-        }
-      } catch (upsertErr) {
-        console.warn('[AuthContext] Notice in DB upsert for new user:', upsertErr);
-      }
 
       dataStore.syncUserProfileFromRemote(activeProfile);
     }
@@ -190,135 +146,109 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return activeProfile;
   };
 
+  // Auth state listener
   useEffect(() => {
     let isMounted = true;
-    let authTimeoutId: any = null;
+    let subscription: any = null;
 
     const stopLoading = () => {
+      if (isMounted) setLoading(false);
+    };
+
+    const authTimeoutId = setTimeout(() => {
       if (isMounted) {
         setLoading(false);
       }
-    };
+    }, 2500);
 
-    // 1. HARD TIMEOUT: Maximum 5 seconds for session verification.
-    authTimeoutId = setTimeout(() => {
-      console.warn('[AuthContext] Auth session check reached 5s timeout. Releasing loading state.');
-      stopLoading();
-    }, 5000);
-
-    const initializeAuth = async () => {
+    const checkInitialSession = async () => {
       try {
-        console.log('[AuthContext] Checking Supabase session...');
-        // Wrap getSession in a promise race with 4.5s internal limit
-        const sessionPromise = supabase.auth.getSession();
-        const timeoutPromise = new Promise<{ data: { session: null }; error: Error }>((resolve) =>
-          setTimeout(() => resolve({ data: { session: null }, error: new Error('getSession timed out') }), 4500)
-        );
-
-        const { data, error } = (await Promise.race([sessionPromise, timeoutPromise])) as any;
-
-        if (error) {
-          console.warn('[AuthContext] getSession result:', error.message);
-        }
-
-        const session = data?.session;
+        const { data: { session } } = await supabase.auth.getSession();
         if (session?.user && isMounted) {
-          const authUser = session.user;
-          const u: AppUser = {
-            id: authUser.id,
-            uid: authUser.id,
-            email: authUser.email,
-            displayName: authUser.user_metadata?.full_name || authUser.user_metadata?.name,
-            user_metadata: authUser.user_metadata,
-          };
-          setUser(u);
+          const email = (session.user.email || '').trim().toLowerCase();
 
-          // Fast initial profile display to unblock UI without delay
-          const fastProfile = dataStore.getUserByEmail(authUser.email || '') || createFallbackProfile(authUser);
-          setProfile(fastProfile);
-
-          // Fetch fresh authoritative profile from Supabase
-          try {
-            const prof = await ensureUserSynced(authUser);
-            if (isMounted && prof) {
-              setProfile(prof);
-            }
-          } catch (e) {
-            console.warn('[AuthContext] Error in ensureUserSynced:', e);
-          }
-        } else if (isMounted) {
-          const storedEmail = localStorage.getItem('school_active_session_email');
-          if (storedEmail) {
-            try {
-              const prof = await ensureUserSynced({ id: '', email: storedEmail });
-              if (isMounted && prof) {
-                setUser({
-                  id: prof.id,
-                  uid: prof.id,
-                  email: prof.email,
-                  displayName: prof.name,
-                });
-                setProfile(prof);
-              }
-            } catch (err) {
-              console.warn('[AuthContext] Error restoring stored session:', err);
+          // Authoritative check if user is allowed to access
+          const authCheck = await verifyGoogleEmailPreAuthorization(email);
+          if (!authCheck.isAuthorized) {
+            console.warn('[AuthContext] Session user not pre-authorized:', email);
+            await supabase.auth.signOut();
+            if (isMounted) {
               setUser(null);
               setProfile(null);
             }
-          } else {
-            setUser(null);
-            setProfile(null);
+            return;
+          }
+
+          const appUser: AppUser = {
+            id: session.user.id,
+            uid: session.user.id,
+            email: session.user.email,
+            displayName: session.user.user_metadata?.name,
+            user_metadata: session.user.user_metadata,
+          };
+          setUser(appUser);
+          const prof = await ensureUserSynced(session.user);
+          if (isMounted) setProfile(prof);
+        } else {
+          // Check local stored session fallback
+          const localSessionEmail = localStorage.getItem('school_active_session_email');
+          if (localSessionEmail && isMounted) {
+            const allUsers = await dataStore.getUsers();
+            const found = allUsers.find(
+              (u) => u.email && u.email.trim().toLowerCase() === localSessionEmail.trim().toLowerCase()
+            );
+            if (found && found.status !== 'disabled') {
+              setUser({
+                id: found.id,
+                uid: found.id,
+                email: found.email,
+                displayName: found.name,
+              });
+              setProfile(found);
+            }
           }
         }
       } catch (err) {
-        console.error('[AuthContext] Unexpected error checking session:', err);
-        if (isMounted) {
-          setUser(null);
-          setProfile(null);
-        }
+        console.warn('[AuthContext] Session init error:', err);
       } finally {
-        if (authTimeoutId) {
-          clearTimeout(authTimeoutId);
-        }
         stopLoading();
       }
     };
 
-    initializeAuth();
+    checkInitialSession();
 
-    // 2. Listen to Supabase Auth state changes
-    let subscription: any = null;
     try {
-      const { data } = supabase.auth.onAuthStateChange(async (event, session) => {
-        console.log('[AuthContext] onAuthStateChange event:', event);
+      const { data } = supabase.auth.onAuthStateChange(async (_event, session) => {
         if (!isMounted) return;
-
         if (session?.user) {
-          const authUser = session.user;
-          const u: AppUser = {
-            id: authUser.id,
-            uid: authUser.id,
-            email: authUser.email,
-            displayName: authUser.user_metadata?.full_name || authUser.user_metadata?.name,
-            user_metadata: authUser.user_metadata,
-          };
-          setUser(u);
+          const email = (session.user.email || '').trim().toLowerCase();
+          const authCheck = await verifyGoogleEmailPreAuthorization(email);
 
-          // Fast profile
-          const fastProfile = dataStore.getUserByEmail(authUser.email || '') || createFallbackProfile(authUser);
-          setProfile(fastProfile);
-
-          try {
-            const prof = await ensureUserSynced(authUser);
-            if (isMounted && prof) {
-              setProfile(prof);
-            }
-          } catch (e) {
-            console.warn('[AuthContext] Profile sync notice:', e);
+          if (!authCheck.isAuthorized) {
+            console.warn('[AuthContext] Auto-signout unauthorized user:', email);
+            await supabase.auth.signOut();
+            setUser(null);
+            setProfile(null);
+            stopLoading();
+            return;
           }
+
+          const appUser: AppUser = {
+            id: session.user.id,
+            uid: session.user.id,
+            email: session.user.email,
+            displayName: session.user.user_metadata?.name,
+            user_metadata: session.user.user_metadata,
+          };
+          setUser(appUser);
+          const prof = await ensureUserSynced(session.user);
+          if (isMounted) setProfile(prof);
         } else {
-          setUser(null);
-          setProfile(null);
+          const localSessionEmail = localStorage.getItem('school_active_session_email');
+          if (!localSessionEmail) {
+            setUser(null);
+            setProfile(null);
+          }
         }
         stopLoading();
       });
@@ -335,141 +265,184 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, []);
 
+  /**
+   * Staff & Parents Email/Password Login
+   * - Rate-limited with lockout after 5 consecutive failed attempts
+   * - Validates email format
+   * - Rejects disabled accounts
+   */
   const login = async (email: string, pass: string) => {
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email: email.trim().toLowerCase(),
-      password: pass,
-    });
+    const cleanEmail = email.trim().toLowerCase();
 
-    if (error) {
-      throw error;
+    // 1. Email format validation
+    if (!validateEmailFormat(cleanEmail)) {
+      throw new Error('يرجى إدخال عنوان بريد إلكتروني صحيح.');
     }
 
-    if (!data.user) {
-      throw new Error('تعذر إتمام تسجيل الدخول');
+    // 2. Brute Force Security Lockout Check
+    const secStatus = checkLoginSecurityStatus(cleanEmail);
+    if (secStatus.isLocked) {
+      throw new Error(
+        `تم قفل الحساب مؤقتاً بسبب تكرار المحاولات الفاشلة. يرجى المحاولة بعد ${secStatus.remainingMinutes} دقيقة أو مراجعة إدارة المدرسة.`
+      );
     }
+
+    let authUser: any = null;
+    let authError: any = null;
+
+    // Attempt 1: Supabase Auth Password Login
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: cleanEmail,
+        password: pass,
+      });
+      if (!error && data?.user) {
+        authUser = data.user;
+      } else {
+        authError = error;
+      }
+    } catch (e: any) {
+      authError = e;
+    }
+
+    // Attempt 2: If Supabase fails, verify local staff credentials (for admin-provisioned staff accounts)
+    if (!authUser) {
+      const isStaffMatch = await verifyStaffCredential(cleanEmail, pass);
+      if (isStaffMatch) {
+        const allUsers = await dataStore.getUsers();
+        const staff = allUsers.find((u) => u.email && u.email.trim().toLowerCase() === cleanEmail);
+        if (staff) {
+          authUser = {
+            id: staff.id,
+            email: cleanEmail,
+            user_metadata: { name: staff.name },
+          };
+          authError = null;
+        }
+      }
+    }
+
+    // Failed Login Handling
+    if (!authUser) {
+      const { isLocked, remainingMinutes, attemptsLeft } = await recordFailedLoginAttempt(
+        cleanEmail,
+        '(محاولة دخول بالبريد وكلمة المرور)'
+      );
+
+      if (isLocked) {
+        throw new Error(
+          `تم تجاوز الحد الأقصى للمحاولات الفاشلة (5 محاولات). تم قفل الحساب مؤقتاً لمدة ${remainingMinutes} دقيقة لدواعي الأمان المدرسية.`
+        );
+      }
+
+      throw new Error(
+        `بيانات الدخول غير صحيحة. متبقي لديكِ ${attemptsLeft} محاولات قبل قفل الحساب مؤقتاً.`
+      );
+    }
+
+    // Reset Failed Attempts Counter on Success
+    resetLoginSecurityAttempts(cleanEmail);
 
     const appUser: AppUser = {
-      id: data.user.id,
-      uid: data.user.id,
-      email: data.user.email,
-      displayName: data.user.user_metadata?.name,
-      user_metadata: data.user.user_metadata,
+      id: authUser.id,
+      uid: authUser.id,
+      email: authUser.email,
+      displayName: authUser.user_metadata?.name,
+      user_metadata: authUser.user_metadata,
     };
     setUser(appUser);
 
-    const userProf = await ensureUserSynced(data.user);
+    const userProf = await ensureUserSynced(authUser);
 
     if (userProf.status === 'disabled') {
       await supabase.auth.signOut();
+      localStorage.removeItem('school_active_session_email');
       setUser(null);
       setProfile(null);
-      throw new Error('تم تعطيل هذا الحساب من قبل إدارة المدرسة. يرجى التواصل مع الإدارة.');
+      throw new Error('تم تعطيل هذا الحساب من قِبل إدارة المدرسة. يرجى التواصل مع الإدارة.');
     }
 
     setProfile(userProf);
+    localStorage.setItem('school_active_session_email', cleanEmail);
 
     // Audit log
     await logActivity({
-      actorId: data.user.id,
+      actorId: authUser.id,
       actorName: userProf.name,
-      actorEmail: data.user.email || '',
+      actorEmail: cleanEmail,
       action: 'LOGIN',
       entity: 'users',
-      entityId: data.user.id,
+      entityId: authUser.id,
       details: `تسجيل دخول ناجح للمستخدم (${ROLE_LABELS_AR[userProf.school_role]})`,
     });
   };
 
-  const register = async (name: string, email: string, pass: string) => {
-    const cleanEmail = email.trim().toLowerCase();
+  /**
+   * Student Login using Name and Secret Code
+   * - Confirms Name and Secret belong to the SAME student
+   * - Rate-limited with lockout after 5 failed attempts
+   */
+  const loginStudent = async (name: string, secret: string) => {
     const cleanName = name.trim();
 
-    // 1. Supabase Auth sign up
-    const { data, error } = await supabase.auth.signUp({
-      email: cleanEmail,
-      password: pass,
-      options: {
-        data: {
-          name: cleanName,
-        },
-      },
-    });
-
-    if (error) {
-      throw error;
+    if (!cleanName || !secret.trim()) {
+      throw new Error('يرجى كتابة اسم الطالبة والسر الخاص بها.');
     }
 
-    if (!data.user) {
-      throw new Error('لم يتم إنشاء المستخدم بنجاح');
+    // Security check on student name/secret identifier
+    const secStatus = checkLoginSecurityStatus(cleanName);
+    if (secStatus.isLocked) {
+      throw new Error(
+        `تم قفل تسجيل الدخول مؤقتاً لهذا الاسم بسبب تكرار المحاولات الفاشلة. يرجى الانتظار لمدة ${secStatus.remainingMinutes} دقيقة أو مراجعة إدارة المدرسة.`
+      );
     }
 
-    const isOwnerEmail = cleanEmail === OWNER_EMAIL.toLowerCase();
-    const initialRole: SchoolRole = isOwnerEmail ? 'owner' : 'student';
-
-    const newProfile: UserProfile = {
-      id: data.user.id,
-      name: cleanName,
-      email: cleanEmail,
-      school_role: initialRole,
-      customPermissions: [],
-      temporaryPermissions: [],
-      status: 'active',
-      createdAt: new Date().toISOString(),
-      lastLoginAt: new Date().toISOString(),
-    };
-
-    // 2. Persist user into dataStore immediately to guarantee zero delay & zero lost users
-    await dataStore.addUser(newProfile);
-
-    // 3. Insert row into Supabase users table
     try {
-      const newRow = {
-        id: data.user.id,
-        name: cleanName,
-        email: cleanEmail,
-        school_role: initialRole,
-        status: 'active',
+      const { student, profile: studentProfile } = await authenticateStudentByNameAndSecret(
+        cleanName,
+        secret
+      );
+
+      resetLoginSecurityAttempts(cleanName);
+
+      const appUser: AppUser = {
+        id: studentProfile.id,
+        uid: studentProfile.id,
+        email: studentProfile.email,
+        displayName: student.name,
       };
 
-      const { error: insertErr } = await supabase.from('users').insert([newRow]);
-      if (insertErr) {
-        console.warn('[AuthContext] Supabase users table insert notice:', insertErr.message);
+      setUser(appUser);
+      setProfile(studentProfile);
+      localStorage.setItem('school_active_session_email', studentProfile.email);
+    } catch (err: any) {
+      const { isLocked, remainingMinutes, attemptsLeft } = await recordFailedLoginAttempt(
+        cleanName,
+        '(محاولة دخول طالبة بالاسم والسر)'
+      );
+
+      if (isLocked) {
+        throw new Error(
+          `تم قفل الدخول مؤقتاً لمدة ${remainingMinutes} دقيقة بعد 5 محاولات فاشلة. يرجى مراجعة إدارة المدرسة لاستلام السر الصحيح.`
+        );
       }
-    } catch (dbErr) {
-      console.warn('[AuthContext] Supabase users table insert exception:', dbErr);
+
+      throw new Error(
+        err?.message || `بيانات الدخول غير صحيحة. متبقي ${attemptsLeft} محاولات قبل القفل المؤقت.`
+      );
     }
-
-    const appUser: AppUser = {
-      id: data.user.id,
-      uid: data.user.id,
-      email: data.user.email,
-      displayName: cleanName,
-      user_metadata: data.user.user_metadata,
-    };
-
-    setUser(appUser);
-    setProfile(newProfile);
-
-    // Audit log
-    await logActivity({
-      actorId: data.user.id,
-      actorName: cleanName,
-      actorEmail: cleanEmail,
-      action: 'CREATE',
-      entity: 'users',
-      entityId: data.user.id,
-      details: `إنشاء حساب جديد بالدور (${ROLE_LABELS_AR[initialRole]})`,
-    });
   };
 
+  /**
+   * Initiates official Google Sign-In redirect
+   */
   const signInWithGoogle = async () => {
-    // Rely exclusively on Google Identity Services (GIS) prompt to avoid provider is not enabled error
-    if (typeof window !== 'undefined' && window.google?.accounts?.id) {
-      window.google.accounts.id.prompt();
-    }
+    await initiateGoogleOAuthLogin();
   };
 
+  /**
+   * Processes Google Credential from Google One Tap / GIS Button
+   */
   const loginWithGoogleCredential = async (credential: string) => {
     setLoading(true);
     try {
@@ -483,25 +456,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
       setUser(appUser);
       setProfile(authedProfile);
-
-      await logActivity({
-        actorId: authedUser.id,
-        actorName: authedProfile.name,
-        actorEmail: authedUser.email || '',
-        action: 'LOGIN',
-        entity: 'users',
-        entityId: authedUser.id,
-        details: `تسجيل دخول ناجح عبر Google Auth SDK (${ROLE_LABELS_AR[authedProfile.school_role]})`,
-      });
+      localStorage.setItem('school_active_session_email', authedUser.email || '');
     } finally {
       setLoading(false);
     }
   };
 
+  /**
+   * Direct Google Account Verification Login (Strict pre-authorization check)
+   */
   const loginWithGoogleAccount = async (email: string, name?: string, photoURL?: string) => {
     setLoading(true);
     try {
-      const { user: authedUser, profile: authedProfile } = await authenticateGoogleAccountDirectly(email, name, photoURL);
+      const { user: authedUser, profile: authedProfile } = await authenticateGoogleAccountDirectly(
+        email,
+        name,
+        photoURL
+      );
       const appUser: AppUser = {
         id: authedUser.id,
         uid: authedUser.id,
@@ -511,18 +482,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
       setUser(appUser);
       setProfile(authedProfile);
-
       localStorage.setItem('school_active_session_email', authedUser.email || '');
-
-      await logActivity({
-        actorId: authedUser.id,
-        actorName: authedProfile.name,
-        actorEmail: authedUser.email || '',
-        action: 'LOGIN',
-        entity: 'users',
-        entityId: authedUser.id,
-        details: `تسجيل دخول ناجح عبر بوابة Google (${ROLE_LABELS_AR[authedProfile.school_role]})`,
-      });
     } finally {
       setLoading(false);
     }
@@ -541,13 +501,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
     }
     localStorage.removeItem('school_active_session_email');
-    await supabase.auth.signOut();
+    try {
+      await supabase.auth.signOut();
+    } catch (e) {
+      // ignore
+    }
     setUser(null);
     setProfile(null);
   };
 
   const resetPassword = async (email: string) => {
-    const { error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase());
+    const cleanEmail = email.trim().toLowerCase();
+    if (!validateEmailFormat(cleanEmail)) {
+      throw new Error('يرجى إدخال بريد إلكتروني صحيح.');
+    }
+    const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail);
     if (error) {
       throw error;
     }
@@ -580,8 +548,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return computeEffectivePermissions(profile);
   }, [profile]);
 
+  const isDirector = Boolean(
+    (user?.email && user.email.trim().toLowerCase() === OWNER_EMAIL.toLowerCase()) ||
+    profile?.school_role === 'director'
+  );
+
   const hasPerm = (permission: PermissionKey): boolean => {
-    if (isOwner) return true;
+    if (isDirector) return true;
     return checkPermission(profile, permission);
   };
 
@@ -590,16 +563,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return canUserManageTarget(profile, target);
   };
 
-  const isOwner = Boolean(
-    (user?.email && user.email.trim().toLowerCase() === OWNER_EMAIL.toLowerCase()) ||
-    (profile?.email && profile.email.trim().toLowerCase() === OWNER_EMAIL.toLowerCase())
-  );
-  const isDirector = isOwner || profile?.school_role === 'director';
-  
+  // Backwards compatibility alias for isOwner -> resolves to isDirector
+  const isOwner = isDirector;
+
   const roleLabel = useMemo(() => {
     const email = (user?.email || profile?.email || '').trim().toLowerCase();
-    if (email === OWNER_EMAIL.toLowerCase()) {
-      return 'مالك النظام';
+    if (email === OWNER_EMAIL.toLowerCase() || profile?.school_role === 'director') {
+      return 'المديرة';
     }
     if (email === 'yaradrashed@gmail.com') {
       return 'الطالبة';
@@ -623,7 +593,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isDirector,
         roleLabel,
         login,
-        register,
+        loginStudent,
         signInWithGoogle,
         loginWithGoogleCredential,
         loginWithGoogleAccount,
