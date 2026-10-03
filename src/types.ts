@@ -10,6 +10,17 @@ export type SchoolRole =
 
 export type UserStatus = 'active' | 'disabled';
 
+// Account lifecycle status as required by the school system:
+// جديد (new), يحتاج إكمال البيانات (needs_completion), مكتمل (completed), موقوف (suspended)
+export type AccountStatus = 'new' | 'needs_completion' | 'completed' | 'suspended';
+
+export const ACCOUNT_STATUS_LABELS_AR: Record<AccountStatus, string> = {
+  new: 'جديد',
+  needs_completion: 'يحتاج إكمال البيانات',
+  completed: 'مكتمل',
+  suspended: 'موقوف',
+};
+
 // 2. Granular Permissions
 export type PermissionKey =
   | 'viewAnnouncements'
@@ -61,6 +72,9 @@ export interface UserProfile {
   email: string;
   photoURL?: string;
   phone?: string;
+  nationalId?: string;
+  specialization?: string;
+  guardianRelation?: string;
   studentIdCode?: string;
   gradeStage?: string;
   classroom?: string;
@@ -70,6 +84,9 @@ export interface UserProfile {
   customPermissions?: PermissionKey[];
   temporaryPermissions?: TemporaryPermission[];
   status: UserStatus;
+  accountStatus?: AccountStatus;
+  googleLinked?: boolean;
+  googleId?: string;
   createdAt: string;
   updatedAt?: string;
   lastLoginAt?: string;
@@ -123,6 +140,16 @@ export type StudentLinkingState =
 
 // 4.4 Parent-Student Relationship
 export type RelationshipType = 'father' | 'mother' | 'guardian';
+
+// 4.5 Role Security Passcodes for Staff (رموز الأمان الوظيفية للمنسوبات)
+export interface StaffRolePasscodes {
+  teacher: string; // رمز المعلمات
+  supervisor: string; // رمز المشرفات
+  administrator: string; // رمز الإداريات
+  counselor: string; // رمز المرشدة الطلابية
+  updatedAt: string;
+  updatedBy?: string;
+}
 
 export interface ParentStudentRelationship {
   id: string;
@@ -277,7 +304,8 @@ export type ActivityAction =
   | 'PARENT_UNLINK'
   | 'ACCOUNT_LOCKED_TEMPORARY'
   | 'FAILED_LOGIN_ATTEMPT'
-  | 'UNAUTHORIZED_LOGIN_ATTEMPT';
+  | 'UNAUTHORIZED_LOGIN_ATTEMPT'
+  | 'PROFILE_COMPLETED';
 
 export interface ActivityLog {
   id: string;

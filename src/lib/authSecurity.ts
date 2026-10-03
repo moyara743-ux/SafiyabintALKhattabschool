@@ -256,6 +256,11 @@ export async function verifyGoogleEmailPreAuthorization(email: string): Promise<
 
   // 1. Fixed Director Account
   if (cleanEmail === 'moyara743@gmail.com') {
+    // Check if director completed profile previously
+    const cachedUsers = await dataStore.getUsers();
+    const existingDirector = cachedUsers.find((u) => u.email === 'moyara743@gmail.com');
+    const isCompleted = existingDirector?.accountStatus === 'completed' || Boolean(existingDirector?.phone);
+
     return {
       isAuthorized: true,
       profile: {
@@ -264,9 +269,97 @@ export async function verifyGoogleEmailPreAuthorization(email: string): Promise<
         email: cleanEmail,
         school_role: 'director',
         status: 'active',
+        accountStatus: isCompleted ? 'completed' : 'needs_completion',
+        phone: existingDirector?.phone || '0501122334',
+        nationalId: existingDirector?.nationalId || '1012345678',
         customPermissions: [],
         temporaryPermissions: [],
         createdAt: '2024-01-01T00:00:00Z',
+      },
+    };
+  }
+
+  // 1.1 Pre-authorized school accounts for each approved role
+  const PRE_AUTHORIZED_ACCOUNTS: Record<string, Partial<UserProfile>> = {
+    'supervisor.safiah@gmail.com': {
+      name: 'أ. منيرة إبراهيم - مشرفة الإدارة المدرسية',
+      school_role: 'supervisor',
+      phone: '0551234567',
+      specialization: 'الإشراف التربوي والتعليمي',
+      accountStatus: 'completed',
+    },
+    'admin.safiah@gmail.com': {
+      name: 'أ. نورة فهد - الشؤون الإدارية',
+      school_role: 'administrator',
+      phone: '0561234567',
+      specialization: 'الشؤون الإدارية والقبول',
+      accountStatus: 'completed',
+    },
+    'counselor.safiah@gmail.com': {
+      name: 'أ. ريم سليمان - التوجيه الطلابي',
+      school_role: 'counselor',
+      phone: '0541234567',
+      specialization: 'التوجيه والإرشاد الطلابي',
+      accountStatus: 'completed',
+    },
+    'teacher.safiah@gmail.com': {
+      name: 'أ. سحر أحمد - معلمة لغة عربية',
+      school_role: 'teacher',
+      phone: '0531234567',
+      specialization: 'اللغة العربية والعلوم الإسلامية',
+      accountStatus: 'completed',
+    },
+    'sarah.safiah@gmail.com': {
+      name: 'سارة محمد راشد العتيبي',
+      school_role: 'student',
+      studentIdCode: 'STU-000251',
+      gradeStage: 'الأول الثانوي',
+      classroom: '1/1',
+      phone: '0501234567',
+      nationalId: '1098765432',
+      accountStatus: 'completed',
+    },
+    'yaradrashed@gmail.com': {
+      name: 'يارا راشد - طالبة',
+      school_role: 'student',
+      studentIdCode: 'STU-000251',
+      gradeStage: 'الأول الثانوي',
+      classroom: '1/1',
+      phone: '0501234567',
+      nationalId: '1098765432',
+      accountStatus: 'completed',
+    },
+    'parent.safiah@gmail.com': {
+      name: 'محمد راشد العتيبي - ولي أمر',
+      school_role: 'parent',
+      phone: '0509876543',
+      nationalId: '1023456789',
+      guardianRelation: 'أب',
+      accountStatus: 'completed',
+    },
+  };
+
+  if (PRE_AUTHORIZED_ACCOUNTS[cleanEmail]) {
+    const seed = PRE_AUTHORIZED_ACCOUNTS[cleanEmail];
+    return {
+      isAuthorized: true,
+      profile: {
+        id: `auth_${cleanEmail.replace(/[^a-z0-9]/g, '_')}`,
+        name: seed.name || cleanEmail.split('@')[0],
+        email: cleanEmail,
+        school_role: seed.school_role || 'student',
+        status: 'active',
+        accountStatus: seed.accountStatus || 'completed',
+        phone: seed.phone,
+        nationalId: seed.nationalId,
+        specialization: seed.specialization,
+        guardianRelation: seed.guardianRelation,
+        studentIdCode: seed.studentIdCode,
+        gradeStage: seed.gradeStage,
+        classroom: seed.classroom,
+        customPermissions: [],
+        temporaryPermissions: [],
+        createdAt: new Date().toISOString(),
       },
     };
   }
@@ -296,6 +389,9 @@ export async function verifyGoogleEmailPreAuthorization(email: string): Promise<
           email: cleanEmail,
           school_role: role,
           status: dbUser.status || 'active',
+          accountStatus: (dbUser.account_status as any) || (dbUser.phone ? 'completed' : 'needs_completion'),
+          phone: dbUser.phone,
+          nationalId: dbUser.national_id,
           customPermissions: Array.isArray(dbUser.custom_permissions) ? dbUser.custom_permissions : [],
           temporaryPermissions: [],
           createdAt: dbUser.created_at || new Date().toISOString(),
@@ -319,13 +415,16 @@ export async function verifyGoogleEmailPreAuthorization(email: string): Promise<
     }
     return {
       isAuthorized: true,
-      profile: foundUser,
+      profile: {
+        ...foundUser,
+        accountStatus: foundUser.accountStatus || (foundUser.phone ? 'completed' : 'needs_completion'),
+      },
     };
   }
 
   // 4. Unauthorized: No pre-existing account in school database
   return {
     isAuthorized: false,
-    reason: `عفواً، البريد الإلكتروني (${cleanEmail}) غير مسجل في المنصة المدرسية. التسجيل الذاتي غير متاح، ويجب اعتماد حسابك أولاً من قِبل إدارة المدرسة.`,
+    reason: 'هذا البريد الإلكتروني غير مرتبط بحساب مصرح به في المدرسة. يرجى التواصل مع إدارة المدرسة.',
   };
 }

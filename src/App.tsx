@@ -43,6 +43,7 @@ import { ParentPortalView } from './views/ParentPortalView';
 import { StudentsManagementView } from './views/StudentsManagementView';
 import { ParentLinkView } from './views/ParentLinkView';
 import { CompleteStudentProfileView } from './views/CompleteStudentProfileView';
+import { CompleteProfileView } from './views/CompleteProfileView';
 import { LoginView } from './views/LoginView';
 
 import { GraduationCap, Shield, Phone, Mail, MapPin, Sparkles } from 'lucide-react';
@@ -121,6 +122,25 @@ function AppContent() {
       )
     ) &&
     Boolean(profile.phone && profile.phone.trim().length >= 9);
+
+  // Universal profile completion check for all school roles (Director, Staff, Student, Parent)
+  const isProfileComplete = Boolean(
+    profile &&
+      (profile.accountStatus === 'completed' ||
+        (profile.school_role === 'student' && isStudentProfileComplete) ||
+        (profile.school_role === 'director' && (profile.phone || profile.accountStatus === 'completed')) ||
+        (profile.school_role !== 'student' &&
+          profile.school_role !== 'parent' &&
+          profile.phone &&
+          (profile.nationalId ||
+            (profile.customPermissions &&
+              profile.customPermissions.some(
+                (p) => typeof p === 'string' && p.startsWith('nid:')
+              )))) ||
+        (profile.school_role === 'parent' &&
+          profile.phone &&
+          (profile.nationalId || profile.accountStatus === 'completed')))
+  );
 
   // Safety timer on authLoading screen
   useEffect(() => {
@@ -322,8 +342,13 @@ function AppContent() {
           </div>
         )}
 
-        {/* Parent Gatekeeper: Unlinked parent cannot access site before linking */}
-        {user && profile?.school_role === 'parent' && !isLinkedParent ? (
+        {/* Universal Profile Gatekeeper: Must complete profile before accessing system */}
+        {user && !isProfileComplete ? (
+          <div className="space-y-6">
+            <CompleteProfileView onComplete={() => setCurrentView('home')} />
+          </div>
+        ) : user && profile?.school_role === 'parent' && !isLinkedParent ? (
+          /* Parent Gatekeeper: Unlinked parent cannot access site before linking */
           <div className="space-y-6">
             <div className="p-4 bg-amber-500/15 border-2 border-amber-500/40 rounded-2xl flex items-center gap-3 text-amber-900">
               <Shield className="w-5 h-5 text-amber-700 shrink-0" />
@@ -335,17 +360,6 @@ function AppContent() {
               onSuccess={() => setCurrentView('parent_portal')}
               onNavigateHome={() => setCurrentView('parent_portal')}
             />
-          </div>
-        ) : user && profile?.school_role === 'student' && !isStudentProfileComplete ? (
-          /* Student Gatekeeper: Must complete student profile before accessing site */
-          <div className="space-y-6">
-            <div className="p-4 bg-emerald-500/15 border-2 border-emerald-500/40 rounded-2xl flex items-center gap-3 text-emerald-950">
-              <GraduationCap className="w-5 h-5 text-emerald-700 shrink-0" />
-              <div className="text-xs sm:text-sm font-bold">
-                مرحباً بكِ في مدرسة صفية بنت عمر الثانوية. يُرجى استكمال بياناتكِ الأساسية المعتمدة أولاً لتفعيل دخولكِ الكامل للمنصة.
-              </div>
-            </div>
-            <CompleteStudentProfileView onComplete={() => setCurrentView('home')} />
           </div>
         ) : (
           <>

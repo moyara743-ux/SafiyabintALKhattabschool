@@ -19,7 +19,19 @@ import {
   CheckCircle2,
   Lock,
   GraduationCap,
+  KeyRound,
+  RefreshCw,
+  Copy,
+  Check,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
+import {
+  getStaffRolePasscodes,
+  updateStaffRolePasscode,
+  generateStrongRolePasscode,
+} from '../lib/passcodeService';
+import { StaffRolePasscodes } from '../types';
 
 interface AdminDashboardProps {
   onNavigate: (view: PageView) => void;
@@ -53,6 +65,44 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   });
   const [recentLogs, setRecentLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Staff Role Passcodes Management State (Principal Passcode Center)
+  const [passcodes, setPasscodes] = useState<StaffRolePasscodes>(getStaffRolePasscodes());
+  const [editPasscodes, setEditPasscodes] = useState<StaffRolePasscodes>(getStaffRolePasscodes());
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [savingKey, setSavingKey] = useState<string | null>(null);
+  const [passcodeSuccessMsg, setPasscodeSuccessMsg] = useState<string | null>(null);
+  const [showPasscodes, setShowPasscodes] = useState<Record<string, boolean>>({
+    teacher: false,
+    supervisor: false,
+    administrator: false,
+    counselor: false,
+  });
+
+  const handleGenerateRandom = (role: 'teacher' | 'supervisor' | 'administrator' | 'counselor') => {
+    const newCode = generateStrongRolePasscode(role);
+    setEditPasscodes((prev) => ({ ...prev, [role]: newCode }));
+  };
+
+  const handleSavePasscode = async (role: 'teacher' | 'supervisor' | 'administrator' | 'counselor') => {
+    setSavingKey(role);
+    try {
+      const updated = await updateStaffRolePasscode(role, editPasscodes[role], profile);
+      setPasscodes(updated);
+      setPasscodeSuccessMsg(`تم تحديث وحفظ رمز أمان (${role}) بنجاح.`);
+      setTimeout(() => setPasscodeSuccessMsg(null), 3000);
+    } catch (e: any) {
+      alert(e?.message || 'تعذر تحديث الرمز');
+    } finally {
+      setSavingKey(null);
+    }
+  };
+
+  const handleCopyCode = (role: string, code: string) => {
+    navigator.clipboard?.writeText(code);
+    setCopiedKey(role);
+    setTimeout(() => setCopiedKey(null), 2000);
+  };
 
   const canAccess =
     hasPerm('accessAdminDashboard') ||
@@ -269,6 +319,280 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           );
         })}
       </div>
+
+      {/* ------------------------------------------------------------- */}
+      {/* SECTION: إدارة رموز المنسوبات (Admin Role Passcodes Control)  */}
+      {/* ------------------------------------------------------------- */}
+      {(isDirector || hasPerm('manageUsers')) && (
+        <div className="bg-white border-2 border-emerald-300/80 rounded-3xl p-6 sm:p-7 shadow-sm space-y-5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-800 flex items-center justify-center">
+                  <KeyRound className="w-4 h-4" />
+                </div>
+                <h3 className="text-base font-extrabold text-emerald-950">
+                  إدارة رموز المنسوبات (Staff Passcodes)
+                </h3>
+              </div>
+              <p className="text-xs text-slate-500 leading-relaxed max-w-2xl">
+                رموز أمان وظيفية عشوائية وصعبة، قابلة للتوليد والتحديث في أي لحظة من قبل المديرة. يُشترط إدخال هذا الرمز مع بريد Google المعتمد عند تسجيل المنسوبة لأول مرة.
+              </p>
+            </div>
+
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-amber-50 text-amber-900 border border-amber-300 text-xs font-bold shrink-0 self-start sm:self-auto">
+              <Shield className="w-3.5 h-3.5 text-amber-700" />
+              <span>المديرة تدخل مباشرة بدون رمز</span>
+            </div>
+          </div>
+
+          {passcodeSuccessMsg && (
+            <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-2xl text-xs font-bold flex items-center gap-2 animate-in fade-in">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span>{passcodeSuccessMsg}</span>
+            </div>
+          )}
+
+          {/* 4 Role Passcodes Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* 1. رمز المعلمات */}
+            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-extrabold text-slate-900 flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-600" />
+                  <span>رمز المعلمات</span>
+                </span>
+                <span className="text-[10px] font-mono text-slate-400">Teacher</span>
+              </div>
+
+              <div className="relative">
+                <input
+                  type={showPasscodes.teacher ? 'text' : 'password'}
+                  value={editPasscodes.teacher}
+                  onChange={(e) =>
+                    setEditPasscodes((prev) => ({ ...prev, teacher: e.target.value }))
+                  }
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-mono font-bold text-slate-900 pr-8 pl-8 tracking-wider"
+                  dir="ltr"
+                />
+                <button
+                  type="button"
+                  onClick={() =>
+                    setShowPasscodes((prev) => ({ ...prev, teacher: !prev.teacher }))
+                  }
+                  className="absolute left-2.5 top-2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                >
+                  {showPasscodes.teacher ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                </button>
+              </div>
+
+              <div className="flex gap-1.5 pt-1">
+                <button
+                  type="button"
+                  onClick={() => handleGenerateRandom('teacher')}
+                  title="توليد رمز عشوائي صعب"
+                  className="p-2 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold transition-colors cursor-pointer"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleCopyCode('teacher', editPasscodes.teacher)}
+                  className="p-2 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold transition-colors cursor-pointer"
+                  title="نسخ الرمز"
+                >
+                  {copiedKey === 'teacher' ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                </button>
+                <button
+                  type="button"
+                  disabled={savingKey === 'teacher'}
+                  onClick={() => handleSavePasscode('teacher')}
+                  className="flex-1 py-1.5 px-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-[11px] font-bold transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  {savingKey === 'teacher' ? 'جارٍ الحفظ...' : 'حفظ وتحديث'}
+                </button>
+              </div>
+            </div>
+
+            {/* 2. رمز المشرفات */}
+            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-extrabold text-slate-900 flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-blue-600" />
+                  <span>رمز المشرفات</span>
+                </span>
+                <span className="text-[10px] font-mono text-slate-400">Supervisor</span>
+              </div>
+
+              <div className="relative">
+                <input
+                  type={showPasscodes.supervisor ? 'text' : 'password'}
+                  value={editPasscodes.supervisor}
+                  onChange={(e) =>
+                    setEditPasscodes((prev) => ({ ...prev, supervisor: e.target.value }))
+                  }
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-mono font-bold text-slate-900 pr-8 pl-8 tracking-wider"
+                  dir="ltr"
+                />
+                <button
+                  type="button"
+                  onClick={() =>
+                    setShowPasscodes((prev) => ({ ...prev, supervisor: !prev.supervisor }))
+                  }
+                  className="absolute left-2.5 top-2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                >
+                  {showPasscodes.supervisor ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                </button>
+              </div>
+
+              <div className="flex gap-1.5 pt-1">
+                <button
+                  type="button"
+                  onClick={() => handleGenerateRandom('supervisor')}
+                  title="توليد رمز عشوائي صعب"
+                  className="p-2 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold transition-colors cursor-pointer"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleCopyCode('supervisor', editPasscodes.supervisor)}
+                  className="p-2 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold transition-colors cursor-pointer"
+                  title="نسخ الرمز"
+                >
+                  {copiedKey === 'supervisor' ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                </button>
+                <button
+                  type="button"
+                  disabled={savingKey === 'supervisor'}
+                  onClick={() => handleSavePasscode('supervisor')}
+                  className="flex-1 py-1.5 px-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-[11px] font-bold transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  {savingKey === 'supervisor' ? 'جارٍ الحفظ...' : 'حفظ وتحديث'}
+                </button>
+              </div>
+            </div>
+
+            {/* 3. رمز الإداريات */}
+            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-extrabold text-slate-900 flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-amber-600" />
+                  <span>رمز الإداريات</span>
+                </span>
+                <span className="text-[10px] font-mono text-slate-400">Admin</span>
+              </div>
+
+              <div className="relative">
+                <input
+                  type={showPasscodes.administrator ? 'text' : 'password'}
+                  value={editPasscodes.administrator}
+                  onChange={(e) =>
+                    setEditPasscodes((prev) => ({ ...prev, administrator: e.target.value }))
+                  }
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-mono font-bold text-slate-900 pr-8 pl-8 tracking-wider"
+                  dir="ltr"
+                />
+                <button
+                  type="button"
+                  onClick={() =>
+                    setShowPasscodes((prev) => ({ ...prev, administrator: !prev.administrator }))
+                  }
+                  className="absolute left-2.5 top-2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                >
+                  {showPasscodes.administrator ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                </button>
+              </div>
+
+              <div className="flex gap-1.5 pt-1">
+                <button
+                  type="button"
+                  onClick={() => handleGenerateRandom('administrator')}
+                  title="توليد رمز عشوائي صعب"
+                  className="p-2 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold transition-colors cursor-pointer"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleCopyCode('administrator', editPasscodes.administrator)}
+                  className="p-2 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold transition-colors cursor-pointer"
+                  title="نسخ الرمز"
+                >
+                  {copiedKey === 'administrator' ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                </button>
+                <button
+                  type="button"
+                  disabled={savingKey === 'administrator'}
+                  onClick={() => handleSavePasscode('administrator')}
+                  className="flex-1 py-1.5 px-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-[11px] font-bold transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  {savingKey === 'administrator' ? 'جارٍ الحفظ...' : 'حفظ وتحديث'}
+                </button>
+              </div>
+            </div>
+
+            {/* 4. رمز المرشدة الطلابية */}
+            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-extrabold text-slate-900 flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-purple-600" />
+                  <span>رمز المرشدة الطلابية</span>
+                </span>
+                <span className="text-[10px] font-mono text-slate-400">Counselor</span>
+              </div>
+
+              <div className="relative">
+                <input
+                  type={showPasscodes.counselor ? 'text' : 'password'}
+                  value={editPasscodes.counselor}
+                  onChange={(e) =>
+                    setEditPasscodes((prev) => ({ ...prev, counselor: e.target.value }))
+                  }
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-mono font-bold text-slate-900 pr-8 pl-8 tracking-wider"
+                  dir="ltr"
+                />
+                <button
+                  type="button"
+                  onClick={() =>
+                    setShowPasscodes((prev) => ({ ...prev, counselor: !prev.counselor }))
+                  }
+                  className="absolute left-2.5 top-2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                >
+                  {showPasscodes.counselor ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                </button>
+              </div>
+
+              <div className="flex gap-1.5 pt-1">
+                <button
+                  type="button"
+                  onClick={() => handleGenerateRandom('counselor')}
+                  title="توليد رمز عشوائي صعب"
+                  className="p-2 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold transition-colors cursor-pointer"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleCopyCode('counselor', editPasscodes.counselor)}
+                  className="p-2 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold transition-colors cursor-pointer"
+                  title="نسخ الرمز"
+                >
+                  {copiedKey === 'counselor' ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                </button>
+                <button
+                  type="button"
+                  disabled={savingKey === 'counselor'}
+                  onClick={() => handleSavePasscode('counselor')}
+                  className="flex-1 py-1.5 px-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-[11px] font-bold transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  {savingKey === 'counselor' ? 'جارٍ الحفظ...' : 'حفظ وتحديث'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Recent Activity Log Preview */}
       <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-4">

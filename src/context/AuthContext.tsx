@@ -13,6 +13,7 @@ import {
   handleGoogleCredential,
   authenticateGoogleAccountDirectly,
   initiateGoogleOAuthLogin,
+  registerOrAuthenticateWithGoogle,
 } from '../lib/googleAuth';
 import {
   checkLoginSecurityStatus,
@@ -50,6 +51,13 @@ interface AuthContextType {
   signInWithGoogle: () => Promise<void>;
   loginWithGoogleCredential: (credential: string) => Promise<void>;
   loginWithGoogleAccount: (email: string, name?: string, photoURL?: string) => Promise<void>;
+  registerWithGoogle: (params: {
+    email: string;
+    role?: SchoolRole;
+    passcode?: string;
+    providedName?: string;
+    photoURL?: string;
+  }) => Promise<{ user: AppUser; profile: UserProfile; isFirstTime: boolean }>;
   logout: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
   updateUserProfile: (displayName: string, photoURL?: string) => Promise<void>;
@@ -159,7 +167,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (isMounted) {
         setLoading(false);
       }
-    }, 2500);
+    }, 600);
 
     const checkInitialSession = async () => {
       try {
@@ -488,6 +496,35 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  /**
+   * Complete Google Registration or Quick Authentication Flow
+   */
+  const registerWithGoogle = async (params: {
+    email: string;
+    role?: SchoolRole;
+    passcode?: string;
+    providedName?: string;
+    photoURL?: string;
+  }): Promise<{ user: AppUser; profile: UserProfile; isFirstTime: boolean }> => {
+    setLoading(true);
+    try {
+      const { user: authedUser, profile: authedProfile, isFirstTime } = await registerOrAuthenticateWithGoogle(params);
+      const appUser: AppUser = {
+        id: authedUser.id,
+        uid: authedUser.id,
+        email: authedUser.email,
+        displayName: authedProfile.name,
+        user_metadata: authedUser.user_metadata,
+      };
+      setUser(appUser);
+      setProfile(authedProfile);
+      localStorage.setItem('school_active_session_email', authedUser.email || '');
+      return { user: appUser, profile: authedProfile, isFirstTime };
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const logout = async () => {
     if (user && profile) {
       await logActivity({
@@ -597,6 +634,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         signInWithGoogle,
         loginWithGoogleCredential,
         loginWithGoogleAccount,
+        registerWithGoogle,
         logout,
         resetPassword,
         updateUserProfile,
