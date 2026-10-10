@@ -45,6 +45,12 @@ import { ParentLinkView } from './views/ParentLinkView';
 import { CompleteStudentProfileView } from './views/CompleteStudentProfileView';
 import { CompleteProfileView } from './views/CompleteProfileView';
 import { LoginView } from './views/LoginView';
+import {
+  SYSTEM_OWNER_EMAIL,
+  isSystemOwner as checkIsSystemOwner,
+  getDesignatedPrincipalEmail,
+  isDesignatedPrincipal,
+} from './lib/principalService';
 
 import { GraduationCap, Shield, Phone, Mail, MapPin, Sparkles } from 'lucide-react';
 
@@ -113,34 +119,82 @@ function AppContent() {
         )));
 
   // Check if student has completed basic required profile with mandatory national ID and mobile phone
+  const studentHasValidNid = Boolean(
+    (profile?.nationalId && profile.nationalId.trim().length === 10) ||
+    (profile?.national_id && profile.national_id.trim().length === 10) ||
+    (profile?.customPermissions &&
+      profile.customPermissions.some(
+        (p) => typeof p === 'string' && p.startsWith('nid:') && p.replace('nid:', '').trim().length === 10
+      ))
+  );
+
+  const studentHasValidPhone = Boolean(
+    profile?.phone &&
+    profile.phone.trim().length >= 10 &&
+    profile.phone.trim().startsWith('05')
+  );
+
+  const studentHasCompletedStatus = Boolean(
+    profile?.is_profile_completed === true ||
+    profile?.is_profile_complete === true ||
+    profile?.accountStatus === 'completed' ||
+    profile?.account_status === 'completed' ||
+    Boolean(profile?.customPermissions?.includes('profile_completed' as any))
+  );
+
+  // Strict Student Profile Guard: Mandatory 10-digit National ID + 10-digit Saudi Mobile + Completed Status
   const isStudentProfileComplete =
     profile?.school_role === 'student' &&
-    Boolean(profile.customPermissions?.includes('profile_completed' as any)) &&
-    Boolean(
-      profile.customPermissions?.some(
-        (p) => typeof p === 'string' && p.startsWith('nid:') && p.replace('nid:', '').trim().length === 10
-      )
-    ) &&
-    Boolean(profile.phone && profile.phone.trim().length >= 9);
+    studentHasValidNid &&
+    studentHasValidPhone &&
+    studentHasCompletedStatus;
 
-  // Universal profile completion check for all school roles (Director, Staff, Student, Parent)
+  // Check if current user is System Owner or Designated Principal
+  const isSystemOwner = Boolean(
+    (user?.email && checkIsSystemOwner(user.email)) ||
+    (profile?.email && checkIsSystemOwner(profile.email))
+  );
+
+  const isPrincipal = Boolean(
+    isSystemOwner ||
+    (user?.email && isDesignatedPrincipal(user.email)) ||
+    (profile?.email && isDesignatedPrincipal(profile.email)) ||
+    profile?.school_role === 'director'
+  );
+
+  // Universal profile completion check:
+  // - System Owner and Principal are strictly exempt from profile completion (enter directly!)
+  // - Students: strictly governed by isStudentProfileComplete (cannot enter without ID + Mobile + completion)
   const isProfileComplete = Boolean(
     profile &&
-      (profile.accountStatus === 'completed' ||
-        (profile.school_role === 'student' && isStudentProfileComplete) ||
-        (profile.school_role === 'director' && (profile.phone || profile.accountStatus === 'completed')) ||
-        (profile.school_role !== 'student' &&
-          profile.school_role !== 'parent' &&
-          profile.phone &&
-          (profile.nationalId ||
-            (profile.customPermissions &&
-              profile.customPermissions.some(
-                (p) => typeof p === 'string' && p.startsWith('nid:')
-              )))) ||
-        (profile.school_role === 'parent' &&
-          profile.phone &&
-          (profile.nationalId || profile.accountStatus === 'completed')))
+      (isSystemOwner ||
+       isPrincipal ||
+       (profile.school_role === 'student'
+         ? isStudentProfileComplete
+         : (profile.accountStatus === 'completed' ||
+            profile.account_status === 'completed' ||
+            profile.is_profile_completed === true ||
+            profile.is_profile_complete === true ||
+            (profile.school_role !== 'student' &&
+              profile.school_role !== 'parent' &&
+              profile.phone &&
+              (profile.nationalId ||
+                profile.national_id ||
+                (profile.customPermissions &&
+                  profile.customPermissions.some(
+                    (p) => typeof p === 'string' && p.startsWith('nid:')
+                  )))) ||
+            (profile.school_role === 'parent' &&
+              profile.phone &&
+              (profile.nationalId || profile.accountStatus === 'completed')))))
   );
+
+  // System Owner immediate redirection: take directly to the Admin Dashboard
+  useEffect(() => {
+    if (isSystemOwner && (currentView === 'home' || (currentView as string) === 'complete_student_profile')) {
+      setCurrentView('admin_dashboard');
+    }
+  }, [isSystemOwner]);
 
   // Safety timer on authLoading screen
   useEffect(() => {
@@ -304,6 +358,14 @@ function AppContent() {
     );
   }
 
+  // Strict Onboarding Guard: Prevent any navigation away from profile completion screen until complete
+  const handleNavigate = (view: PageView) => {
+    if (user && !isProfileComplete) {
+      return;
+    }
+    setCurrentView(view);
+  };
+
   // Mandatory Login Gate: When not authenticated, show LoginView immediately
   if (!user) {
     return <LoginView />;
@@ -317,7 +379,7 @@ function AppContent() {
       {/* Top Navbar */}
       <Navbar
         currentView={currentView}
-        onNavigate={setCurrentView}
+        onNavigate={handleNavigate}
         onOpenAuth={handleOpenAuth}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}

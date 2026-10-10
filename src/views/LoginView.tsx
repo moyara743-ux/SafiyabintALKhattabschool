@@ -24,6 +24,12 @@ import {
   ArrowLeft,
 } from 'lucide-react';
 import { getGoogleClientId, DIRECTOR_EMAIL } from '../lib/googleAuth';
+import {
+  SYSTEM_OWNER_EMAIL,
+  SYSTEM_OWNER_NAME,
+  getDesignatedPrincipalEmail,
+  getDesignatedPrincipalName,
+} from '../lib/principalService';
 import { SchoolRole } from '../types';
 
 export const LoginView: React.FC = () => {
@@ -871,27 +877,24 @@ export const LoginView: React.FC = () => {
                   onChange={(e: any) => setSelectedStaffRole(e.target.value)}
                   className="w-full px-3 py-2 bg-white border border-purple-300 rounded-xl text-xs font-bold text-purple-950 focus:outline-none focus:border-purple-600"
                 >
-                  <option value="director">المديرة (المديرة العامة)</option>
                   <option value="teacher">المعلمة</option>
                   <option value="supervisor">المشرفة التربوية</option>
                   <option value="administrator">الإدارية</option>
                   <option value="counselor">المرشدة الطلابية</option>
                 </select>
 
-                {selectedStaffRole !== 'director' && (
-                  <div>
-                    <label className="block text-[11px] font-bold text-purple-900 mb-1">
-                      رمز الأمان الوظيفي (Passcode) المعتمد من الإدارة:
-                    </label>
-                    <input
-                      type="password"
-                      value={staffPasscode}
-                      onChange={(e) => setStaffPasscode(e.target.value)}
-                      placeholder="رمز الأمان الوظيفي"
-                      className="w-full px-3 py-2 bg-white border border-purple-300 rounded-xl text-xs font-mono text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-purple-600"
-                    />
-                  </div>
-                )}
+                <div>
+                  <label className="block text-[11px] font-bold text-purple-900 mb-1">
+                    رمز الأمان الوظيفي (Passcode) المعتمد من الإدارة:
+                  </label>
+                  <input
+                    type="password"
+                    value={staffPasscode}
+                    onChange={(e) => setStaffPasscode(e.target.value)}
+                    placeholder="رمز الأمان الوظيفي"
+                    className="w-full px-3 py-2 bg-white border border-purple-300 rounded-xl text-xs font-mono text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-purple-600"
+                  />
+                </div>
               </div>
             )}
 
@@ -903,34 +906,86 @@ export const LoginView: React.FC = () => {
                 </div>
 
                 <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
-                  {/* Director Account (Official & Fixed) */}
+                  {/* System Owner Account (Official & Supreme Authority) */}
+                  <button
+                    type="button"
+                    onClick={() => handleProcessGoogleAuth(SYSTEM_OWNER_EMAIL, SYSTEM_OWNER_NAME)}
+                    className="w-full p-3.5 rounded-2xl border-2 border-amber-400 bg-amber-500/10 hover:bg-amber-500/20 text-right flex items-center justify-between transition-all cursor-pointer group shadow-sm"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-amber-600 to-amber-500 text-slate-950 font-black flex items-center justify-center text-sm shadow-md">
+                        <Shield className="w-5 h-5 text-slate-950" />
+                      </div>
+                      <div>
+                        <div className="text-xs font-black text-slate-900 group-hover:text-amber-950 flex items-center gap-1.5">
+                          <span>أ. يارا محمد راشد</span>
+                          <span className="px-2 py-0.5 rounded-md bg-amber-200 text-amber-950 text-[10px] font-black border border-amber-300">
+                            مالك النظام
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-slate-600 font-mono" dir="ltr">
+                          {SYSTEM_OWNER_EMAIL}
+                        </div>
+                      </div>
+                    </div>
+                    <ArrowRight className="w-4 h-4 text-amber-700 rotate-180 opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </button>
+
+                  {/* Designated Principal Account (المديرة) */}
                   {(modalTargetRole === null || modalTargetRole === 'teacher') && (
                     <button
                       type="button"
-                      onClick={() => handleProcessGoogleAuth(DIRECTOR_EMAIL, 'يارا محمد راشد - مديرة المدرسة')}
-                      className="w-full p-3.5 rounded-2xl border-2 border-emerald-400 bg-emerald-50/80 hover:bg-emerald-100/90 text-right flex items-center justify-between transition-all cursor-pointer group shadow-sm"
+                      onClick={() => handleProcessGoogleAuth(getDesignatedPrincipalEmail(), getDesignatedPrincipalName())}
+                      className="w-full p-3.5 rounded-2xl border-2 border-purple-400 bg-purple-50/80 hover:bg-purple-100/90 text-right flex items-center justify-between transition-all cursor-pointer group shadow-sm"
                     >
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-emerald-700 text-white font-black flex items-center justify-center text-sm shadow-md">
+                        <div className="w-10 h-10 rounded-full bg-purple-700 text-white font-black flex items-center justify-center text-sm shadow-md">
                           م
                         </div>
                         <div>
-                          <div className="text-xs font-black text-slate-900 group-hover:text-emerald-950 flex items-center gap-1.5">
-                            <span>أ. يارا محمد راشد</span>
-                            <span className="px-2 py-0.5 rounded-md bg-emerald-200 text-emerald-900 text-[10px] font-extrabold">
-                              المديرة العامة
+                          <div className="text-xs font-black text-slate-900 group-hover:text-purple-950 flex items-center gap-1.5">
+                            <span>{getDesignatedPrincipalName().split('-')[0].trim()}</span>
+                            <span className="px-2 py-0.5 rounded-md bg-purple-200 text-purple-900 text-[10px] font-extrabold">
+                              المديرة
                             </span>
                           </div>
                           <div className="text-[11px] text-slate-600 font-mono" dir="ltr">
-                            {DIRECTOR_EMAIL}
+                            {getDesignatedPrincipalEmail()}
                           </div>
                         </div>
                       </div>
-                      <ArrowRight className="w-4 h-4 text-emerald-700 rotate-180 opacity-0 group-hover:opacity-100 transition-opacity" />
+                      <ArrowRight className="w-4 h-4 text-purple-700 rotate-180 opacity-0 group-hover:opacity-100 transition-opacity" />
                     </button>
                   )}
 
-                  {/* Student Account */}
+                  {/* Student Account: Mona Khaled */}
+                  {(modalTargetRole === null || modalTargetRole === 'student') && (
+                    <button
+                      type="button"
+                      onClick={() => handleProcessGoogleAuth('mona.khaled@gmail.com', 'منى خالد')}
+                      className="w-full p-3 rounded-2xl border border-slate-200 hover:border-emerald-400 hover:bg-slate-50 text-right flex items-center justify-between transition-all cursor-pointer group"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-full bg-emerald-600 text-white font-extrabold flex items-center justify-center text-xs shadow-sm">
+                          م
+                        </div>
+                        <div>
+                          <div className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                            <span>منى خالد</span>
+                            <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[10px] font-bold">
+                              طالبة (STU-467645)
+                            </span>
+                          </div>
+                          <div className="text-[11px] text-slate-500 font-mono" dir="ltr">
+                            mona.khaled@gmail.com
+                          </div>
+                        </div>
+                      </div>
+                      <ArrowRight className="w-4 h-4 text-slate-400 rotate-180 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </button>
+                  )}
+
+                  {/* Student Account: Sarah */}
                   {(modalTargetRole === null || modalTargetRole === 'student') && (
                     <button
                       type="button"

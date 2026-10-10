@@ -259,6 +259,11 @@ export function canAssignRole(actor: UserProfile, newRole: SchoolRole): boolean 
   const actorEmail = (actor.email || '').trim().toLowerCase();
   if (actorEmail === 'yaradrashed@gmail.com') return false;
 
+  // STRICT RULE: Director role is designated exclusively by System Owner (moyara743@gmail.com)
+  if (newRole === 'director') {
+    return actorEmail === 'moyara743@gmail.com';
+  }
+
   const isDirectorActor = actorEmail === 'moyara743@gmail.com' || actor.school_role === 'director';
   if (isDirectorActor) return true;
 

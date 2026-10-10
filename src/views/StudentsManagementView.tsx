@@ -117,7 +117,18 @@ export const StudentsManagementView: React.FC = () => {
       // Fetch linking inspections for each student
       const detailsMap: typeof linkingDetails = {};
       for (const s of studentList) {
-        detailsMap[s.id] = await getStudentLinkingInspection(s.id);
+        try {
+          detailsMap[s.id] = await getStudentLinkingInspection(s.id);
+        } catch (e) {
+          detailsMap[s.id] = {
+            state: 'unlinked',
+            stateLabel: 'غير مرتبطة',
+            activeCode: null,
+            remainingTime: '',
+            linkedRelationship: null,
+            linkedParent: null,
+          };
+        }
       }
       setLinkingDetails(detailsMap);
     } catch (err: any) {

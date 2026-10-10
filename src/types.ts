@@ -73,6 +73,9 @@ export interface UserProfile {
   photoURL?: string;
   phone?: string;
   nationalId?: string;
+  national_id?: string;
+  is_profile_completed?: boolean;
+  is_profile_complete?: boolean;
   specialization?: string;
   guardianRelation?: string;
   studentIdCode?: string;
@@ -85,6 +88,7 @@ export interface UserProfile {
   temporaryPermissions?: TemporaryPermission[];
   status: UserStatus;
   accountStatus?: AccountStatus;
+  account_status?: AccountStatus;
   googleLinked?: boolean;
   googleId?: string;
   createdAt: string;

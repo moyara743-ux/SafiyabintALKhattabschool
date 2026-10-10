@@ -17,6 +17,7 @@ import {
   Plus,
   ArrowLeft,
   CheckCircle2,
+  AlertCircle,
   Lock,
   GraduationCap,
   KeyRound,
@@ -32,6 +33,12 @@ import {
   generateStrongRolePasscode,
 } from '../lib/passcodeService';
 import { StaffRolePasscodes } from '../types';
+import {
+  getDesignatedPrincipalEmail,
+  getDesignatedPrincipalName,
+  updateDesignatedPrincipal,
+  isSystemOwner as checkIsSystemOwner,
+} from '../lib/principalService';
 
 interface AdminDashboardProps {
   onNavigate: (view: PageView) => void;
@@ -78,6 +85,39 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     administrator: false,
     counselor: false,
   });
+
+  // Principal (Director) Governance State (System Owner Exclusive)
+  const isSystemOwner = Boolean(
+    checkIsSystemOwner(user?.email) ||
+    checkIsSystemOwner(profile?.email)
+  );
+  const [directorEmail, setDirectorEmail] = useState(getDesignatedPrincipalEmail());
+  const [directorName, setDirectorName] = useState(getDesignatedPrincipalName());
+  const [savingDirector, setSavingDirector] = useState(false);
+  const [directorSuccessMsg, setDirectorSuccessMsg] = useState<string | null>(null);
+  const [directorErrorMsg, setDirectorErrorMsg] = useState<string | null>(null);
+
+  const handleSaveDirector = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setDirectorErrorMsg(null);
+    setDirectorSuccessMsg(null);
+    setSavingDirector(true);
+    try {
+      const res = await updateDesignatedPrincipal({
+        newEmail: directorEmail,
+        newName: directorName,
+        actorEmail: user?.email || profile?.email || '',
+        actorName: profile?.name || 'مالك النظام',
+        actorId: profile?.id || user?.id || 'owner_id',
+      });
+      setDirectorSuccessMsg(res.message);
+      setTimeout(() => setDirectorSuccessMsg(null), 4000);
+    } catch (err: any) {
+      setDirectorErrorMsg(err?.message || 'تعذر تعيين وتحديث حساب المديرة.');
+    } finally {
+      setSavingDirector(false);
+    }
+  };
 
   const handleGenerateRandom = (role: 'teacher' | 'supervisor' | 'administrator' | 'counselor') => {
     const newCode = generateStrongRolePasscode(role);
@@ -319,6 +359,93 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           );
         })}
       </div>
+
+      {/* ------------------------------------------------------------------- */}
+      {/* SECTION: إدارة وتعيين حساب مديرة المدرسة (خاص بـ مالك النظام حصراً) */}
+      {/* ------------------------------------------------------------------- */}
+      {isSystemOwner && (
+        <div className="bg-gradient-to-br from-amber-50/70 via-white to-amber-50/40 border-2 border-amber-300 rounded-3xl p-6 sm:p-7 shadow-sm space-y-5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-amber-200/60 pb-4">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-900 border border-amber-400/50 flex items-center justify-center font-bold">
+                  <Shield className="w-4 h-4 text-amber-700" />
+                </div>
+                <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
+                  <span>إدارة حساب مديرة المدرسة المعتمد</span>
+                  <span className="px-2 py-0.5 rounded-md bg-amber-200 text-amber-950 text-[10px] font-black border border-amber-300">
+                    صلاحية حصرية لـ [مالك النظام]
+                  </span>
+                </h3>
+              </div>
+              <p className="text-xs text-slate-600 leading-relaxed max-w-2xl">
+                قاعدة أمنية عليا: يوجد حساب <strong>مديرة واحدة فقط</strong> محدد في النظام، ويمنع إنشاء حساب ثانٍ أو التسجيل الذاتي لهذه الرتبة. بصفتكِ <strong>مالك النظام</strong>، أنتِ الجهة الوحيدة المخولة بتعيين أو تغيير البريد الإلكتروني الخاص بحساب المديرة.
+              </p>
+            </div>
+
+            <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-100 text-emerald-950 border border-emerald-300 text-xs font-bold shrink-0 self-start sm:self-auto">
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-700" />
+              <span>المديرة ومالك النظام معفيان من إكمال البيانات</span>
+            </div>
+          </div>
+
+          {directorSuccessMsg && (
+            <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-2xl text-xs font-bold flex items-center gap-2 animate-in fade-in">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span>{directorSuccessMsg}</span>
+            </div>
+          )}
+
+          {directorErrorMsg && (
+            <div className="p-3 bg-rose-50 border border-rose-200 text-rose-900 rounded-2xl text-xs font-bold flex items-center gap-2 animate-in fade-in">
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+              <span>{directorErrorMsg}</span>
+            </div>
+          )}
+
+          <form onSubmit={handleSaveDirector} className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
+            <div>
+              <label className="block text-xs font-bold text-slate-800 mb-1.5">
+                عنوان بريد Google المعتمد للمديرة:
+              </label>
+              <input
+                type="email"
+                required
+                value={directorEmail}
+                onChange={(e) => setDirectorEmail(e.target.value)}
+                placeholder="director.safiah@gmail.com"
+                className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-mono text-slate-900 focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-200"
+                dir="ltr"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-800 mb-1.5">
+                اسم مديرة المدرسة:
+              </label>
+              <input
+                type="text"
+                required
+                value={directorName}
+                onChange={(e) => setDirectorName(e.target.value)}
+                placeholder="أ. هدى الغامدي - مديرة المدرسة"
+                className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-200"
+              />
+            </div>
+
+            <div>
+              <button
+                type="submit"
+                disabled={savingDirector}
+                className="w-full py-2.5 px-4 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-black transition-colors cursor-pointer disabled:opacity-50 shadow-md flex items-center justify-center gap-2"
+              >
+                <Check className="w-4 h-4" />
+                <span>{savingDirector ? 'جارٍ الاعتماد والتعيين...' : 'اعتماد وحفظ حساب المديرة'}</span>
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
 
       {/* ------------------------------------------------------------- */}
       {/* SECTION: إدارة رموز المنسوبات (Admin Role Passcodes Control)  */}

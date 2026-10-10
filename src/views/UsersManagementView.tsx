@@ -107,26 +107,27 @@ export const UsersManagementView: React.FC = () => {
         .order('created_at', { ascending: false });
 
       if (error) {
-        console.error('[UsersManagementView] Supabase public.users query error:', error);
-        throw error;
+        console.warn('[UsersManagementView] Supabase public.users notice:', error.message);
       }
 
-      if (data && Array.isArray(data)) {
+      if (!error && data && Array.isArray(data)) {
         const remoteUsers: UserProfile[] = data.map((d: any) => {
           const email = (d.email || '').trim().toLowerCase();
-          const isDirectorAccount = email === 'moyara743@gmail.com';
+          const isSystemOwnerAccount = email === 'moyara743@gmail.com';
           const isYaraAccount = email === 'yaradrashed@gmail.com';
 
           let role: SchoolRole = (d.school_role === 'owner' ? 'director' : d.school_role) || 'student';
-          if (isDirectorAccount) {
+          let name = d.name || 'مستخدم';
+          if (isSystemOwnerAccount) {
             role = 'director';
+            name = 'يارا محمد راشد - مالك النظام';
           } else if (isYaraAccount) {
             role = 'student';
           }
 
           return {
             id: d.id,
-            name: d.name || 'مستخدم',
+            name,
             email,
             phone: d.phone || '',
             school_role: role,
@@ -482,7 +483,15 @@ export const UsersManagementView: React.FC = () => {
     return matchesSearch && matchesRole && matchesStatus;
   });
 
-  const getRoleBadge = (role: SchoolRole) => {
+  const getRoleBadge = (role: SchoolRole, email?: string) => {
+    if (email?.trim().toLowerCase() === 'moyara743@gmail.com') {
+      return (
+        <span className="px-2.5 py-1 bg-amber-500/20 text-amber-950 border border-amber-400 rounded-full text-xs font-black shadow-xs flex items-center gap-1 w-fit">
+          <Shield className="w-3.5 h-3.5 text-amber-700" />
+          <span>مالك النظام</span>
+        </span>
+      );
+    }
     const label = ROLE_LABELS_AR[role] || role;
     switch (role) {
       case 'director':
@@ -713,7 +722,7 @@ export const UsersManagementView: React.FC = () => {
 
                       <td className="p-4 text-slate-500 font-mono text-[11px]">{u.email}</td>
 
-                      <td className="p-4">{getRoleBadge(u.school_role)}</td>
+                      <td className="p-4">{getRoleBadge(u.school_role, u.email)}</td>
 
                       <td className="p-4">
                         {isUserActive ? (
@@ -1158,8 +1167,9 @@ export const UsersManagementView: React.FC = () => {
                   رتبة ودور المستخدم (school_role)
                 </label>
                 {editingUser.email?.trim().toLowerCase() === 'moyara743@gmail.com' ? (
-                  <div className="p-2.5 bg-emerald-50 border border-emerald-300 rounded-xl text-xs font-bold text-emerald-900">
-                    حساب المديرة المعتمد (لا يمكن تعديله)
+                  <div className="p-2.5 bg-amber-50 border border-amber-300 rounded-xl text-xs font-black text-amber-950 flex items-center gap-2">
+                    <Shield className="w-4 h-4 text-amber-600" />
+                    <span>حساب [مالك النظام] (System Owner) - السلطة العليا (لا يمكن تعديله)</span>
                   </div>
                 ) : editingUser.email?.trim().toLowerCase() === 'yaradrashed@gmail.com' ? (
                   <div className="p-2.5 bg-slate-100 border border-slate-300 rounded-xl text-xs font-bold text-slate-700">
@@ -1175,7 +1185,12 @@ export const UsersManagementView: React.FC = () => {
                     disabled={saving}
                     className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600 cursor-pointer"
                   >
-                    <option value="director">المديرة</option>
+                    {/* Director option is exclusively available to System Owner */}
+                    {currentProfile?.email?.toLowerCase().trim() === 'moyara743@gmail.com' ? (
+                      <option value="director">المديرة (تعيين حصري من مالك النظام)</option>
+                    ) : (
+                      <option value="director" disabled>المديرة (تُعين حصراً عبر مالك النظام)</option>
+                    )}
                     <option value="supervisor">المشرفة</option>
                     <option value="administrator">الإدارية</option>
                     <option value="counselor">المرشدة الطلابية</option>

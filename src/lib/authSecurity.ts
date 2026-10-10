@@ -2,6 +2,12 @@ import { supabase } from '../supabaseClient';
 import { dataStore } from './dataStore';
 import { UserProfile, SchoolRole } from '../types';
 import { logActivity } from './activityLogger';
+import {
+  SYSTEM_OWNER_EMAIL,
+  SYSTEM_OWNER_NAME,
+  getDesignatedPrincipalEmail,
+  getDesignatedPrincipalName,
+} from './principalService';
 
 const STORAGE_KEY_LOGIN_ATTEMPTS = 'safiah_login_security_attempts';
 const STORAGE_KEY_STAFF_CREDS = 'safiah_staff_credentials';
@@ -254,24 +260,44 @@ export async function verifyGoogleEmailPreAuthorization(email: string): Promise<
     };
   }
 
-  // 1. Fixed Director Account
-  if (cleanEmail === 'moyara743@gmail.com') {
-    // Check if director completed profile previously
-    const cachedUsers = await dataStore.getUsers();
-    const existingDirector = cachedUsers.find((u) => u.email === 'moyara743@gmail.com');
-    const isCompleted = existingDirector?.accountStatus === 'completed' || Boolean(existingDirector?.phone);
-
+  // 1. System Owner Account (moyara743@gmail.com)
+  if (cleanEmail === SYSTEM_OWNER_EMAIL.toLowerCase()) {
     return {
       isAuthorized: true,
       profile: {
         id: '00000000-0000-0000-0000-000000000001',
-        name: 'يارا محمد راشد - مديرة المدرسة',
+        name: SYSTEM_OWNER_NAME,
         email: cleanEmail,
         school_role: 'director',
         status: 'active',
-        accountStatus: isCompleted ? 'completed' : 'needs_completion',
-        phone: existingDirector?.phone || '0501122334',
-        nationalId: existingDirector?.nationalId || '1012345678',
+        accountStatus: 'completed',
+        is_profile_completed: true,
+        is_profile_complete: true,
+        phone: '0501122334',
+        nationalId: '1012345678',
+        customPermissions: [],
+        temporaryPermissions: [],
+        createdAt: '2024-01-01T00:00:00Z',
+      },
+    };
+  }
+
+  // 1.1 Designated Single Principal Account
+  const designatedPrincipalEmail = getDesignatedPrincipalEmail().toLowerCase();
+  if (cleanEmail === designatedPrincipalEmail) {
+    return {
+      isAuthorized: true,
+      profile: {
+        id: '00000000-0000-0000-0000-000000000002',
+        name: getDesignatedPrincipalName(),
+        email: cleanEmail,
+        school_role: 'director',
+        status: 'active',
+        accountStatus: 'completed',
+        is_profile_completed: true,
+        is_profile_complete: true,
+        phone: '0509988776',
+        nationalId: '1099887766',
         customPermissions: [],
         temporaryPermissions: [],
         createdAt: '2024-01-01T00:00:00Z',
@@ -309,6 +335,30 @@ export async function verifyGoogleEmailPreAuthorization(email: string): Promise<
       specialization: 'اللغة العربية والعلوم الإسلامية',
       accountStatus: 'completed',
     },
+    'mona.khaled@gmail.com': {
+      name: 'منى خالد',
+      school_role: 'student',
+      studentIdCode: 'STU-467645',
+      gradeStage: 'الأول الثانوي',
+      classroom: '1/1',
+      phone: '',
+      nationalId: '',
+      accountStatus: 'needs_completion',
+      is_profile_completed: false,
+      is_profile_complete: false,
+    },
+    'mona.safiah@gmail.com': {
+      name: 'منى خالد',
+      school_role: 'student',
+      studentIdCode: 'STU-467645',
+      gradeStage: 'الأول الثانوي',
+      classroom: '1/1',
+      phone: '',
+      nationalId: '',
+      accountStatus: 'needs_completion',
+      is_profile_completed: false,
+      is_profile_complete: false,
+    },
     'sarah.safiah@gmail.com': {
       name: 'سارة محمد راشد العتيبي',
       school_role: 'student',
@@ -341,6 +391,13 @@ export async function verifyGoogleEmailPreAuthorization(email: string): Promise<
 
   if (PRE_AUTHORIZED_ACCOUNTS[cleanEmail]) {
     const seed = PRE_AUTHORIZED_ACCOUNTS[cleanEmail];
+    const isStudent = seed.school_role === 'student';
+    const hasStudentNid = Boolean(seed.nationalId && seed.nationalId.trim().length === 10);
+    const hasStudentPhone = Boolean(seed.phone && seed.phone.trim().length >= 10);
+    const isCompleted = isStudent
+      ? (hasStudentNid && hasStudentPhone && seed.accountStatus === 'completed' && seed.is_profile_completed === true)
+      : (seed.accountStatus === 'completed' || Boolean(seed.phone));
+
     return {
       isAuthorized: true,
       profile: {
@@ -349,9 +406,13 @@ export async function verifyGoogleEmailPreAuthorization(email: string): Promise<
         email: cleanEmail,
         school_role: seed.school_role || 'student',
         status: 'active',
-        accountStatus: seed.accountStatus || 'completed',
-        phone: seed.phone,
-        nationalId: seed.nationalId,
+        accountStatus: isCompleted ? 'completed' : 'needs_completion',
+        account_status: isCompleted ? 'completed' : 'needs_completion',
+        is_profile_completed: isCompleted,
+        is_profile_complete: isCompleted,
+        phone: seed.phone || '',
+        nationalId: seed.nationalId || '',
+        national_id: seed.nationalId || '',
         specialization: seed.specialization,
         guardianRelation: seed.guardianRelation,
         studentIdCode: seed.studentIdCode,
@@ -381,6 +442,16 @@ export async function verifyGoogleEmailPreAuthorization(email: string): Promise<
       }
 
       const role: SchoolRole = dbUser.school_role || 'student';
+      const isStudent = role === 'student';
+      const hasStudentNid = Boolean(
+        (dbUser.national_id && dbUser.national_id.trim().length === 10) ||
+        (Array.isArray(dbUser.custom_permissions) && dbUser.custom_permissions.some((p: string) => typeof p === 'string' && p.startsWith('nid:')))
+      );
+      const hasStudentPhone = Boolean(dbUser.phone && dbUser.phone.trim().length >= 10);
+      const isCompleted = isStudent
+        ? (hasStudentNid && hasStudentPhone && (dbUser.is_profile_completed || dbUser.is_profile_complete || dbUser.account_status === 'completed'))
+        : Boolean(dbUser.is_profile_completed || dbUser.is_profile_complete || dbUser.account_status === 'completed' || dbUser.phone);
+
       return {
         isAuthorized: true,
         profile: {
@@ -389,9 +460,16 @@ export async function verifyGoogleEmailPreAuthorization(email: string): Promise<
           email: cleanEmail,
           school_role: role,
           status: dbUser.status || 'active',
-          accountStatus: (dbUser.account_status as any) || (dbUser.phone ? 'completed' : 'needs_completion'),
-          phone: dbUser.phone,
-          nationalId: dbUser.national_id,
+          accountStatus: isCompleted ? 'completed' : 'needs_completion',
+          account_status: isCompleted ? 'completed' : 'needs_completion',
+          is_profile_completed: isCompleted,
+          is_profile_complete: isCompleted,
+          phone: dbUser.phone || '',
+          nationalId: dbUser.national_id || '',
+          national_id: dbUser.national_id || '',
+          studentIdCode: dbUser.student_id_code,
+          gradeStage: dbUser.grade_stage,
+          classroom: dbUser.classroom,
           customPermissions: Array.isArray(dbUser.custom_permissions) ? dbUser.custom_permissions : [],
           temporaryPermissions: [],
           createdAt: dbUser.created_at || new Date().toISOString(),
@@ -413,11 +491,25 @@ export async function verifyGoogleEmailPreAuthorization(email: string): Promise<
         reason: 'هذا الحساب معطل حالياً من قبل إدارة المدرسة.',
       };
     }
+    const isStudent = foundUser.school_role === 'student';
+    const hasStudentNid = Boolean(
+      (foundUser.nationalId && foundUser.nationalId.trim().length === 10) ||
+      (foundUser.national_id && foundUser.national_id.trim().length === 10) ||
+      (foundUser.customPermissions && foundUser.customPermissions.some((p) => typeof p === 'string' && p.startsWith('nid:')))
+    );
+    const hasStudentPhone = Boolean(foundUser.phone && foundUser.phone.trim().length >= 10);
+    const isCompleted = isStudent
+      ? (hasStudentNid && hasStudentPhone && (foundUser.is_profile_completed || foundUser.is_profile_complete || foundUser.accountStatus === 'completed'))
+      : Boolean(foundUser.is_profile_completed || foundUser.is_profile_complete || foundUser.accountStatus === 'completed' || foundUser.phone);
+
     return {
       isAuthorized: true,
       profile: {
         ...foundUser,
-        accountStatus: foundUser.accountStatus || (foundUser.phone ? 'completed' : 'needs_completion'),
+        accountStatus: isCompleted ? 'completed' : 'needs_completion',
+        account_status: isCompleted ? 'completed' : 'needs_completion',
+        is_profile_completed: isCompleted,
+        is_profile_complete: isCompleted,
       },
     };
   }

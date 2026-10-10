@@ -1,7 +1,8 @@
 import { SiteSettings, Post, SchoolEvent, SchoolPhoto, UserProfile } from '../types';
 
-export const DIRECTOR_EMAIL = 'moyara743@gmail.com';
-export const OWNER_EMAIL = DIRECTOR_EMAIL;
+export const SYSTEM_OWNER_EMAIL = 'moyara743@gmail.com';
+export const DIRECTOR_EMAIL = 'director.safiah@gmail.com';
+export const OWNER_EMAIL = SYSTEM_OWNER_EMAIL;
 
 export const INITIAL_USERS: UserProfile[] = [];
 

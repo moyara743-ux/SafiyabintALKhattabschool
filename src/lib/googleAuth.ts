@@ -4,9 +4,16 @@ import { dataStore } from './dataStore';
 import { verifyGoogleEmailPreAuthorization } from './authSecurity';
 import { logActivity } from './activityLogger';
 import { verifyStaffRolePasscode } from './passcodeService';
+import {
+  SYSTEM_OWNER_EMAIL,
+  getDesignatedPrincipalEmail,
+  getDesignatedPrincipalName,
+  isSystemOwner,
+  isDesignatedPrincipal,
+} from './principalService';
 
-export const DIRECTOR_EMAIL = 'moyara743@gmail.com';
-export const OWNER_EMAIL = DIRECTOR_EMAIL;
+export const DIRECTOR_EMAIL = SYSTEM_OWNER_EMAIL;
+export const OWNER_EMAIL = SYSTEM_OWNER_EMAIL;
 
 /**
  * Returns Google OAuth client ID from environment
@@ -220,13 +227,64 @@ export async function authenticateGoogleAccountDirectly(
 }
 
 /**
+ * Helper to check whether a user profile is fully completed according to school security rules.
+ * For students: Requires valid 10-digit National ID AND 10-digit Saudi mobile phone AND completed status.
+ */
+export function isUserProfileCompleted(profile: UserProfile): boolean {
+  const cleanEmail = (profile.email || '').trim().toLowerCase();
+
+  // System Owner and Principal are strictly exempt from profile completion
+  if (
+    isSystemOwner(cleanEmail) ||
+    isDesignatedPrincipal(cleanEmail) ||
+    profile.school_role === 'director' ||
+    (profile.school_role as any) === 'owner' ||
+    (profile.school_role as any) === 'system_owner'
+  ) {
+    return true;
+  }
+
+  if (profile.school_role === 'student') {
+    const hasNid = Boolean(
+      (profile.nationalId && profile.nationalId.trim().length === 10) ||
+      (profile.national_id && profile.national_id.trim().length === 10) ||
+      (profile.customPermissions &&
+        profile.customPermissions.some((p) => typeof p === 'string' && p.startsWith('nid:')))
+    );
+    const hasPhone = Boolean(profile.phone && profile.phone.trim().length >= 10 && profile.phone.trim().startsWith('05'));
+    const isStatusCompleted = Boolean(
+      profile.is_profile_completed === true ||
+      profile.is_profile_complete === true ||
+      profile.accountStatus === 'completed' ||
+      profile.account_status === 'completed' ||
+      profile.customPermissions?.includes('profile_completed' as any)
+    );
+    return hasNid && hasPhone && isStatusCompleted;
+  }
+
+  return Boolean(
+    profile.is_profile_completed ||
+    profile.is_profile_complete ||
+    (profile.accountStatus as string) === 'completed' ||
+    (profile.account_status as string) === 'completed' ||
+    (profile.phone &&
+      Boolean(
+        profile.nationalId ||
+        profile.national_id ||
+        (profile.customPermissions &&
+          profile.customPermissions.some((p) => typeof p === 'string' && p.startsWith('nid:')))
+      ))
+  );
+}
+
+/**
  * Register or Authenticate a User with Google:
  * Implements the complete multi-tier flow required:
  * - Quick Sign-In: If already exists and completed, enters instantly in 1 second.
  * - If not completed: blocks and directs to complete profile.
  * - Staff registration: requires pre-registered email + role passcode.
  * - Student/Parent registration: creates account in 'needs_completion' status.
- * - Principal: moyara743@gmail.com enters directly with full authority.
+ * - System Owner / Principal: enter directly with full authority, exempt from profile completion.
  */
 export async function registerOrAuthenticateWithGoogle(params: {
   email: string;
@@ -241,13 +299,18 @@ export async function registerOrAuthenticateWithGoogle(params: {
     throw new Error('يرجى إدخال عنوان بريد Google صحيح.');
   }
 
-  // 1. Principal (المديرة)
-  if (cleanEmail === DIRECTOR_EMAIL.toLowerCase()) {
+  // Strictly block self-registration as Director
+  if (params.role === 'director' && !isSystemOwner(cleanEmail)) {
+    throw new Error('يمنع منعاً باتاً إنشاء حساب مديرة ثانٍ أو التسجيل الذاتي لرتبة المديرة. حساب المديرة يُعين حصراً عبر مالك النظام.');
+  }
+
+  // 1. System Owner (مالك النظام) or Designated Principal (المديرة)
+  if (isSystemOwner(cleanEmail) || isDesignatedPrincipal(cleanEmail)) {
     const authRes = await authenticateGoogleAccountDirectly(cleanEmail, params.providedName, params.photoURL);
     return {
       user: authRes.user,
       profile: authRes.profile,
-      isFirstTime: authRes.profile.accountStatus !== 'completed',
+      isFirstTime: false,
     };
   }
 
@@ -261,7 +324,7 @@ export async function registerOrAuthenticateWithGoogle(params: {
     }
 
     const authRes = await authenticateGoogleAccountDirectly(cleanEmail, params.providedName, params.photoURL);
-    const isCompleted = authRes.profile.accountStatus === 'completed';
+    const isCompleted = isUserProfileCompleted(authRes.profile);
     return {
       user: authRes.user,
       profile: authRes.profile,
@@ -302,7 +365,7 @@ export async function registerOrAuthenticateWithGoogle(params: {
         displayName: profile.name,
       },
       profile,
-      isFirstTime: profile.accountStatus !== 'completed',
+      isFirstTime: !isUserProfileCompleted(profile),
     };
   }
 
@@ -313,7 +376,7 @@ export async function registerOrAuthenticateWithGoogle(params: {
       return {
         user: { id: existing.profile.id, email: cleanEmail, displayName: existing.profile.name },
         profile: existing.profile,
-        isFirstTime: existing.profile.accountStatus !== 'completed',
+        isFirstTime: !isUserProfileCompleted(existing.profile),
       };
     }
 
@@ -325,6 +388,11 @@ export async function registerOrAuthenticateWithGoogle(params: {
       school_role: 'student',
       status: 'active',
       accountStatus: 'needs_completion',
+      account_status: 'needs_completion',
+      is_profile_completed: false,
+      is_profile_complete: false,
+      phone: '',
+      nationalId: '',
       customPermissions: [],
       temporaryPermissions: [],
       createdAt: new Date().toISOString(),

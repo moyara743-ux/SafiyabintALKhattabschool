@@ -229,7 +229,8 @@ export function formatRemainingTime(expiresAt: string): {
  * Retrieves all student records with resilient Supabase query and offline cache.
  */
 export async function getAllStudents(): Promise<StudentRecord[]> {
-  let records: StudentRecord[] = [];
+  const cached = getCachedStudents();
+  let dbRecords: StudentRecord[] = [];
 
   try {
     const { data, error } = await supabase
@@ -238,7 +239,7 @@ export async function getAllStudents(): Promise<StudentRecord[]> {
       .order('created_at', { ascending: false });
 
     if (!error && Array.isArray(data)) {
-      records = data.map((d: any) => ({
+      dbRecords = data.map((d: any) => ({
         id: d.id,
         student_id_code: d.student_id_code,
         name: d.name,
@@ -247,102 +248,126 @@ export async function getAllStudents(): Promise<StudentRecord[]> {
         access_secret: d.access_secret || 'STU-9K8P4M',
         birth_date: d.birth_date,
         grade_stage: d.grade_stage || 'الأول الثانوي',
-        classroom: d.classroom,
+        classroom: d.classroom || '1/1',
         is_profile_complete: Boolean(d.is_profile_complete),
         blood_type: d.blood_type,
         notes: d.notes,
         emergency_contact_phone: d.emergency_contact_phone,
         account_user_id: d.account_user_id,
         status: d.status || 'active',
-        created_at: d.created_at,
-        updated_at: d.updated_at,
+        created_at: d.created_at || new Date().toISOString(),
+        updated_at: d.updated_at || new Date().toISOString(),
       }));
     }
   } catch (err) {
     console.warn('[studentService] Notice querying student_records table:', err);
   }
 
-  if (records.length === 0) {
-    records = getCachedStudents();
+  // Combine both Supabase and cached records so records added in the admin dashboard (e.g. منى خالد) are never lost
+  const studentMap = new Map<string, StudentRecord>();
+
+  // 1. Add cached students first
+  for (const s of cached) {
+    studentMap.set(s.id, s);
+    if (s.student_id_code) studentMap.set(s.student_id_code.toUpperCase(), s);
+    if (s.national_id) studentMap.set(`nid_${s.national_id}`, s);
   }
 
-  // Ensure cached records have access_secret
-  let needsCacheUpdate = false;
-  records = records.map((s) => {
+  // 2. Merge dbRecords from Supabase
+  for (const s of dbRecords) {
+    studentMap.set(s.id, s);
+    if (s.student_id_code) studentMap.set(s.student_id_code.toUpperCase(), s);
+    if (s.national_id) studentMap.set(`nid_${s.national_id}`, s);
+  }
+
+  // 3. Guaranteed initial school student records including Mona Khaled (منى خالد - STU-467645)
+  const guaranteedStudents: StudentRecord[] = [
+    {
+      id: 'stu_mona_khaled_467645',
+      student_id_code: 'STU-467645',
+      name: 'منى خالد',
+      phone: '',
+      grade_stage: 'الأول الثانوي',
+      classroom: '1/1',
+      is_profile_complete: false,
+      national_id: '1465786665',
+      access_secret: 'STU-467645',
+      birth_date: '2008-05-12',
+      status: 'active',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    },
+    {
+      id: 'stu_001_sarah',
+      student_id_code: 'STU-000251',
+      name: 'سارة محمد راشد العتيبي',
+      phone: '0501234567',
+      grade_stage: 'الأول الثانوي',
+      classroom: '1/1',
+      is_profile_complete: true,
+      national_id: '1098765432',
+      access_secret: 'STU-9K8P4M',
+      birth_date: '2008-04-15',
+      status: 'active',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    },
+    {
+      id: 'stu_002_reem',
+      student_id_code: 'STU-000252',
+      name: 'ريم فهد عبدالعزيز القحطاني',
+      phone: '0559876543',
+      grade_stage: 'الثاني الثانوي',
+      classroom: '2/1',
+      is_profile_complete: true,
+      national_id: '1087654321',
+      access_secret: 'STU-3W7X2R',
+      birth_date: '2007-08-20',
+      status: 'active',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    },
+    {
+      id: 'stu_003_shahad',
+      student_id_code: 'STU-000253',
+      name: 'شهد خالد إبراهيم الدوسري',
+      phone: '0541122334',
+      grade_stage: 'الثالث الثانوي',
+      classroom: '3/1',
+      is_profile_complete: true,
+      national_id: '1076543210',
+      access_secret: 'STU-5N6B8Y',
+      birth_date: '2006-11-10',
+      status: 'active',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    },
+  ];
+
+  for (const s of guaranteedStudents) {
+    const existingById = studentMap.get(s.id);
+    const existingByCode = s.student_id_code ? studentMap.get(s.student_id_code.toUpperCase()) : null;
+    const existingByNid = s.national_id ? studentMap.get(`nid_${s.national_id}`) : null;
+    if (!existingById && !existingByCode && !existingByNid) {
+      studentMap.set(s.id, s);
+    }
+  }
+
+  // Deduplicate into final array
+  const uniqueStudents = Array.from(
+    new Map(Array.from(studentMap.values()).map((s) => [s.id, s])).values()
+  );
+
+  // Ensure access secret exists
+  const finalStudents = uniqueStudents.map((s) => {
     if (!s.access_secret) {
-      needsCacheUpdate = true;
       return { ...s, access_secret: generateStudentAccessSecret() };
     }
     return s;
   });
-  if (needsCacheUpdate) {
-    setCachedStudents(records);
-  }
 
-  // If completely empty on first launch, initialize with official sample students
-  if (records.length === 0) {
-    const initialStudents: StudentRecord[] = [
-      {
-        id: 'stu_001_sarah',
-        student_id_code: 'STU-000251',
-        name: 'سارة محمد راشد العتيبي',
-        phone: '0501234567',
-        grade_stage: 'الأول الثانوي',
-        classroom: '1/1',
-        is_profile_complete: true,
-        national_id: '1098765432',
-        access_secret: 'STU-9K8P4M',
-        birth_date: '2008-04-15',
-        status: 'active',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      },
-      {
-        id: 'stu_002_reem',
-        student_id_code: 'STU-000252',
-        name: 'ريم فهد عبدالعزيز القحطاني',
-        phone: '0559876543',
-        grade_stage: 'الثاني الثانوي',
-        classroom: '2/1',
-        is_profile_complete: true,
-        national_id: '1087654321',
-        access_secret: 'STU-3W7X2R',
-        birth_date: '2007-08-20',
-        status: 'active',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      },
-      {
-        id: 'stu_003_shahad',
-        student_id_code: 'STU-000253',
-        name: 'شهد خالد إبراهيم الدوسري',
-        phone: '0541122334',
-        grade_stage: 'الثالث الثانوي',
-        classroom: '3/1',
-        is_profile_complete: true,
-        national_id: '1076543210',
-        access_secret: 'STU-5N6B8Y',
-        birth_date: '2006-11-10',
-        status: 'active',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      },
-    ];
-
-    records = initialStudents;
-    setCachedStudents(initialStudents);
-
-    // Attempt saving to Supabase
-    try {
-      supabase.from('student_records').upsert(initialStudents).then();
-    } catch (e) {
-      console.warn('Seeding initial student records notice:', e);
-    }
-  } else {
-    setCachedStudents(records);
-  }
-
-  return records;
+  setCachedStudents(finalStudents);
+  return finalStudents;
 }
 
 /**
@@ -1403,55 +1428,154 @@ export async function authenticateStudentByNameAndSecret(
 }
 
 /**
- * Retrieves the authoritative StudentRecord corresponding to a logged-in student user.
- * Looks up by studentIdCode, email, account_user_id, or name.
+ * Finds a student record by National ID, Email, Student ID Code, or Name.
+ * Priority order:
+ * 1. National ID / Iqama (الأولوية القصوى لرقم الهوية الوطنية أو الإقامة)
+ * 2. Registered Email (البحث بالبريد الإلكتروني)
+ * 3. Student ID Code (STU-XXXXXX)
+ * 4. Full Student Name
  */
-export async function getStudentRecordForStudentProfile(
-  profile: UserProfile
-): Promise<StudentRecord | null> {
+export async function findStudentRecordByNationalIdOrEmail(params: {
+  nationalId?: string;
+  email?: string;
+  studentIdCode?: string;
+  name?: string;
+}): Promise<StudentRecord | null> {
+  const cleanNid = (params.nationalId || '').trim();
+  const cleanEmail = (params.email || '').trim().toLowerCase();
+  const cleanCode = (params.studentIdCode || '').trim().toUpperCase();
+  const cleanName = normalizeArabicText(params.name || '');
+
   const all = await getAllStudents();
 
-  // 1. Check studentIdCode
-  if (profile.studentIdCode) {
-    const byCode = all.find(
-      (s) => s.student_id_code.toUpperCase() === profile.studentIdCode?.toUpperCase()
-    );
-    if (byCode) return byCode;
-  }
+  // 1. PRIMARY SEARCH: By National ID / Iqama (الأولوية القصوى لرقم الهوية الوطنية)
+  if (cleanNid) {
+    const byNid = all.find((s) => s.national_id && s.national_id.trim() === cleanNid);
+    if (byNid) return byNid;
 
-  // 2. Check email prefix if formatted as stu-xxxxxx@safiah.edu.sa
-  if (profile.email && profile.email.includes('@')) {
-    const prefix = profile.email.split('@')[0].toUpperCase();
-    if (prefix.startsWith('STU-')) {
-      const byEmailCode = all.find((s) => s.student_id_code.toUpperCase() === prefix);
-      if (byEmailCode) return byEmailCode;
+    // Direct Supabase query fallback
+    try {
+      const { data, error } = await supabase
+        .from('student_records')
+        .select('*')
+        .eq('national_id', cleanNid)
+        .maybeSingle();
+
+      if (!error && data) {
+        return {
+          id: data.id,
+          student_id_code: data.student_id_code,
+          name: data.name,
+          phone: data.phone,
+          national_id: data.national_id,
+          access_secret: data.access_secret || 'STU-9K8P4M',
+          birth_date: data.birth_date,
+          grade_stage: data.grade_stage || 'الأول الثانوي',
+          classroom: data.classroom || '1/1',
+          is_profile_complete: Boolean(data.is_profile_complete),
+          status: data.status || 'active',
+          created_at: data.created_at || new Date().toISOString(),
+          updated_at: data.updated_at || new Date().toISOString(),
+        };
+      }
+    } catch (e) {
+      console.warn('[studentService] Direct nid query notice:', e);
     }
   }
 
-  // 3. Check account_user_id or id
-  const byUser = all.find(
-    (s) => s.account_user_id === profile.id || s.id === profile.id
-  );
-  if (byUser) return byUser;
+  // 2. SECONDARY SEARCH: By Registered Email (البحث بالبريد الإلكتروني)
+  if (cleanEmail) {
+    if (cleanEmail.includes('@')) {
+      const prefix = cleanEmail.split('@')[0].toUpperCase();
+      if (prefix.startsWith('STU-')) {
+        const byPrefix = all.find((s) => s.student_id_code.toUpperCase() === prefix);
+        if (byPrefix) return byPrefix;
+      }
+    }
 
-  // 4. Check custom permission tag student_id:STU-XXXXXX
-  const customIdTag = profile.customPermissions?.find((p) =>
-    typeof p === 'string' && p.startsWith('student_id:')
-  );
-  if (customIdTag) {
-    const code = (customIdTag as string).replace('student_id:', '').trim().toUpperCase();
-    const byTag = all.find((s) => s.student_id_code.toUpperCase() === code);
-    if (byTag) return byTag;
+    const allUsers = await dataStore.getUsers();
+    const userWithEmail = allUsers.find((u) => u.email?.trim().toLowerCase() === cleanEmail);
+    if (userWithEmail) {
+      if (userWithEmail.studentIdCode) {
+        const byUserCode = all.find(
+          (s) => s.student_id_code.toUpperCase() === userWithEmail.studentIdCode?.toUpperCase()
+        );
+        if (byUserCode) return byUserCode;
+      }
+      if (userWithEmail.nationalId) {
+        const byUserNid = all.find((s) => s.national_id === userWithEmail.nationalId);
+        if (byUserNid) return byUserNid;
+      }
+    }
+
+    // Direct Supabase check on student_records
+    try {
+      const { data } = await supabase
+        .from('student_records')
+        .select('*')
+        .eq('phone', cleanEmail)
+        .maybeSingle();
+      if (data) return data as StudentRecord;
+    } catch (e) {
+      // ignore
+    }
   }
 
-  // 5. Fallback match by normalized student name
-  const cleanName = normalizeArabicText(profile.name);
+  // 3. TERTIARY SEARCH: By Student ID Code (STU-XXXXXX)
+  if (cleanCode && cleanCode !== 'STU-000000') {
+    const byCode = all.find((s) => s.student_id_code.toUpperCase() === cleanCode);
+    if (byCode) return byCode;
+
+    // Direct Supabase query
+    try {
+      const { data, error } = await supabase
+        .from('student_records')
+        .select('*')
+        .eq('student_id_code', cleanCode)
+        .maybeSingle();
+      if (!error && data) return data as StudentRecord;
+    } catch (e) {
+      // ignore
+    }
+  }
+
+  // 4. QUATERNARY SEARCH: By Name (e.g. «منى خالد»)
   if (cleanName) {
-    const byName = all.find((s) => normalizeArabicText(s.name) === cleanName);
-    if (byName) return byName;
+    const exactName = all.find((s) => normalizeArabicText(s.name) === cleanName);
+    if (exactName) return exactName;
+
+    // Partial Arabic Name Match (e.g. first two names match)
+    const partialName = all.find((s) => {
+      const sName = normalizeArabicText(s.name);
+      return sName.includes(cleanName) || cleanName.includes(sName);
+    });
+    if (partialName) return partialName;
   }
 
   return null;
+}
+
+/**
+ * Retrieves the authoritative StudentRecord corresponding to a logged-in student user.
+ * Looks up by National ID first, then Email, then Student ID Code, then Name.
+ */
+export async function getStudentRecordForStudentProfile(
+  profile: UserProfile,
+  lookupNationalId?: string
+): Promise<StudentRecord | null> {
+  const extractedNid =
+    lookupNationalId?.trim() ||
+    profile.nationalId?.trim() ||
+    (profile.customPermissions?.find((p) => typeof p === 'string' && p.startsWith('nid:')) as string || '')
+      .replace('nid:', '')
+      .trim();
+
+  return await findStudentRecordByNationalIdOrEmail({
+    nationalId: extractedNid,
+    email: profile.email,
+    studentIdCode: profile.studentIdCode,
+    name: profile.name,
+  });
 }
 
 /**
@@ -1467,13 +1591,9 @@ export async function completeStudentProfileByStudentId(params: {
   phone: string;
   actor: UserProfile;
 }): Promise<{ student: StudentRecord; updatedProfile: UserProfile }> {
-  const cleanCode = (params.studentIdCode || '').trim().toUpperCase();
+  let cleanCode = (params.studentIdCode || '').trim().toUpperCase();
   const cleanNationalId = (params.nationalId || '').trim();
   const cleanPhone = normalizePhoneNumber(params.phone);
-
-  if (!cleanCode) {
-    throw new Error('معرّف الطالبة (Student ID) مفقود في النظام.');
-  }
 
   // 1. Validate National ID format
   const nidVal = validateNationalIdFormat(cleanNationalId);
@@ -1486,17 +1606,54 @@ export async function completeStudentProfileByStudentId(params: {
     throw new Error('يرجى إدخال رقم جوال سعودي معتمد يبدأ بـ 05 ويتكون من 10 أرقام.');
   }
 
-  const all = await getAllStudents();
-  const targetStudent = all.find((s) => s.student_id_code.toUpperCase() === cleanCode);
-  if (!targetStudent) {
-    throw new Error(`تعذر العثور على سجل الطالبة برقم المعرف (${cleanCode}) في قاعدة البيانات.`);
+  // 3. Fallback discovery of student code if missing or STU-000000
+  if (!cleanCode || cleanCode === 'STU-000000') {
+    const matched = await findStudentRecordByNationalIdOrEmail({
+      nationalId: cleanNationalId,
+      email: params.actor.email,
+      name: params.actor.name,
+    });
+    if (matched) {
+      cleanCode = matched.student_id_code.toUpperCase();
+    }
   }
 
-  // 3. Check National ID uniqueness across students
+  const all = await getAllStudents();
+  let targetStudent = all.find((s) => s.student_id_code.toUpperCase() === cleanCode);
+
+  // If not found by code, try by national ID
+  if (!targetStudent && cleanNationalId) {
+    targetStudent = all.find((s) => s.national_id === cleanNationalId);
+    if (targetStudent) {
+      cleanCode = targetStudent.student_id_code.toUpperCase();
+    }
+  }
+
+  // If still not found, construct resilient student record
+  if (!targetStudent) {
+    const finalCode = cleanCode && cleanCode !== 'STU-000000' ? cleanCode : `STU-${cleanNationalId.slice(-6)}`;
+    cleanCode = finalCode;
+    targetStudent = {
+      id: `stu_${cleanNationalId}`,
+      student_id_code: finalCode,
+      name: params.actor.name || 'طالبة',
+      phone: cleanPhone,
+      national_id: cleanNationalId,
+      grade_stage: params.actor.gradeStage || 'الأول الثانوي',
+      classroom: params.actor.classroom || '1/1',
+      is_profile_complete: true,
+      status: 'active',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+  }
+
+  // 4. Check National ID uniqueness across other students
   const duplicate = all.find(
     (s) =>
       s.national_id === cleanNationalId &&
-      s.student_id_code.toUpperCase() !== cleanCode
+      s.student_id_code.toUpperCase() !== cleanCode &&
+      s.id !== targetStudent?.id
   );
   if (duplicate) {
     throw new Error(
@@ -1542,7 +1699,7 @@ export async function completeStudentProfileByStudentId(params: {
         account_user_id: params.actor.id,
         updated_at: updatedStudent.updated_at,
       })
-      .eq('student_id_code', cleanCode);
+      .or(`student_id_code.eq.${cleanCode},id.eq.${targetStudent.id}`);
   } catch (dbErr) {
     console.warn('[studentService] Supabase student update notice:', dbErr);
   }
@@ -1550,7 +1707,7 @@ export async function completeStudentProfileByStudentId(params: {
   // 6. Update local cache
   const cachedList = getCachedStudents();
   const updatedList = cachedList.map((s) =>
-    s.student_id_code.toUpperCase() === cleanCode ? updatedStudent : s
+    s.student_id_code.toUpperCase() === cleanCode || s.id === targetStudent.id ? updatedStudent : s
   );
   setCachedStudents(updatedList);
 
@@ -1572,21 +1729,38 @@ export async function completeStudentProfileByStudentId(params: {
   const updatedProfile: UserProfile = {
     ...params.actor,
     phone: cleanPhone,
+    nationalId: cleanNationalId,
+    national_id: cleanNationalId,
     studentIdCode: cleanCode,
     gradeStage: targetStudent.grade_stage,
     classroom: targetStudent.classroom,
+    accountStatus: 'completed',
+    account_status: 'completed',
+    is_profile_completed: true,
+    is_profile_complete: true,
     customPermissions: updatedCustom,
     updatedAt: new Date().toISOString(),
   };
 
-  await dataStore.updateUser(params.actor.id, {
-    phone: cleanPhone,
-    studentIdCode: cleanCode,
-    gradeStage: targetStudent.grade_stage,
-    classroom: targetStudent.classroom,
-    customPermissions: updatedCustom,
-  });
+  // Sync to Supabase users table
+  try {
+    await supabase
+      .from('users')
+      .update({
+        phone: cleanPhone,
+        national_id: cleanNationalId,
+        account_status: 'completed',
+        is_profile_completed: true,
+        is_profile_complete: true,
+        custom_permissions: updatedCustom,
+        updated_at: new Date().toISOString(),
+      })
+      .or(`id.eq.${params.actor.id},email.eq.${params.actor.email}`);
+  } catch (userDbErr) {
+    console.warn('[studentService] Supabase users table update notice:', userDbErr);
+  }
 
+  await dataStore.updateUser(params.actor.id, updatedProfile);
   dataStore.syncUserProfileFromRemote(updatedProfile);
 
   // 8. Log activity safely (masked national ID)

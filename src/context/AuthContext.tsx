@@ -24,9 +24,18 @@ import {
   verifyGoogleEmailPreAuthorization,
 } from '../lib/authSecurity';
 import { authenticateStudentByNameAndSecret } from '../lib/studentService';
+import {
+  SYSTEM_OWNER_EMAIL,
+  SYSTEM_OWNER_NAME,
+  SYSTEM_OWNER_ROLE_LABEL,
+  getDesignatedPrincipalEmail,
+  getDesignatedPrincipalName,
+  isSystemOwner as checkIsSystemOwner,
+  isDesignatedPrincipal as checkIsDesignatedPrincipal,
+} from '../lib/principalService';
 
-export const DIRECTOR_EMAIL = 'moyara743@gmail.com';
-export const OWNER_EMAIL = DIRECTOR_EMAIL;
+export const DIRECTOR_EMAIL = SYSTEM_OWNER_EMAIL;
+export const OWNER_EMAIL = SYSTEM_OWNER_EMAIL;
 
 export interface AppUser {
   id: string;
@@ -75,13 +84,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const ensureUserSynced = async (authUser: { id: string; email?: string; user_metadata?: any }): Promise<UserProfile> => {
     const currentId = authUser.id;
     const currentEmail = (authUser.email || '').trim().toLowerCase();
-    const isDirectorEmail = currentEmail === OWNER_EMAIL.toLowerCase();
+    const isOwnerAccount = checkIsSystemOwner(currentEmail);
+    const isPrincipalAccount = checkIsDesignatedPrincipal(currentEmail);
     const isYaraAccount = currentEmail === 'yaradrashed@gmail.com';
-    const currentName =
-      authUser.user_metadata?.full_name ||
-      authUser.user_metadata?.name ||
-      (isDirectorEmail ? 'يارا محمد راشد - مديرة المدرسة' : currentEmail.split('@')[0] || 'مستخدم');
-    const defaultRole: SchoolRole = isDirectorEmail ? 'director' : 'student';
+
+    let currentName = authUser.user_metadata?.full_name || authUser.user_metadata?.name;
+    if (isOwnerAccount) {
+      currentName = SYSTEM_OWNER_NAME;
+    } else if (isPrincipalAccount) {
+      currentName = getDesignatedPrincipalName();
+    } else if (!currentName) {
+      currentName = currentEmail.split('@')[0] || 'مستخدم';
+    }
+
+    const defaultRole: SchoolRole = (isOwnerAccount || isPrincipalAccount) ? 'director' : 'student';
 
     // 1. FRESH FETCH DIRECTLY FROM SUPABASE public.users TABLE
     let dbUser: any = null;
@@ -109,18 +125,41 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     if (dbUser) {
       let resolvedRole: SchoolRole = (dbUser.school_role as SchoolRole) || defaultRole;
-      if (isDirectorEmail) {
+      if (isOwnerAccount || isPrincipalAccount) {
         resolvedRole = 'director';
       } else if (isYaraAccount) {
         resolvedRole = 'student';
       }
 
+      const isComp = isOwnerAccount || isPrincipalAccount || Boolean(
+        dbUser.is_profile_completed ||
+        dbUser.is_profile_complete ||
+        dbUser.account_status === 'completed' ||
+        (Array.isArray(dbUser.custom_permissions) && dbUser.custom_permissions.includes('profile_completed'))
+      );
+
+      const resolvedName = isOwnerAccount
+        ? SYSTEM_OWNER_NAME
+        : (isPrincipalAccount ? getDesignatedPrincipalName() : (dbUser.name || currentName));
+
       activeProfile = {
         id: dbUser.id || currentId,
-        name: dbUser.name || currentName,
+        name: resolvedName,
         email: currentEmail,
         school_role: resolvedRole,
         status: dbUser.status === 'disabled' ? 'disabled' : 'active',
+        phone: dbUser.phone || '',
+        nationalId: dbUser.national_id || dbUser.nationalId || '',
+        national_id: dbUser.national_id || dbUser.nationalId || '',
+        accountStatus: (isOwnerAccount || isPrincipalAccount) ? 'completed' : ((dbUser.account_status as any) || (isComp ? 'completed' : 'needs_completion')),
+        account_status: (isOwnerAccount || isPrincipalAccount) ? 'completed' : ((dbUser.account_status as any) || (isComp ? 'completed' : 'needs_completion')),
+        is_profile_completed: isComp,
+        is_profile_complete: isComp,
+        studentIdCode: dbUser.student_id_code || dbUser.studentIdCode,
+        gradeStage: dbUser.grade_stage || dbUser.gradeStage,
+        classroom: dbUser.classroom,
+        specialization: dbUser.specialization,
+        guardianRelation: dbUser.guardian_relation || dbUser.guardianRelation,
         customPermissions: isYaraAccount ? [] : (Array.isArray(dbUser.custom_permissions) ? dbUser.custom_permissions : []),
         temporaryPermissions: [],
         createdAt: dbUser.created_at || new Date().toISOString(),
@@ -133,15 +172,38 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const localUsers = await dataStore.getUsers();
       const localExisting = localUsers.find((u) => u.email && u.email.trim().toLowerCase() === currentEmail);
 
-      let resolvedRole: SchoolRole = isDirectorEmail ? 'director' : (localExisting?.school_role || defaultRole);
+      let resolvedRole: SchoolRole = (isOwnerAccount || isPrincipalAccount) ? 'director' : (localExisting?.school_role || defaultRole);
       if (isYaraAccount) resolvedRole = 'student';
+
+      const isComp = isOwnerAccount || isPrincipalAccount || Boolean(
+        localExisting?.is_profile_completed ||
+        localExisting?.is_profile_complete ||
+        localExisting?.accountStatus === 'completed' ||
+        (Array.isArray(localExisting?.customPermissions) && localExisting?.customPermissions.includes('profile_completed' as any))
+      );
+
+      const resolvedName = isOwnerAccount
+        ? SYSTEM_OWNER_NAME
+        : (isPrincipalAccount ? getDesignatedPrincipalName() : (localExisting?.name || currentName));
 
       activeProfile = {
         id: localExisting?.id || currentId,
-        name: localExisting?.name || currentName,
+        name: resolvedName,
         email: currentEmail,
         school_role: resolvedRole,
         status: localExisting?.status || 'active',
+        phone: localExisting?.phone || '',
+        nationalId: localExisting?.nationalId || localExisting?.national_id || '',
+        national_id: localExisting?.national_id || localExisting?.nationalId || '',
+        accountStatus: (isOwnerAccount || isPrincipalAccount) ? 'completed' : ((localExisting?.accountStatus as any) || (isComp ? 'completed' : 'needs_completion')),
+        account_status: (isOwnerAccount || isPrincipalAccount) ? 'completed' : ((localExisting?.account_status as any) || (isComp ? 'completed' : 'needs_completion')),
+        is_profile_completed: isComp,
+        is_profile_complete: isComp,
+        studentIdCode: localExisting?.studentIdCode,
+        gradeStage: localExisting?.gradeStage,
+        classroom: localExisting?.classroom,
+        specialization: localExisting?.specialization,
+        guardianRelation: localExisting?.guardianRelation,
         customPermissions: isYaraAccount ? [] : (localExisting?.customPermissions || []),
         temporaryPermissions: [],
         createdAt: localExisting?.createdAt || new Date().toISOString(),
@@ -585,13 +647,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return computeEffectivePermissions(profile);
   }, [profile]);
 
+  const isOwner = Boolean(
+    (user?.email && checkIsSystemOwner(user.email)) ||
+    (profile?.email && checkIsSystemOwner(profile.email))
+  );
+
   const isDirector = Boolean(
-    (user?.email && user.email.trim().toLowerCase() === OWNER_EMAIL.toLowerCase()) ||
+    isOwner ||
+    (user?.email && checkIsDesignatedPrincipal(user.email)) ||
+    (profile?.email && checkIsDesignatedPrincipal(profile.email)) ||
     profile?.school_role === 'director'
   );
 
   const hasPerm = (permission: PermissionKey): boolean => {
-    if (isDirector) return true;
+    if (isOwner || isDirector) return true;
     return checkPermission(profile, permission);
   };
 
@@ -600,12 +669,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return canUserManageTarget(profile, target);
   };
 
-  // Backwards compatibility alias for isOwner -> resolves to isDirector
-  const isOwner = isDirector;
-
   const roleLabel = useMemo(() => {
     const email = (user?.email || profile?.email || '').trim().toLowerCase();
-    if (email === OWNER_EMAIL.toLowerCase() || profile?.school_role === 'director') {
+    if (checkIsSystemOwner(email)) {
+      return SYSTEM_OWNER_ROLE_LABEL;
+    }
+    if (checkIsDesignatedPrincipal(email) || profile?.school_role === 'director') {
       return 'المديرة';
     }
     if (email === 'yaradrashed@gmail.com') {
