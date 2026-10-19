@@ -109,6 +109,8 @@ export async function updateStaffRolePasscode(
 
 /**
  * Verifies if the entered passcode matches the designated role passcode
+ * STRICT CONDITION: Must match the database passcode for this exact role.
+ * If user selected 'teacher' and entered the 'supervisor' passcode, rejects completely.
  */
 export function verifyStaffRolePasscode(
   role: 'teacher' | 'supervisor' | 'administrator' | 'counselor',
@@ -119,13 +121,18 @@ export function verifyStaffRolePasscode(
   const actual = (enteredCode || '').trim().toUpperCase();
 
   if (!actual) {
-    return { isValid: false, message: 'يرجى إدخال رمز الأمان الوظيفي.' };
+    return {
+      isValid: false,
+      message: 'تعذر التفعيل، يرجى التأكد من البيانات المدخلة والمحاولة مرة أخرى.',
+    };
   }
 
+  // Strict check: The entered passcode must match the exact authorized passcode for the selected role
+  // Generic error message to prevent brute-force / guessing of roles and codes
   if (actual !== expected) {
     return {
       isValid: false,
-      message: 'رمز الأمان الوظيفي المدخل غير صحيح. يرجى الحصول على الرمز المعتمد من إدارة المدرسة.',
+      message: 'تعذر التفعيل، يرجى التأكد من البيانات المدخلة والمحاولة مرة أخرى.',
     };
   }
 

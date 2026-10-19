@@ -1,8 +1,9 @@
 import { SchoolRole, PermissionKey, UserProfile, TemporaryPermission } from '../types';
 import { getTodayDateString } from './dateUtils';
 
-// 1. Role Levels hierarchy (7 approved school roles - Director is top executive, NO owner)
+// 1. Role Levels hierarchy (System Owner is supreme authority, Director is school head)
 export const ROLE_LEVELS: Record<SchoolRole, number> = {
+  system_owner: 999,
   director: 100,
   supervisor: 80,
   administrator: 70,
@@ -12,8 +13,9 @@ export const ROLE_LEVELS: Record<SchoolRole, number> = {
   student: 10,
 };
 
-// 2. Arabic Role Titles (7 approved school roles)
+// 2. Arabic Role Titles
 export const ROLE_LABELS_AR: Record<SchoolRole, string> = {
+  system_owner: 'مالك النظام',
   director: 'المديرة',
   supervisor: 'المشرفة',
   administrator: 'الإدارية',
@@ -73,6 +75,20 @@ export const ALL_PERMISSIONS: PermissionKey[] = Object.keys(PERMISSION_LABELS_AR
 
 // 4. Default Base Permissions by School Role
 export const ROLE_PERMISSIONS: Record<SchoolRole, PermissionKey[]> = {
+  system_owner: [
+    'viewAnnouncements', 'createAnnouncements', 'editAnnouncements', 'deleteAnnouncements',
+    'viewPosts', 'createPosts', 'editPosts', 'deletePosts',
+    'viewEvents', 'createEvents', 'editEvents', 'deleteEvents',
+    'viewAchievements', 'createAchievements', 'editAchievements', 'deleteAchievements',
+    'viewPhotos', 'createPhotos', 'editPhotos', 'deletePhotos',
+    'viewAlbums', 'createAlbums', 'editAlbums', 'deleteAlbums',
+    'viewDailyMessage', 'createDailyMessage', 'editDailyMessage',
+    'manageUsers', 'changeRoles', 'managePermissions',
+    'manageParentRelationships',
+    'viewActivityLog',
+    'manageSiteSettings',
+  ],
+
   director: [
     'viewAnnouncements', 'createAnnouncements', 'editAnnouncements', 'deleteAnnouncements',
     'viewPosts', 'createPosts', 'editPosts', 'deletePosts',
@@ -216,8 +232,8 @@ export function hasPermission(profile: UserProfile | null, permission: Permissio
 
   const cleanEmail = (profile.email || '').trim().toLowerCase();
 
-  // Director moyara743@gmail.com has full access
-  if (cleanEmail === 'moyara743@gmail.com') return true;
+  // System Owner (moyara743@gmail.com) and Principal have full access
+  if (cleanEmail === 'moyara743@gmail.com' || profile.school_role === 'system_owner') return true;
 
   // STRICT RULE: yaradrashed@gmail.com is strictly a student with NO admin permissions
   if (cleanEmail === 'yaradrashed@gmail.com') {
@@ -237,12 +253,12 @@ export function canUserManageTarget(actor: UserProfile, target: UserProfile): bo
 
   if (actorEmail === 'yaradrashed@gmail.com') return false;
 
-  // Target director account (moyara743@gmail.com) is protected from management by other users
-  if (targetEmail === 'moyara743@gmail.com') {
+  // System Owner account is protected from management by any other users
+  if (targetEmail === 'moyara743@gmail.com' || target.school_role === 'system_owner') {
     return false;
   }
 
-  if (actorEmail === 'moyara743@gmail.com') return true;
+  if (actorEmail === 'moyara743@gmail.com' || actor.school_role === 'system_owner') return true;
 
   if (!hasPermission(actor, 'manageUsers')) return false;
 
@@ -259,12 +275,20 @@ export function canAssignRole(actor: UserProfile, newRole: SchoolRole): boolean 
   const actorEmail = (actor.email || '').trim().toLowerCase();
   if (actorEmail === 'yaradrashed@gmail.com') return false;
 
-  // STRICT RULE: Director role is designated exclusively by System Owner (moyara743@gmail.com)
-  if (newRole === 'director') {
-    return actorEmail === 'moyara743@gmail.com';
+  // System Owner role cannot be assigned to anyone
+  if (newRole === 'system_owner') {
+    return false;
   }
 
-  const isDirectorActor = actorEmail === 'moyara743@gmail.com' || actor.school_role === 'director';
+  // Director role is designated exclusively by System Owner or Current Principal through transfer tool
+  if (newRole === 'director') {
+    return actorEmail === 'moyara743@gmail.com' || actor.school_role === 'system_owner' || actor.school_role === 'director';
+  }
+
+  const isSupreme = actorEmail === 'moyara743@gmail.com' || actor.school_role === 'system_owner';
+  if (isSupreme) return true;
+
+  const isDirectorActor = actor.school_role === 'director';
   if (isDirectorActor) return true;
 
   if (!hasPermission(actor, 'changeRoles')) return false;
@@ -282,8 +306,9 @@ export function canGrantPermission(actor: UserProfile, permission: PermissionKey
   const actorEmail = (actor.email || '').trim().toLowerCase();
   if (actorEmail === 'yaradrashed@gmail.com') return false;
 
+  if (actorEmail === 'moyara743@gmail.com' || actor.school_role === 'system_owner' || actor.school_role === 'director') return true;
+
   if (!hasPermission(actor, 'managePermissions')) return false;
-  if (actorEmail === 'moyara743@gmail.com' || actor.school_role === 'director') return true;
 
   return hasPermission(actor, permission);
 }

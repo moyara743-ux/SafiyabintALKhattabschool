@@ -4,6 +4,8 @@ import { dataStore } from './dataStore';
 import { verifyGoogleEmailPreAuthorization } from './authSecurity';
 import { logActivity } from './activityLogger';
 import { verifyStaffRolePasscode } from './passcodeService';
+import { activateStaffEmail } from './authorizedStaffService';
+import { ROLE_LABELS_AR } from './permissions';
 import {
   SYSTEM_OWNER_EMAIL,
   getDesignatedPrincipalEmail,
@@ -20,30 +22,94 @@ export const OWNER_EMAIL = SYSTEM_OWNER_EMAIL;
  */
 export function getGoogleClientId(): string {
   const envClientId = (((import.meta as any).env?.VITE_GOOGLE_CLIENT_ID) || '').trim();
-  return envClientId;
+  return envClientId || '414952150687-c0u0tcl7sjdci5u3383m9pnl0288q85j.apps.googleusercontent.com';
 }
 
 /**
- * Initiates official Google OAuth Redirect Flow via Supabase Auth.
- * When user returns, their email is strictly verified against pre-existing school accounts.
+ * Constructs the official external Google OAuth 2.0 authorization URL
  */
-export async function initiateGoogleOAuthLogin(): Promise<void> {
-  const redirectTo = typeof window !== 'undefined' ? window.location.origin : undefined;
-  const { error } = await supabase.auth.signInWithOAuth({
-    provider: 'google',
-    options: {
-      redirectTo,
-      queryParams: {
-        access_type: 'offline',
-        prompt: 'consent',
-      },
-    },
+export function buildGoogleOAuthUrl(intent: string = 'quick_login'): string {
+  const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
+  const redirectUri = `${origin}/auth/callback`;
+  const clientId = getGoogleClientId();
+
+  const params = new URLSearchParams({
+    client_id: clientId,
+    redirect_uri: redirectUri,
+    response_type: 'token id_token',
+    scope: 'openid email profile',
+    prompt: 'select_account',
+    nonce: Math.random().toString(36).substring(2),
+    state: intent,
   });
 
-  if (error) {
-    console.error('[GoogleAuth] signInWithOAuth error:', error);
-    throw new Error(error.message || 'تعذر بدء عملية تسجيل الدخول عبر Google');
+  return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
+}
+
+/**
+ * Checks whether a genuine, active Google Cloud Console OAuth Client ID is available.
+ */
+export function isRealGoogleClientIdAvailable(): boolean {
+  const envClientId = getGoogleClientId();
+  return Boolean(envClientId && envClientId.endsWith('.apps.googleusercontent.com'));
+}
+
+/**
+ * Detects whether the current execution is within development, preview, or cloud editor environment.
+ */
+export function isPreviewOrDevEnvironment(): boolean {
+  if (typeof window === 'undefined') return true;
+  const hostname = window.location.hostname;
+  return (
+    hostname === 'localhost' ||
+    hostname === '127.0.0.1' ||
+    hostname.includes('run.app') ||
+    hostname.includes('aistudio') ||
+    Boolean(window.top && window.top !== window)
+  );
+}
+
+/**
+ * Real official Google OAuth is always enabled with genuine VITE_GOOGLE_CLIENT_ID
+ */
+export function shouldUseExternalGoogleOAuth(): boolean {
+  return true;
+}
+
+/**
+ * Redirects user directly to official external Google OAuth page (accounts.google.com)
+ */
+export function redirectToGoogleOAuth(
+  intent: string = 'quick_login'
+): Window | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    localStorage.setItem('safiah_oauth_intent', intent);
+  } catch {}
+
+  const googleAuthUrl = buildGoogleOAuthUrl(intent);
+  const isIframe = typeof window !== 'undefined' && window.top !== window.self;
+
+  // In embedded preview iframe, opening in a new tab avoids Google's X-Frame-Options 403 block
+  if (isIframe) {
+    try {
+      const opened = window.open(googleAuthUrl, '_blank');
+      if (opened) return opened;
+    } catch (err) {
+      console.warn('[Google OAuth] window.open blocked, redirecting window:', err);
+    }
   }
+
+  // Official browser window redirect
+  window.location.href = googleAuthUrl;
+  return null;
+}
+
+/**
+ * Initiates official Google OAuth login with Preview/Production auto-detection
+ */
+export async function initiateGoogleOAuthLogin(intent?: string): Promise<Window | null> {
+  return redirectToGoogleOAuth(intent || 'quick_login');
 }
 
 /**
@@ -113,8 +179,7 @@ export async function handleGoogleCredential(credential: string): Promise<{
     });
 
     throw new Error(
-      authCheck.reason ||
-        'هذا البريد الإلكتروني غير مرتبط بحساب مصرح به في المدرسة. يرجى التواصل مع إدارة المدرسة.'
+      authCheck.reason || 'هذا البريد غير مسجل لدى المدرسة.'
     );
   }
 
@@ -191,8 +256,7 @@ export async function authenticateGoogleAccountDirectly(
     });
 
     throw new Error(
-      authCheck.reason ||
-        'هذا البريد الإلكتروني غير مرتبط بحساب مصرح به في المدرسة. يرجى التواصل مع إدارة المدرسة.'
+      authCheck.reason || 'هذا البريد غير مسجل لدى المدرسة.'
     );
   }
 
@@ -319,7 +383,7 @@ export async function registerOrAuthenticateWithGoogle(params: {
     const authCheck = await verifyGoogleEmailPreAuthorization(cleanEmail);
     if (!authCheck.isAuthorized || !authCheck.profile) {
       throw new Error(
-        'هذا البريد الإلكتروني غير مسجل بعد في المنصة المدرسية. يرجى استخدام قسم «التسجيل لأول مرة» لاختيار فئتك وإكمال بياناتك.'
+        'هذا البريد غير مسجل لدى المدرسة.'
       );
     }
 
@@ -332,40 +396,89 @@ export async function registerOrAuthenticateWithGoogle(params: {
     };
   }
 
-  // 3. Registration: Staff (المعلمة، المشرفة، الإدارية، المرشدة الطلابية)
+  // 3. Registration / First-Time Activation: Staff (المعلمة، المشرفة، الإدارية، المرشدة الطلابية)
   if (['teacher', 'supervisor', 'administrator', 'counselor'].includes(params.role)) {
     const staffRole = params.role as 'teacher' | 'supervisor' | 'administrator' | 'counselor';
 
-    // Condition 1: Must enter correct Role Security Passcode
+    // Condition 1: Must enter correct Role Security Passcode matching THIS EXACT ROLE
     const passcodeValidation = verifyStaffRolePasscode(staffRole, params.passcode || '');
     if (!passcodeValidation.isValid) {
       throw new Error(
         passcodeValidation.message ||
-          'رمز الأمان الوظيفي المدخل غير صحيح. يرجى الحصول على الرمز المعتمد من إدارة المدرسة.'
+          'تعذر التفعيل، يرجى التأكد من البيانات المدخلة والمحاولة مرة أخرى.'
       );
     }
 
-    // Condition 2: Email must be pre-registered by administration in database
+    // Condition 2: Email must be pre-authorized by administration in database
     const authCheck = await verifyGoogleEmailPreAuthorization(cleanEmail);
     if (!authCheck.isAuthorized || !authCheck.profile) {
       throw new Error(
-        'هذا البريد الإلكتروني غير مضاف في قاعدة بيانات منسوبات المدرسة من قبل الإدارة. يرجى مراجعة إدارة المدرسة لإضافة بريدكِ أولاً.'
+        'هذا البريد الإلكتروني غير مضاف في قائمة منسوبات المدرسة المصرح لهن من قبل الإدارة. يرجى التواصل مع إدارة المدرسة لإضافة بريدكِ أولاً.'
       );
     }
 
-    // Authorized staff member with valid passcode
+    // Authorized staff member with valid passcode -> ACTIVATE ACCOUNT IMMEDIATELY!
     const profile = authCheck.profile;
+    const resolvedName = params.providedName?.trim() || profile.name || cleanEmail.split('@')[0];
+
     profile.school_role = staffRole;
+    profile.name = resolvedName;
+    profile.accountStatus = 'completed';
+    profile.account_status = 'completed';
+    profile.is_profile_completed = true;
+    profile.is_profile_complete = true;
+    profile.status = 'active';
+
+    // Mark as activated in authorizedStaffService
+    try {
+      await activateStaffEmail({
+        email: cleanEmail,
+        role: staffRole,
+        name: resolvedName,
+      });
+    } catch (e) {
+      console.warn('[googleAuth] activateStaffEmail notice:', e);
+    }
+
+    // Sync to Supabase
+    try {
+      await supabase.from('users').upsert({
+        id: profile.id,
+        email: cleanEmail,
+        name: resolvedName,
+        school_role: staffRole,
+        account_status: 'completed',
+        status: 'active',
+        is_profile_completed: true,
+        is_profile_complete: true,
+        updated_at: new Date().toISOString(),
+      });
+    } catch (e) {
+      console.warn('[googleAuth] Supabase upsert notice:', e);
+    }
+
+    // Sync to local dataStore
     dataStore.syncUserProfileFromRemote(profile);
+
+    // Audit Log
+    await logActivity({
+      actorId: profile.id,
+      actorName: resolvedName,
+      actorEmail: cleanEmail,
+      action: 'UPDATE_ROLE',
+      entity: 'users',
+      entityId: profile.id,
+      details: `تم تفعيل حساب المنسوبة (${resolvedName}) بنجاح لأول مرة برتبة (${ROLE_LABELS_AR[staffRole]}) بعد التحقق التام من رمز الأمان الوظيفي ومطابقته لقاعدة البيانات`,
+    });
 
     return {
       user: {
         id: profile.id,
         email: cleanEmail,
-        displayName: profile.name,
+        displayName: resolvedName,
       },
       profile,
-      isFirstTime: !isUserProfileCompleted(profile),
+      isFirstTime: false,
     };
   }
 

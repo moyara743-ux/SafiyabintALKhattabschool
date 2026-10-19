@@ -8,6 +8,7 @@ import {
   getDesignatedPrincipalEmail,
   getDesignatedPrincipalName,
 } from './principalService';
+import { isStaffEmailAuthorized } from './authorizedStaffService';
 
 const STORAGE_KEY_LOGIN_ATTEMPTS = 'safiah_login_security_attempts';
 const STORAGE_KEY_STAFF_CREDS = 'safiah_staff_credentials';
@@ -268,7 +269,7 @@ export async function verifyGoogleEmailPreAuthorization(email: string): Promise<
         id: '00000000-0000-0000-0000-000000000001',
         name: SYSTEM_OWNER_NAME,
         email: cleanEmail,
-        school_role: 'director',
+        school_role: 'system_owner',
         status: 'active',
         accountStatus: 'completed',
         is_profile_completed: true,
@@ -305,7 +306,34 @@ export async function verifyGoogleEmailPreAuthorization(email: string): Promise<
     };
   }
 
-  // 1.1 Pre-authorized school accounts for each approved role
+  // 1.2 Check Dynamic Authorized Staff Emails List (Option A - Email added by Admin)
+  const staffAuth = await isStaffEmailAuthorized(cleanEmail);
+  if (staffAuth.isAuthorized && staffAuth.record) {
+    const isCompleted = staffAuth.isActivated;
+    const assignedRole: SchoolRole = (staffAuth.record.assignedRole as SchoolRole) || 'teacher';
+    return {
+      isAuthorized: true,
+      profile: {
+        id: staffAuth.record.id || `auth_${cleanEmail.replace(/[^a-z0-9]/g, '_')}`,
+        name: staffAuth.record.name || cleanEmail.split('@')[0],
+        email: cleanEmail,
+        school_role: assignedRole,
+        status: 'active',
+        accountStatus: isCompleted ? 'completed' : 'needs_completion',
+        account_status: isCompleted ? 'completed' : 'needs_completion',
+        is_profile_completed: isCompleted,
+        is_profile_complete: isCompleted,
+        phone: '',
+        nationalId: '',
+        national_id: '',
+        customPermissions: [],
+        temporaryPermissions: [],
+        createdAt: staffAuth.record.addedAt || new Date().toISOString(),
+      },
+    };
+  }
+
+  // 1.3 Pre-authorized school accounts for each approved role
   const PRE_AUTHORIZED_ACCOUNTS: Record<string, Partial<UserProfile>> = {
     'supervisor.safiah@gmail.com': {
       name: 'أ. منيرة إبراهيم - مشرفة الإدارة المدرسية',
@@ -517,6 +545,6 @@ export async function verifyGoogleEmailPreAuthorization(email: string): Promise<
   // 4. Unauthorized: No pre-existing account in school database
   return {
     isAuthorized: false,
-    reason: 'هذا البريد الإلكتروني غير مرتبط بحساب مصرح به في المدرسة. يرجى التواصل مع إدارة المدرسة.',
+    reason: 'هذا البريد غير مسجل لدى المدرسة.',
   };
 }

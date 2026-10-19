@@ -26,18 +26,34 @@ import {
   Check,
   Eye,
   EyeOff,
+  Trash2,
+  UserPlus,
+  Mail,
+  Search,
+  Filter,
+  Edit2,
+  X,
+  User,
+  Clock,
 } from 'lucide-react';
 import {
   getStaffRolePasscodes,
   updateStaffRolePasscode,
   generateStrongRolePasscode,
 } from '../lib/passcodeService';
-import { StaffRolePasscodes } from '../types';
+import { StaffRolePasscodes, AuthorizedStaffEmail } from '../types';
+import {
+  getAuthorizedStaffEmails,
+  addAuthorizedStaffEmail,
+  removeAuthorizedStaffEmail,
+  updateAuthorizedStaffMember,
+} from '../lib/authorizedStaffService';
 import {
   getDesignatedPrincipalEmail,
   getDesignatedPrincipalName,
   updateDesignatedPrincipal,
   isSystemOwner as checkIsSystemOwner,
+  isDesignatedPrincipal,
 } from '../lib/principalService';
 
 interface AdminDashboardProps {
@@ -86,16 +102,44 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     counselor: false,
   });
 
-  // Principal (Director) Governance State (System Owner Exclusive)
+  // Principal (Director) Governance State (System Owner & Current Principal)
   const isSystemOwner = Boolean(
     checkIsSystemOwner(user?.email) ||
-    checkIsSystemOwner(profile?.email)
+    checkIsSystemOwner(profile?.email) ||
+    profile?.school_role === 'system_owner'
+  );
+  const canManageDirector = Boolean(
+    isSystemOwner ||
+    (user?.email && isDesignatedPrincipal(user.email)) ||
+    (profile?.email && isDesignatedPrincipal(profile.email)) ||
+    profile?.school_role === 'director'
   );
   const [directorEmail, setDirectorEmail] = useState(getDesignatedPrincipalEmail());
   const [directorName, setDirectorName] = useState(getDesignatedPrincipalName());
   const [savingDirector, setSavingDirector] = useState(false);
   const [directorSuccessMsg, setDirectorSuccessMsg] = useState<string | null>(null);
   const [directorErrorMsg, setDirectorErrorMsg] = useState<string | null>(null);
+
+  // Authorized Staff Emails State (Option A: Adding email only, role bound via passcode)
+  const [authorizedStaffList, setAuthorizedStaffList] = useState<AuthorizedStaffEmail[]>([]);
+  const [newStaffEmail, setNewStaffEmail] = useState('');
+  const [newStaffName, setNewStaffName] = useState('');
+  const [addingStaff, setAddingStaff] = useState(false);
+  const [showAddStaffModal, setShowAddStaffModal] = useState(false);
+  const [staffListSuccessMsg, setStaffListSuccessMsg] = useState<string | null>(null);
+  const [staffListErrorMsg, setStaffListErrorMsg] = useState<string | null>(null);
+  const [staffToDelete, setStaffToDelete] = useState<{ email: string; name?: string } | null>(null);
+  const [deletingStaff, setDeletingStaff] = useState(false);
+
+  // Dedicated Staff Search, Filter & Edit States
+  const [staffSearchQuery, setStaffSearchQuery] = useState('');
+  const [staffRoleFilter, setStaffRoleFilter] = useState<string>('all');
+  const [staffStatusFilter, setStaffStatusFilter] = useState<'all' | 'activated' | 'pending'>('all');
+  const [editingStaff, setEditingStaff] = useState<AuthorizedStaffEmail | null>(null);
+  const [editStaffEmail, setEditStaffEmail] = useState('');
+  const [editStaffName, setEditStaffName] = useState('');
+  const [editStaffRole, setEditStaffRole] = useState<'teacher' | 'supervisor' | 'administrator' | 'counselor' | undefined>(undefined);
+  const [savingEditStaff, setSavingEditStaff] = useState(false);
 
   const handleSaveDirector = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -107,13 +151,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         newEmail: directorEmail,
         newName: directorName,
         actorEmail: user?.email || profile?.email || '',
-        actorName: profile?.name || 'مالك النظام',
-        actorId: profile?.id || user?.id || 'owner_id',
+        actorName: profile?.name || (isSystemOwner ? 'مالك النظام' : 'المديرة الحالية'),
+        actorId: profile?.id || user?.id || 'actor_id',
+        actorRole: profile?.school_role,
       });
       setDirectorSuccessMsg(res.message);
-      setTimeout(() => setDirectorSuccessMsg(null), 4000);
+      setTimeout(() => setDirectorSuccessMsg(null), 5000);
     } catch (err: any) {
-      setDirectorErrorMsg(err?.message || 'تعذر تعيين وتحديث حساب المديرة.');
+      setDirectorErrorMsg(err?.message || 'تعذر نقل وتعيين حساب المديرة.');
     } finally {
       setSavingDirector(false);
     }
@@ -144,6 +189,115 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setTimeout(() => setCopiedKey(null), 2000);
   };
 
+  const handleAddStaffEmail = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setStaffListErrorMsg(null);
+    setStaffListSuccessMsg(null);
+    setAddingStaff(true);
+    try {
+      const added = await addAuthorizedStaffEmail({
+        email: newStaffEmail,
+        name: newStaffName,
+        actor: profile,
+      });
+      setAuthorizedStaffList((prev) => [added, ...prev.filter((p) => p.email !== added.email)]);
+      setNewStaffEmail('');
+      setNewStaffName('');
+      setShowAddStaffModal(false);
+      setStaffListSuccessMsg(`تمت إضافة المنسوبة (${added.email}) إلى قائمة المصرح لهن بالدخول بنجاح.`);
+      setTimeout(() => setStaffListSuccessMsg(null), 4000);
+    } catch (err: any) {
+      setStaffListErrorMsg(err?.message || 'تعذر إضافة البريد المصرح له.');
+    } finally {
+      setAddingStaff(false);
+    }
+  };
+
+  const handleOpenEditStaff = (staff: AuthorizedStaffEmail) => {
+    setStaffListErrorMsg(null);
+    setStaffListSuccessMsg(null);
+    setEditingStaff(staff);
+    setEditStaffEmail(staff.email);
+    setEditStaffName(staff.name || '');
+    setEditStaffRole(staff.assignedRole);
+  };
+
+  const handleSaveEditStaff = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingStaff) return;
+    setSavingEditStaff(true);
+    setStaffListErrorMsg(null);
+    setStaffListSuccessMsg(null);
+
+    try {
+      const updated = await updateAuthorizedStaffMember({
+        oldEmail: editingStaff.email,
+        newEmail: editStaffEmail,
+        name: editStaffName,
+        assignedRole: editStaffRole,
+        actor: profile,
+      });
+
+      setAuthorizedStaffList((prev) =>
+        prev.map((item) =>
+          item.id === editingStaff.id || item.email.toLowerCase() === editingStaff.email.toLowerCase()
+            ? updated
+            : item
+        )
+      );
+
+      setStaffListSuccessMsg(`تم تحديث بيانات المنسوبة (${updated.name || updated.email}) بنجاح.`);
+      setTimeout(() => setStaffListSuccessMsg(null), 4000);
+      setEditingStaff(null);
+    } catch (err: any) {
+      setStaffListErrorMsg(err?.message || 'تعذر تحديث بيانات المنسوبة.');
+    } finally {
+      setSavingEditStaff(false);
+    }
+  };
+
+  const handleInitiateRemoveStaff = (targetEmail: string, name?: string) => {
+    setStaffListErrorMsg(null);
+    setStaffListSuccessMsg(null);
+    setStaffToDelete({ email: targetEmail, name });
+  };
+
+  const handleConfirmDeleteStaff = async () => {
+    if (!staffToDelete) return;
+    const targetEmail = staffToDelete.email;
+    setDeletingStaff(true);
+    setStaffListErrorMsg(null);
+    setStaffListSuccessMsg(null);
+
+    try {
+      // 1. Delete/Revoke Mensebah in database and strip all privileges
+      await removeAuthorizedStaffEmail(targetEmail, profile);
+
+      // 2. Real-time state refresh (immediate removal of row without page reload)
+      setAuthorizedStaffList((prev) =>
+        prev.filter((p) => p.email.toLowerCase() !== targetEmail.toLowerCase())
+      );
+
+      setStaffListSuccessMsg(
+        `تم إلغاء تصريح المنسوبة (${targetEmail}) وحذفها وتجريد الحساب من الصلاحيات بنجاح.`
+      );
+      setTimeout(() => setStaffListSuccessMsg(null), 4000);
+      setStaffToDelete(null);
+    } catch (err: any) {
+      console.error('[AdminDashboard] Error removing staff member:', err);
+      // Fallback state refresh to ensure UI responsiveness even if remote sync threw an error
+      setAuthorizedStaffList((prev) =>
+        prev.filter((p) => p.email.toLowerCase() !== targetEmail.toLowerCase())
+      );
+      setStaffListErrorMsg(
+        err?.message || 'تعذر استكمال حذف المنسوبة بالكامل من الخادم، تم تحديث القائمة محلياً.'
+      );
+      setStaffToDelete(null);
+    } finally {
+      setDeletingStaff(false);
+    }
+  };
+
   const canAccess =
     hasPerm('accessAdminDashboard') ||
     hasPerm('manageUsers') ||
@@ -160,6 +314,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         const ach = dataStore.getAchievements();
         const photos = dataStore.getPhotos();
         const users = await dataStore.getUsers();
+        const staffList = await getAuthorizedStaffEmails();
 
         setCounts({
           posts: posts.length,
@@ -169,6 +324,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           photos: photos.length,
           users: users.length,
         });
+
+        setAuthorizedStaffList(staffList);
 
         const localLogs: any[] = JSON.parse(
           localStorage.getItem('safiah_activity_logs') || '[]'
@@ -361,9 +518,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       </div>
 
       {/* ------------------------------------------------------------------- */}
-      {/* SECTION: إدارة وتعيين حساب مديرة المدرسة (خاص بـ مالك النظام حصراً) */}
+      {/* SECTION: إدارة ونقل رتبة ولقب مديرة المدرسة (مالك النظام والمديرة الحالية) */}
       {/* ------------------------------------------------------------------- */}
-      {isSystemOwner && (
+      {canManageDirector && (
         <div className="bg-gradient-to-br from-amber-50/70 via-white to-amber-50/40 border-2 border-amber-300 rounded-3xl p-6 sm:p-7 shadow-sm space-y-5">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-amber-200/60 pb-4">
             <div className="space-y-1">
@@ -372,14 +529,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <Shield className="w-4 h-4 text-amber-700" />
                 </div>
                 <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
-                  <span>إدارة حساب مديرة المدرسة المعتمد</span>
+                  <span>إدارة ونقل رتبة ولقب مديرة المدرسة المعتمد</span>
                   <span className="px-2 py-0.5 rounded-md bg-amber-200 text-amber-950 text-[10px] font-black border border-amber-300">
-                    صلاحية حصرية لـ [مالك النظام]
+                    {isSystemOwner ? 'صلاحية مالك النظام' : 'صلاحية المديرة الحالية'}
                   </span>
                 </h3>
               </div>
               <p className="text-xs text-slate-600 leading-relaxed max-w-2xl">
-                قاعدة أمنية عليا: يوجد حساب <strong>مديرة واحدة فقط</strong> محدد في النظام، ويمنع إنشاء حساب ثانٍ أو التسجيل الذاتي لهذه الرتبة. بصفتكِ <strong>مالك النظام</strong>، أنتِ الجهة الوحيدة المخولة بتعيين أو تغيير البريد الإلكتروني الخاص بحساب المديرة.
+                قاعدة أمنية عليا: يوجد حساب <strong>مديرة واحدة فقط</strong> في النظام. الجهة الوحيدة المخولة بنقل لقب ورتبة "المديرة" إلى حساب آخر هي <strong>مالك النظام</strong> و<strong>المديرة الحالية</strong>. بمجرد النقل، <strong>يُسحب اللقب وكافة الصلاحيات الإدارية فوراً وتلقائياً من الحساب القديم</strong> ويتحول إلى رتبة معلمة، وتُمنح للمديرة الجديدة فوراً.
               </p>
             </div>
 
@@ -721,6 +878,517 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
       )}
 
+      {/* -------------------------------------------------------------------------- */}
+      {/* SECTION: قائمة البريد المصرح له لمنسوبات المدرسة (الخيار أ - ربط المسمى بالرمز) */}
+      {/* -------------------------------------------------------------------------- */}
+      {/* -------------------------------------------------------------------------- */}
+      {/* SECTION: إدارة وتصاريح منسوبات المدرسة (حصرياً لمالك النظام والمديرة)          */}
+      {/* -------------------------------------------------------------------------- */}
+      {canManageDirector && (
+        <div className="bg-white border-2 border-teal-300/80 rounded-3xl p-6 sm:p-7 shadow-sm space-y-6">
+          {/* Header & Main Action */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-5">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <div className="w-9 h-9 rounded-2xl bg-teal-100 text-teal-800 flex items-center justify-center font-bold shadow-xs">
+                  <UserPlus className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base sm:text-lg font-black text-slate-900 flex items-center gap-2">
+                    <span>إدارة وتصاريح منسوبات المدرسة</span>
+                    <span className="px-2.5 py-0.5 rounded-full bg-teal-100 text-teal-900 text-[11px] font-black border border-teal-200">
+                      قائمة المعتمدات رسمياً
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-600 leading-relaxed max-w-3xl mt-0.5">
+                    إدارة حسابات منسوبات المدرسة (معلمات، مشرفات تربويات، إداريات، مرشدات طلابيات)، واعتماد البريد الإلكتروني للربط مع Google والتحقق الأمني.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2.5 self-start sm:self-auto shrink-0">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-50 text-emerald-900 border border-emerald-300 text-xs font-bold shadow-2xs">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-700" />
+                <span>{authorizedStaffList.length} منسوبة معتمدة</span>
+              </div>
+
+              {/* Add Staff Button */}
+              <button
+                type="button"
+                onClick={() => {
+                  setStaffListErrorMsg(null);
+                  setStaffListSuccessMsg(null);
+                  setNewStaffEmail('');
+                  setNewStaffName('');
+                  setShowAddStaffModal(true);
+                }}
+                className="px-4 py-2.5 rounded-xl bg-teal-700 hover:bg-teal-800 text-white text-xs font-black transition-all shadow-sm hover:shadow-md flex items-center gap-2 cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                <span>+ إضافة منسوبة جديدة</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Success / Error Messages */}
+          {staffListSuccessMsg && (
+            <div className="p-3.5 bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-2xl text-xs font-bold flex items-center gap-2 animate-in fade-in">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span>{staffListSuccessMsg}</span>
+            </div>
+          )}
+
+          {staffListErrorMsg && (
+            <div className="p-3.5 bg-rose-50 border border-rose-200 text-rose-900 rounded-2xl text-xs font-bold flex items-center gap-2 animate-in fade-in">
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+              <span>{staffListErrorMsg}</span>
+            </div>
+          )}
+
+          {/* Filter and Search Bar */}
+          <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3.5 sm:p-4 grid grid-cols-1 sm:grid-cols-12 gap-3 items-center">
+            {/* Search Input */}
+            <div className="sm:col-span-5 relative">
+              <input
+                type="text"
+                value={staffSearchQuery}
+                onChange={(e) => setStaffSearchQuery(e.target.value)}
+                placeholder="بحث بالاسم أو بالبريد الإلكتروني..."
+                className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-teal-600 pr-9"
+              />
+              <Search className="w-4 h-4 text-slate-400 absolute right-3 top-3 pointer-events-none" />
+              {staffSearchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setStaffSearchQuery('')}
+                  className="absolute left-2.5 top-2.5 text-slate-400 hover:text-slate-600"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+
+            {/* Filter by Role */}
+            <div className="sm:col-span-4 relative">
+              <select
+                value={staffRoleFilter}
+                onChange={(e) => setStaffRoleFilter(e.target.value)}
+                className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-teal-600 cursor-pointer"
+              >
+                <option value="all">كل الرتب والمسميات الوظيفية</option>
+                <option value="teacher">معلمة</option>
+                <option value="supervisor">مشرفة تربوية</option>
+                <option value="administrator">إدارية</option>
+                <option value="counselor">مرشدة طلابية</option>
+              </select>
+            </div>
+
+            {/* Filter by Status */}
+            <div className="sm:col-span-3 relative">
+              <select
+                value={staffStatusFilter}
+                onChange={(e) => setStaffStatusFilter(e.target.value as any)}
+                className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-teal-600 cursor-pointer"
+              >
+                <option value="all">جميع حالات الحساب</option>
+                <option value="activated">نشط ومكتمل</option>
+                <option value="pending">بانتظار التفعيل والدخول</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Authorized Staff Table */}
+          <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-xs">
+            <div className="overflow-x-auto">
+              <table className="w-full text-right text-xs">
+                <thead className="bg-slate-50 border-b border-slate-200 text-slate-700 font-bold">
+                  <tr>
+                    <th className="p-3.5">المنسوبة (الاسم الكامل)</th>
+                    <th className="p-3.5">البريد الإلكتروني (المرتبط بـ Google)</th>
+                    <th className="p-3.5">الرتبة والمسمى الوظيفي</th>
+                    <th className="p-3.5">حالة الحساب</th>
+                    <th className="p-3.5 text-center">الإجراءات</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {authorizedStaffList
+                    .filter((item) => {
+                      if (staffSearchQuery.trim()) {
+                        const q = staffSearchQuery.trim().toLowerCase();
+                        const matchEmail = item.email.toLowerCase().includes(q);
+                        const matchName = (item.name || '').toLowerCase().includes(q);
+                        if (!matchEmail && !matchName) return false;
+                      }
+                      if (staffRoleFilter !== 'all') {
+                        if (item.assignedRole !== staffRoleFilter) return false;
+                      }
+                      if (staffStatusFilter === 'activated' && !item.isActivated) return false;
+                      if (staffStatusFilter === 'pending' && item.isActivated) return false;
+                      return true;
+                    })
+                    .map((item) => {
+                      const roleConfig: Record<string, { label: string; bg: string; text: string; border: string }> = {
+                        teacher: {
+                          label: 'معلمة',
+                          bg: 'bg-emerald-50',
+                          text: 'text-emerald-900',
+                          border: 'border-emerald-300',
+                        },
+                        supervisor: {
+                          label: 'مشرفة تربوية',
+                          bg: 'bg-blue-50',
+                          text: 'text-blue-900',
+                          border: 'border-blue-300',
+                        },
+                        administrator: {
+                          label: 'إدارية',
+                          bg: 'bg-indigo-50',
+                          text: 'text-indigo-900',
+                          border: 'border-indigo-300',
+                        },
+                        counselor: {
+                          label: 'مرشدة طلابية',
+                          bg: 'bg-purple-50',
+                          text: 'text-purple-900',
+                          border: 'border-purple-300',
+                        },
+                        director: {
+                          label: 'مديرة المدرسة',
+                          bg: 'bg-amber-50',
+                          text: 'text-amber-900',
+                          border: 'border-amber-300',
+                        },
+                      };
+                      const roleInfo = item.assignedRole ? roleConfig[item.assignedRole] : null;
+
+                      return (
+                        <tr key={item.id} className="hover:bg-slate-50/80 transition-colors">
+                          {/* 1. المنسوبة (الاسم الكامل) */}
+                          <td className="p-3.5 font-bold text-slate-900">
+                            <div className="flex items-center gap-2.5">
+                              <div className="w-8 h-8 rounded-xl bg-teal-100 text-teal-800 flex items-center justify-center font-bold text-xs shrink-0 shadow-2xs border border-teal-200">
+                                {item.name ? item.name[0] : item.email[0].toUpperCase()}
+                              </div>
+                              <div>
+                                <span className="block font-black text-slate-900">
+                                  {item.name || 'منسوبة معتمدة'}
+                                </span>
+                                <span className="text-[10px] text-slate-400 font-normal">
+                                  أضيفت: {item.addedAt ? new Date(item.addedAt).toLocaleDateString('ar-SA') : 'معتمدة'}
+                                </span>
+                              </div>
+                            </div>
+                          </td>
+
+                          {/* 2. البريد الإلكتروني (المرتبط بـ Google) */}
+                          <td className="p-3.5 font-mono text-xs text-slate-800" dir="ltr">
+                            <div className="flex items-center gap-1.5 justify-end">
+                              <span>{item.email}</span>
+                              <Mail className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                            </div>
+                          </td>
+
+                          {/* 3. الرتبة والمسمى الوظيفي */}
+                          <td className="p-3.5">
+                            {roleInfo ? (
+                              <span
+                                className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-black border ${roleInfo.bg} ${roleInfo.text} ${roleInfo.border}`}
+                              >
+                                {roleInfo.label}
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-300 text-[10px] font-bold">
+                                بانتظار تحديد الرتبة
+                              </span>
+                            )}
+                          </td>
+
+                          {/* 4. حالة الحساب */}
+                          <td className="p-3.5">
+                            {item.isActivated ? (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-950 border border-emerald-300 text-[11px] font-black">
+                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
+                                <span>نشط ومكتمل</span>
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-100 text-amber-950 border border-amber-300 text-[11px] font-black">
+                                <Clock className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+                                <span>بانتظار التفعيل والدخول</span>
+                              </span>
+                            )}
+                          </td>
+
+                          {/* 5. الإجراءات (زر تعديل / زر إلغاء التصريح والحذف) */}
+                          <td className="p-3.5 text-center">
+                            <div className="flex items-center justify-center gap-1.5">
+                              {/* زر تعديل */}
+                              <button
+                                type="button"
+                                onClick={() => handleOpenEditStaff(item)}
+                                className="p-2 rounded-xl text-teal-700 bg-teal-50 hover:bg-teal-100 hover:text-teal-900 transition-colors cursor-pointer border border-teal-200"
+                                title="تعديل بيانات المنسوبة"
+                              >
+                                <Edit2 className="w-3.5 h-3.5" />
+                              </button>
+
+                              {/* زر إلغاء التصريح والحذف */}
+                              <button
+                                type="button"
+                                onClick={() => handleInitiateRemoveStaff(item.email, item.name)}
+                                className="p-2 rounded-xl text-rose-600 bg-rose-50 hover:bg-rose-100 hover:text-rose-700 transition-colors cursor-pointer border border-rose-200"
+                                title="إلغاء التصريح وحذف البريد"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+
+                  {authorizedStaffList.filter((item) => {
+                    if (staffSearchQuery.trim()) {
+                      const q = staffSearchQuery.trim().toLowerCase();
+                      const matchEmail = item.email.toLowerCase().includes(q);
+                      const matchName = (item.name || '').toLowerCase().includes(q);
+                      if (!matchEmail && !matchName) return false;
+                    }
+                    if (staffRoleFilter !== 'all') {
+                      if (item.assignedRole !== staffRoleFilter) return false;
+                    }
+                    if (staffStatusFilter === 'activated' && !item.isActivated) return false;
+                    if (staffStatusFilter === 'pending' && item.isActivated) return false;
+                    return true;
+                  }).length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="py-8 text-center text-xs text-slate-400">
+                        لا توجد منسوبات مطابقة لمعايير البحث الحالية.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
+          {/* MODAL: ADD NEW STAFF MEMBER                                  */}
+          {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
+          {showAddStaffModal && (
+            <div
+              className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs animate-in fade-in"
+              dir="rtl"
+            >
+              <div className="w-full max-w-lg bg-white rounded-3xl shadow-2xl border-2 border-teal-500/30 p-6 space-y-4 text-slate-900 animate-in zoom-in-95 duration-150">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-9 h-9 rounded-2xl bg-teal-100 text-teal-800 flex items-center justify-center font-bold">
+                      <UserPlus className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-extrabold text-slate-900">
+                        + إضافة منسوبة جديدة إلى القائمة المعتمدة
+                      </h3>
+                      <p className="text-[11px] text-slate-500 font-medium">
+                        اعتماد بريد Google للسماح لها بالدخول ومطابقة رمز الأمان
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowAddStaffModal(false)}
+                    className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                <form onSubmit={handleAddStaffEmail} className="space-y-4 pt-1">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-800 mb-1.5">
+                      البريد الإلكتروني المعتمد للمنسوبة (مرتبط بـ Google): <span className="text-rose-500">*</span>
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="email"
+                        required
+                        value={newStaffEmail}
+                        onChange={(e) => setNewStaffEmail(e.target.value)}
+                        placeholder="teacher.name@gmail.com"
+                        className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-mono font-bold text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:border-teal-600 pr-9"
+                        dir="ltr"
+                      />
+                      <Mail className="w-4 h-4 text-slate-400 absolute right-3 top-3 pointer-events-none" />
+                    </div>
+                    <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">
+                      * لن تتمكن المنسوبة من تجاوز شاشة الدخول الأولى إلا إذا كان بريدها مسجلاً في هذه القائمة بدقة.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-800 mb-1.5">
+                      اسم المنسوبة (اختياري / للتعريف في اللوحة):
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={newStaffName}
+                        onChange={(e) => setNewStaffName(e.target.value)}
+                        placeholder="أ. نورة العتيبي"
+                        className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:border-teal-600 pr-9"
+                      />
+                      <User className="w-4 h-4 text-slate-400 absolute right-3 top-3 pointer-events-none" />
+                    </div>
+                  </div>
+
+                  <div className="pt-2 flex gap-2.5">
+                    <button
+                      type="submit"
+                      disabled={addingStaff}
+                      className="flex-1 py-3 px-4 rounded-xl bg-teal-700 hover:bg-teal-800 text-white text-xs font-black transition-colors cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm"
+                    >
+                      {addingStaff ? (
+                        <span>جارٍ الإضافة والاعتماد...</span>
+                      ) : (
+                        <>
+                          <Plus className="w-4 h-4" />
+                          <span>إضافة واعتماد الدخول</span>
+                        </>
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowAddStaffModal(false)}
+                      disabled={addingStaff}
+                      className="py-3 px-4 rounded-xl border border-slate-300 text-slate-700 hover:bg-slate-100 text-xs font-bold transition-colors cursor-pointer"
+                    >
+                      إلغاء
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
+          {/* MODAL: EDIT STAFF MEMBER DETAILS                              */}
+          {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
+          {editingStaff && (
+            <div
+              className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs animate-in fade-in"
+              dir="rtl"
+            >
+              <div className="w-full max-w-lg bg-white rounded-3xl shadow-2xl border-2 border-teal-500/30 p-6 space-y-4 text-slate-900 animate-in zoom-in-95 duration-150">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-9 h-9 rounded-2xl bg-teal-100 text-teal-800 flex items-center justify-center font-bold">
+                      <Edit2 className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-extrabold text-slate-900">
+                        تعديل بيانات وتصريح المنسوبة
+                      </h3>
+                      <p className="text-[11px] text-slate-500 font-medium">
+                        تحديث البريد المعتمد أو المسمى الوظيفي
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setEditingStaff(null)}
+                    className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                <form onSubmit={handleSaveEditStaff} className="space-y-4 pt-1">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-800 mb-1.5">
+                      البريد الإلكتروني المعتمد (Google): <span className="text-rose-500">*</span>
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="email"
+                        required
+                        value={editStaffEmail}
+                        onChange={(e) => setEditStaffEmail(e.target.value)}
+                        className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-mono font-bold text-slate-900 focus:bg-white focus:outline-none focus:border-teal-600 pr-9"
+                        dir="ltr"
+                      />
+                      <Mail className="w-4 h-4 text-slate-400 absolute right-3 top-3 pointer-events-none" />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-800 mb-1.5">
+                      اسم المنسوبة:
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={editStaffName}
+                        onChange={(e) => setEditStaffName(e.target.value)}
+                        placeholder="أ. نورة العتيبي"
+                        className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:bg-white focus:outline-none focus:border-teal-600 pr-9"
+                      />
+                      <User className="w-4 h-4 text-slate-400 absolute right-3 top-3 pointer-events-none" />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-800 mb-1.5">
+                      الرتبة والمسمى الوظيفي المعتمد:
+                    </label>
+                    <select
+                      value={editStaffRole || ''}
+                      onChange={(e) =>
+                        setEditStaffRole(
+                          e.target.value ? (e.target.value as any) : undefined
+                        )
+                      }
+                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:outline-none focus:border-teal-600 cursor-pointer"
+                    >
+                      <option value="">(غير محدد - تحدده المنسوبة برمز الأمان)</option>
+                      <option value="teacher">معلمة</option>
+                      <option value="supervisor">مشرفة تربوية</option>
+                      <option value="administrator">إدارية</option>
+                      <option value="counselor">مرشدة طلابية</option>
+                    </select>
+                  </div>
+
+                  <div className="pt-2 flex gap-2.5">
+                    <button
+                      type="submit"
+                      disabled={savingEditStaff}
+                      className="flex-1 py-3 px-4 rounded-xl bg-teal-700 hover:bg-teal-800 text-white text-xs font-black transition-colors cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm"
+                    >
+                      {savingEditStaff ? (
+                        <span>جارٍ حفظ التعديلات...</span>
+                      ) : (
+                        <>
+                          <Check className="w-4 h-4" />
+                          <span>حفظ التعديلات</span>
+                        </>
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditingStaff(null)}
+                      disabled={savingEditStaff}
+                      className="py-3 px-4 rounded-xl border border-slate-300 text-slate-700 hover:bg-slate-100 text-xs font-bold transition-colors cursor-pointer"
+                    >
+                      إلغاء
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Recent Activity Log Preview */}
       <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-4">
         <div className="flex items-center justify-between">
@@ -758,6 +1426,85 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           <p className="text-xs text-slate-400 text-center py-4">لا توجد عمليات مسجلة حديثاً.</p>
         )}
       </div>
+
+      {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
+      {/* QUICK CONFIRMATION MODAL: REVOKE / DELETE STAFF MEMBER       */}
+      {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
+      {staffToDelete && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs animate-in fade-in"
+          dir="rtl"
+        >
+          <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl border-2 border-rose-200 p-6 space-y-4 text-slate-900 animate-in zoom-in-95 duration-150">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-rose-100 text-rose-700 flex items-center justify-center shrink-0">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-extrabold text-slate-900">
+                  تأكيد إلغاء تصريح المنسوبة
+                </h3>
+                <span className="text-[11px] text-slate-500 font-medium">
+                  إدارة الصلاحيات وقائمة البريد المعتمد
+                </span>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-800 leading-relaxed font-bold">
+              هل أنتِ متأكدة من إلغاء تصريح المنسوبة وحذف بريدها الإلكتروني من القائمة المعتمدة؟
+            </p>
+
+            <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl space-y-1.5 text-xs">
+              {staffToDelete.name && (
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-500 font-medium">اسم المنسوبة:</span>
+                  <span className="font-bold text-slate-900">{staffToDelete.name}</span>
+                </div>
+              )}
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500 font-medium">البريد الإلكتروني:</span>
+                <span className="font-mono font-bold text-slate-900" dir="ltr">
+                  {staffToDelete.email}
+                </span>
+              </div>
+            </div>
+
+            <div className="p-3 bg-rose-50 border border-rose-200 rounded-2xl text-[11px] text-rose-900 flex items-start gap-2.5">
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+              <span className="leading-relaxed font-bold">
+                تنبيه: سيتم تجريد هذا الحساب من كافة الصلاحيات فوراً ومنعه من تسجيل الدخول كمنسوبة.
+              </span>
+            </div>
+
+            <div className="pt-2 flex gap-2.5">
+              <button
+                type="button"
+                onClick={handleConfirmDeleteStaff}
+                disabled={deletingStaff}
+                className="flex-1 py-3 px-4 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-black transition-colors cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm"
+              >
+                {deletingStaff ? (
+                  <span>جارٍ الحذف والتجريد...</span>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4" />
+                    <span>نعم، إلغاء التصريح والحذف</span>
+                  </>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setStaffToDelete(null)}
+                disabled={deletingStaff}
+                className="py-3 px-4 rounded-xl border border-slate-300 text-slate-700 hover:bg-slate-100 text-xs font-bold transition-colors cursor-pointer"
+              >
+                إلغاء
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

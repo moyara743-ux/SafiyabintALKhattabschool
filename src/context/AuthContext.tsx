@@ -24,6 +24,7 @@ import {
   verifyGoogleEmailPreAuthorization,
 } from '../lib/authSecurity';
 import { authenticateStudentByNameAndSecret } from '../lib/studentService';
+import { isStaffEmailAuthorized } from '../lib/authorizedStaffService';
 import {
   SYSTEM_OWNER_EMAIL,
   SYSTEM_OWNER_NAME,
@@ -57,7 +58,7 @@ interface AuthContextType {
   roleLabel: string;
   login: (email: string, pass: string) => Promise<void>;
   loginStudent: (name: string, secret: string) => Promise<void>;
-  signInWithGoogle: () => Promise<void>;
+  signInWithGoogle: (intent?: string) => Promise<void>;
   loginWithGoogleCredential: (credential: string) => Promise<void>;
   loginWithGoogleAccount: (email: string, name?: string, photoURL?: string) => Promise<void>;
   registerWithGoogle: (params: {
@@ -97,7 +98,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       currentName = currentEmail.split('@')[0] || 'مستخدم';
     }
 
-    const defaultRole: SchoolRole = (isOwnerAccount || isPrincipalAccount) ? 'director' : 'student';
+    const defaultRole: SchoolRole = isOwnerAccount ? 'system_owner' : (isPrincipalAccount ? 'director' : 'student');
 
     // 1. FRESH FETCH DIRECTLY FROM SUPABASE public.users TABLE
     let dbUser: any = null;
@@ -125,7 +126,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     if (dbUser) {
       let resolvedRole: SchoolRole = (dbUser.school_role as SchoolRole) || defaultRole;
-      if (isOwnerAccount || isPrincipalAccount) {
+      if (isOwnerAccount) {
+        resolvedRole = 'system_owner';
+      } else if (isPrincipalAccount) {
         resolvedRole = 'director';
       } else if (isYaraAccount) {
         resolvedRole = 'student';
@@ -172,7 +175,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const localUsers = await dataStore.getUsers();
       const localExisting = localUsers.find((u) => u.email && u.email.trim().toLowerCase() === currentEmail);
 
-      let resolvedRole: SchoolRole = (isOwnerAccount || isPrincipalAccount) ? 'director' : (localExisting?.school_role || defaultRole);
+      let resolvedRole: SchoolRole = isOwnerAccount ? 'system_owner' : (isPrincipalAccount ? 'director' : (localExisting?.school_role || defaultRole));
       if (isYaraAccount) resolvedRole = 'student';
 
       const isComp = isOwnerAccount || isPrincipalAccount || Boolean(
@@ -233,9 +236,43 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const checkInitialSession = async () => {
       try {
+        // Enforce immediate forced session reset / logout as requested
+        const hasForceReset = localStorage.getItem('safiah_force_hana_logout_done_v2');
+        if (!hasForceReset) {
+          localStorage.setItem('safiah_force_hana_logout_done_v2', 'true');
+          localStorage.removeItem('school_active_session_email');
+          try {
+            await supabase.auth.signOut();
+          } catch {}
+          if (isMounted) {
+            setUser(null);
+            setProfile(null);
+          }
+          return;
+        }
+
         const { data: { session } } = await supabase.auth.getSession();
         if (session?.user && isMounted) {
           const email = (session.user.email || '').trim().toLowerCase();
+          const displayName = (session.user.user_metadata?.name || session.user.user_metadata?.full_name || '').trim();
+
+          // If session belongs to Hana Al-Dossari, log her out immediately to return to first-time unactivated state
+          const isHana =
+            displayName.includes('هنا') ||
+            displayName.includes('الدوسري') ||
+            email.includes('hana') ||
+            email.includes('dossari');
+
+          if (isHana) {
+            console.log('[AuthContext] Force-logging out Hana Al-Dossari to reset session to initial state');
+            await supabase.auth.signOut();
+            localStorage.removeItem('school_active_session_email');
+            if (isMounted) {
+              setUser(null);
+              setProfile(null);
+            }
+            return;
+          }
 
           // Authoritative check if user is allowed to access
           const authCheck = await verifyGoogleEmailPreAuthorization(email);
@@ -263,10 +300,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           // Check local stored session fallback
           const localSessionEmail = localStorage.getItem('school_active_session_email');
           if (localSessionEmail && isMounted) {
+            const cleanLocal = localSessionEmail.trim().toLowerCase();
+            if (cleanLocal.includes('hana') || cleanLocal.includes('dossari')) {
+              localStorage.removeItem('school_active_session_email');
+              if (isMounted) {
+                setUser(null);
+                setProfile(null);
+              }
+              return;
+            }
+
             const allUsers = await dataStore.getUsers();
             const found = allUsers.find(
-              (u) => u.email && u.email.trim().toLowerCase() === localSessionEmail.trim().toLowerCase()
+              (u) => u.email && u.email.trim().toLowerCase() === cleanLocal
             );
+
+            if (found && (found.name?.includes('هنا') || found.name?.includes('الدوسري'))) {
+              localStorage.removeItem('school_active_session_email');
+              if (isMounted) {
+                setUser(null);
+                setProfile(null);
+              }
+              return;
+            }
+
             if (found && found.status !== 'disabled') {
               setUser({
                 id: found.id,
@@ -292,6 +349,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (!isMounted) return;
         if (session?.user) {
           const email = (session.user.email || '').trim().toLowerCase();
+          const displayName = (session.user.user_metadata?.name || session.user.user_metadata?.full_name || '').trim();
+
+          if (displayName.includes('هنا') || displayName.includes('الدوسري') || email.includes('hana') || email.includes('dossari')) {
+            console.log('[AuthContext] onAuthStateChange: Force-logging out Hana Al-Dossari');
+            await supabase.auth.signOut();
+            localStorage.removeItem('school_active_session_email');
+            setUser(null);
+            setProfile(null);
+            stopLoading();
+            return;
+          }
+
           const authCheck = await verifyGoogleEmailPreAuthorization(email);
 
           if (!authCheck.isAuthorized) {
@@ -649,14 +718,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const isOwner = Boolean(
     (user?.email && checkIsSystemOwner(user.email)) ||
-    (profile?.email && checkIsSystemOwner(profile.email))
+    (profile?.email && checkIsSystemOwner(profile.email)) ||
+    profile?.school_role === 'system_owner'
   );
 
   const isDirector = Boolean(
-    isOwner ||
-    (user?.email && checkIsDesignatedPrincipal(user.email)) ||
-    (profile?.email && checkIsDesignatedPrincipal(profile.email)) ||
-    profile?.school_role === 'director'
+    !isOwner && (
+      (user?.email && checkIsDesignatedPrincipal(user.email)) ||
+      (profile?.email && checkIsDesignatedPrincipal(profile.email)) ||
+      profile?.school_role === 'director'
+    )
   );
 
   const hasPerm = (permission: PermissionKey): boolean => {
@@ -671,7 +742,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const roleLabel = useMemo(() => {
     const email = (user?.email || profile?.email || '').trim().toLowerCase();
-    if (checkIsSystemOwner(email)) {
+    if (checkIsSystemOwner(email) || profile?.school_role === 'system_owner' || isOwner) {
       return SYSTEM_OWNER_ROLE_LABEL;
     }
     if (checkIsDesignatedPrincipal(email) || profile?.school_role === 'director') {
@@ -684,7 +755,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return ROLE_LABELS_AR[profile.school_role] || 'مستخدم';
     }
     return user ? 'مستخدم' : 'زائر';
-  }, [user, profile]);
+  }, [user, profile, isOwner]);
 
   return (
     <AuthContext.Provider

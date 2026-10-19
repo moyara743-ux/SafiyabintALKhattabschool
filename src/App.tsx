@@ -15,7 +15,6 @@ import {
 import { dataStore } from './lib/dataStore';
 
 import { Navbar } from './components/Navbar';
-import { AuthModal } from './components/AuthModal';
 import { CreatePostModal } from './components/CreatePostModal';
 import { CreateAnnouncementModal } from './components/CreateAnnouncementModal';
 import { CreateEventModal } from './components/CreateEventModal';
@@ -25,6 +24,8 @@ import { CreateAlbumModal } from './components/CreateAlbumModal';
 import { DailyMessageModal } from './components/DailyMessageModal';
 import { PostDetailsModal } from './components/PostDetailsModal';
 import { FloatingAddButton } from './components/FloatingAddButton';
+import { AuthCallbackView } from './views/AuthCallbackView';
+import { redirectToGoogleOAuth } from './lib/googleAuth';
 
 import { HomePage } from './views/HomePage';
 import { AnnouncementsView } from './views/AnnouncementsView';
@@ -79,9 +80,22 @@ function AppContent() {
     principalName: 'أ. هدى الغامدي',
   });
 
-  // Modal Open States
-  const [authModalOpen, setAuthModalOpen] = useState(false);
-  const [authModalMode, setAuthModalMode] = useState<'login' | 'register'>('login');
+  // Check if browser currently is on /auth/callback or has tokens from Google OAuth
+  const isAuthCallbackUrl = typeof window !== 'undefined' && (
+    window.location.pathname.includes('/auth/callback') ||
+    window.location.hash.includes('id_token') ||
+    window.location.hash.includes('access_token') ||
+    window.location.search.includes('id_token=') ||
+    (window.location.search.includes('code=') && !window.location.search.includes('mock='))
+  );
+
+  const [isProcessingCallback, setIsProcessingCallback] = useState(isAuthCallbackUrl);
+  const [callbackRouteState, setCallbackRouteState] = useState<{
+    staffActivationEmail?: string;
+    staffActivationName?: string;
+    error?: string;
+    notice?: string;
+  } | null>(null);
 
   const [createPostOpen, setCreatePostOpen] = useState(false);
   const [defaultPostType, setDefaultPostType] = useState<PostType | undefined>(undefined);
@@ -152,46 +166,50 @@ function AppContent() {
   // Check if current user is System Owner or Designated Principal
   const isSystemOwner = Boolean(
     (user?.email && checkIsSystemOwner(user.email)) ||
-    (profile?.email && checkIsSystemOwner(profile.email))
+    (profile?.email && checkIsSystemOwner(profile.email)) ||
+    profile?.school_role === 'system_owner' ||
+    (user?.email && user.email.trim().toLowerCase() === 'moyara743@gmail.com') ||
+    (profile?.email && profile.email.trim().toLowerCase() === 'moyara743@gmail.com')
   );
 
   const isPrincipal = Boolean(
-    isSystemOwner ||
-    (user?.email && isDesignatedPrincipal(user.email)) ||
-    (profile?.email && isDesignatedPrincipal(profile.email)) ||
-    profile?.school_role === 'director'
+    (!isSystemOwner && (
+      (user?.email && isDesignatedPrincipal(user.email)) ||
+      (profile?.email && isDesignatedPrincipal(profile.email)) ||
+      profile?.school_role === 'director'
+    ))
   );
 
   // Universal profile completion check:
   // - System Owner and Principal are strictly exempt from profile completion (enter directly!)
   // - Students: strictly governed by isStudentProfileComplete (cannot enter without ID + Mobile + completion)
   const isProfileComplete = Boolean(
-    profile &&
-      (isSystemOwner ||
-       isPrincipal ||
-       (profile.school_role === 'student'
-         ? isStudentProfileComplete
-         : (profile.accountStatus === 'completed' ||
-            profile.account_status === 'completed' ||
-            profile.is_profile_completed === true ||
-            profile.is_profile_complete === true ||
-            (profile.school_role !== 'student' &&
-              profile.school_role !== 'parent' &&
-              profile.phone &&
-              (profile.nationalId ||
-                profile.national_id ||
-                (profile.customPermissions &&
-                  profile.customPermissions.some(
-                    (p) => typeof p === 'string' && p.startsWith('nid:')
-                  )))) ||
-            (profile.school_role === 'parent' &&
-              profile.phone &&
-              (profile.nationalId || profile.accountStatus === 'completed')))))
+    isSystemOwner ||
+    isPrincipal ||
+    (profile &&
+      (profile.school_role === 'student'
+        ? isStudentProfileComplete
+        : (profile.accountStatus === 'completed' ||
+           profile.account_status === 'completed' ||
+           profile.is_profile_completed === true ||
+           profile.is_profile_complete === true ||
+           (profile.school_role !== 'student' &&
+             profile.school_role !== 'parent' &&
+             profile.phone &&
+             (profile.nationalId ||
+               profile.national_id ||
+               (profile.customPermissions &&
+                 profile.customPermissions.some(
+                   (p) => typeof p === 'string' && p.startsWith('nid:')
+                 )))) ||
+           (profile.school_role === 'parent' &&
+             profile.phone &&
+             (profile.nationalId || profile.accountStatus === 'completed')))))
   );
 
   // System Owner immediate redirection: take directly to the Admin Dashboard
   useEffect(() => {
-    if (isSystemOwner && (currentView === 'home' || (currentView as string) === 'complete_student_profile')) {
+    if (isSystemOwner && (currentView === 'home' || (currentView as string) === 'complete_student_profile' || (currentView as string) === 'complete_profile' || (currentView as string) === 'profile')) {
       setCurrentView('admin_dashboard');
     }
   }, [isSystemOwner]);
@@ -242,9 +260,65 @@ function AppContent() {
     };
   }, []);
 
-  const handleOpenAuth = (mode: 'login' | 'register' = 'login') => {
-    setAuthModalMode(mode);
-    setAuthModalOpen(true);
+  // Listen for OAuth callback result from popup window
+  useEffect(() => {
+    const handleMessage = (e: MessageEvent) => {
+      if (e.data && e.data.type === 'SAFIAH_OAUTH_CALLBACK') {
+        const target = e.data.target;
+        if (target) {
+          setIsProcessingCallback(false);
+          if (target.view === 'login') {
+            setCallbackRouteState({
+              staffActivationEmail: target.staffActivationEmail,
+              staffActivationName: target.staffActivationName,
+              error: target.error,
+              notice: target.notice,
+            });
+            setCurrentView('home');
+          } else if (target.view === 'admin_dashboard') {
+            setCurrentView('admin_dashboard');
+          } else {
+            setCurrentView('home');
+          }
+        }
+      }
+    };
+
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === 'safiah_oauth_event' && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          if (parsed?.target) {
+            const target = parsed.target;
+            setIsProcessingCallback(false);
+            if (target.view === 'login') {
+              setCallbackRouteState({
+                staffActivationEmail: target.staffActivationEmail,
+                staffActivationName: target.staffActivationName,
+                error: target.error,
+                notice: target.notice,
+              });
+              setCurrentView('home');
+            } else if (target.view === 'admin_dashboard') {
+              setCurrentView('admin_dashboard');
+            } else {
+              setCurrentView('home');
+            }
+          }
+        } catch {}
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+    window.addEventListener('storage', handleStorage);
+    return () => {
+      window.removeEventListener('message', handleMessage);
+      window.removeEventListener('storage', handleStorage);
+    };
+  }, []);
+
+  const handleOpenAuth = (_mode: 'login' | 'register' = 'login') => {
+    redirectToGoogleOAuth('quick_login');
   };
 
   const handleOpenCreatePost = (type?: PostType) => {
@@ -366,9 +440,40 @@ function AppContent() {
     setCurrentView(view);
   };
 
+  // Auth Callback Processor: When returning from official Google OAuth
+  if (isProcessingCallback) {
+    return (
+      <AuthCallbackView
+        onRoute={(target) => {
+          setIsProcessingCallback(false);
+          if (target.view === 'login') {
+            setCallbackRouteState({
+              staffActivationEmail: target.staffActivationEmail,
+              staffActivationName: target.staffActivationName,
+              error: target.error,
+              notice: target.notice,
+            });
+            setCurrentView('home');
+          } else if (target.view === 'admin_dashboard') {
+            setCurrentView('admin_dashboard');
+          } else {
+            setCurrentView('home');
+          }
+        }}
+      />
+    );
+  }
+
   // Mandatory Login Gate: When not authenticated, show LoginView immediately
   if (!user) {
-    return <LoginView />;
+    return (
+      <LoginView
+        initialError={callbackRouteState?.error}
+        initialNotice={callbackRouteState?.notice}
+        initialStaffActivationEmail={callbackRouteState?.staffActivationEmail}
+        initialStaffActivationName={callbackRouteState?.staffActivationName}
+      />
+    );
   }
 
   return (
@@ -548,12 +653,6 @@ function AppContent() {
         )}
       </main>
 
-      {/* Global Modals */}
-      <AuthModal
-        isOpen={authModalOpen}
-        onClose={() => setAuthModalOpen(false)}
-        defaultMode={authModalMode}
-      />
 
       <CreatePostModal
         isOpen={createPostOpen}

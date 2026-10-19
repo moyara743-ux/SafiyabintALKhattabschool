@@ -28,6 +28,14 @@ import {
   deleteRelationship,
 } from '../lib/parentStudentService';
 import {
+  transferPrincipalRole,
+  canManageDirectorAccount,
+  isSystemOwner,
+  isDesignatedPrincipal,
+  getDesignatedPrincipalName,
+  SYSTEM_OWNER_NAME,
+} from '../lib/principalService';
+import {
   Users,
   Search,
   Shield,
@@ -113,14 +121,18 @@ export const UsersManagementView: React.FC = () => {
       if (!error && data && Array.isArray(data)) {
         const remoteUsers: UserProfile[] = data.map((d: any) => {
           const email = (d.email || '').trim().toLowerCase();
-          const isSystemOwnerAccount = email === 'moyara743@gmail.com';
+          const isSystemOwnerAccount = isSystemOwner(email);
+          const isDesignatedPrincipalAccount = isDesignatedPrincipal(email);
           const isYaraAccount = email === 'yaradrashed@gmail.com';
 
           let role: SchoolRole = (d.school_role === 'owner' ? 'director' : d.school_role) || 'student';
           let name = d.name || 'مستخدم';
           if (isSystemOwnerAccount) {
+            role = 'system_owner';
+            name = SYSTEM_OWNER_NAME;
+          } else if (isDesignatedPrincipalAccount) {
             role = 'director';
-            name = 'يارا محمد راشد - مالك النظام';
+            name = getDesignatedPrincipalName();
           } else if (isYaraAccount) {
             role = 'student';
           }
@@ -248,9 +260,9 @@ export const UsersManagementView: React.FC = () => {
     if (!editingUser || !currentUser || !currentProfile) return;
     const targetEmail = (editingUser.email || '').trim().toLowerCase();
 
-    // STRICT RULE: Director role is reserved for school director
-    if (editRole === 'director' && targetEmail !== 'moyara743@gmail.com' && currentProfile.school_role !== 'director') {
-      setErrorMessage('لا يمكن تعيين دور المديرة إلا عبر إدارة المدرسة المعتمدة.');
+    // STRICT RULE: System Owner account cannot be modified
+    if (targetEmail === 'moyara743@gmail.com' || editingUser.school_role === 'system_owner') {
+      setErrorMessage('حساب [مالك النظام] هو الحساب الأعلى صلاحية في المنصة ولا يمكن تعديله أو تغيير رتبته.');
       return;
     }
 
@@ -260,6 +272,36 @@ export const UsersManagementView: React.FC = () => {
         setErrorMessage('الحساب yaradrashed@gmail.com مقيد برتبة طالبة ولا يمتلك أي صلاحيات إدارة أو ملكية.');
         return;
       }
+    }
+
+    // STRICT RULE: Single Active Principal Limit:
+    // Promoting any user to Director MUST use transferPrincipalRole to strip all admin powers from old principal
+    if (editRole === 'director' && editRole !== editingUser.school_role) {
+      const isAuthorizedToTransfer = canManageDirectorAccount(currentUser.email || currentProfile.email, currentProfile.school_role);
+      if (!isAuthorizedToTransfer) {
+        setErrorMessage('نقل رتبة ولقب المديرة محصور حصراً بـ [مالك النظام] و[المديرة الحالية].');
+        return;
+      }
+      setSaving(true);
+      setErrorMessage(null);
+      try {
+        const transferRes = await transferPrincipalRole({
+          newEmail: targetEmail,
+          newName: editingUser.name,
+          actorEmail: currentUser.email || currentProfile.email || '',
+          actorName: currentProfile.name,
+          actorId: currentUser.id || currentUser.uid,
+          actorRole: currentProfile.school_role,
+        });
+        showToast(transferRes.message);
+        setEditingUser(null);
+        await loadUsers();
+      } catch (err: any) {
+        setErrorMessage(err?.message || 'حدث خطأ أثناء نقل رتبة المديرة');
+      } finally {
+        setSaving(false);
+      }
+      return;
     }
 
     if (editRole !== editingUser.school_role && !canAssignRole(currentProfile, editRole)) {
@@ -484,7 +526,7 @@ export const UsersManagementView: React.FC = () => {
   });
 
   const getRoleBadge = (role: SchoolRole, email?: string) => {
-    if (email?.trim().toLowerCase() === 'moyara743@gmail.com') {
+    if (role === 'system_owner' || email?.trim().toLowerCase() === 'moyara743@gmail.com') {
       return (
         <span className="px-2.5 py-1 bg-amber-500/20 text-amber-950 border border-amber-400 rounded-full text-xs font-black shadow-xs flex items-center gap-1 w-fit">
           <Shield className="w-3.5 h-3.5 text-amber-700" />
@@ -1166,7 +1208,7 @@ export const UsersManagementView: React.FC = () => {
                 <label className="block text-xs font-bold text-slate-700 mb-1.5">
                   رتبة ودور المستخدم (school_role)
                 </label>
-                {editingUser.email?.trim().toLowerCase() === 'moyara743@gmail.com' ? (
+                {editingUser.school_role === 'system_owner' || editingUser.email?.trim().toLowerCase() === 'moyara743@gmail.com' ? (
                   <div className="p-2.5 bg-amber-50 border border-amber-300 rounded-xl text-xs font-black text-amber-950 flex items-center gap-2">
                     <Shield className="w-4 h-4 text-amber-600" />
                     <span>حساب [مالك النظام] (System Owner) - السلطة العليا (لا يمكن تعديله)</span>
@@ -1185,11 +1227,11 @@ export const UsersManagementView: React.FC = () => {
                     disabled={saving}
                     className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600 cursor-pointer"
                   >
-                    {/* Director option is exclusively available to System Owner */}
-                    {currentProfile?.email?.toLowerCase().trim() === 'moyara743@gmail.com' ? (
-                      <option value="director">المديرة (تعيين حصري من مالك النظام)</option>
+                    {/* Director option is exclusively available to System Owner & Current Principal via transfer */}
+                    {canManageDirectorAccount(currentProfile?.email, currentProfile?.school_role) ? (
+                      <option value="director">المديرة (نقل اللقب وسحب صلاحيات المديرة السابقة فوراً)</option>
                     ) : (
-                      <option value="director" disabled>المديرة (تُعين حصراً عبر مالك النظام)</option>
+                      <option value="director" disabled>المديرة (نقل اللقب محصور بمالك النظام والمديرة الحالية)</option>
                     )}
                     <option value="supervisor">المشرفة</option>
                     <option value="administrator">الإدارية</option>

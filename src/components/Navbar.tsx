@@ -55,7 +55,10 @@ export const Navbar: React.FC<NavbarProps> = ({
   const isSystemOwner = Boolean(
     checkIsSystemOwner(user?.email) ||
     checkIsSystemOwner(profile?.email) ||
-    roleLabel === SYSTEM_OWNER_ROLE_LABEL
+    profile?.school_role === 'system_owner' ||
+    roleLabel === SYSTEM_OWNER_ROLE_LABEL ||
+    (user?.email && user.email.trim().toLowerCase() === 'moyara743@gmail.com') ||
+    (profile?.email && profile.email.trim().toLowerCase() === 'moyara743@gmail.com')
   );
 
   const displayName = isSystemOwner
@@ -65,7 +68,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   const displayRoleLabel = isSystemOwner ? SYSTEM_OWNER_ROLE_LABEL : roleLabel;
 
   const getRoleBadgeStyle = (role?: SchoolRole) => {
-    if (isSystemOwner) {
+    if (isSystemOwner || role === 'system_owner') {
       return 'bg-amber-500/25 text-amber-300 border-amber-400/50 shadow-sm font-black';
     }
     switch (role) {
@@ -162,8 +165,8 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           {/* User Role Badge & Status */}
           <div className="flex items-center gap-2.5 shrink-0">
-            {profile && (
-              <span className={`px-2.5 py-0.5 text-[11px] sm:text-xs font-bold rounded-lg border ${getRoleBadgeStyle(profile.school_role)}`}>
+            {(profile || user) && (
+              <span className={`px-2.5 py-0.5 text-[11px] sm:text-xs font-bold rounded-lg border ${getRoleBadgeStyle(profile?.school_role)}`}>
                 {displayRoleLabel}
               </span>
             )}
@@ -236,12 +239,11 @@ export const Navbar: React.FC<NavbarProps> = ({
                   <div className="w-8 h-8 rounded-lg bg-emerald-800 border border-amber-400/40 flex items-center justify-center text-amber-300 font-bold text-xs shadow-inner shrink-0 group-hover:bg-emerald-700 transition-colors">
                     {profile?.name?.[0] || user.email?.[0]?.toUpperCase() || 'U'}
                   </div>
-                  <div className="flex items-center gap-1.5 text-xs">
+                  <div className="flex items-center gap-2 text-xs">
                     <span className="font-bold text-white whitespace-nowrap">
                       {displayName}
                     </span>
-                    <span className="text-emerald-300/60 font-normal">-</span>
-                    <span className="text-amber-300 font-bold whitespace-nowrap">
+                    <span className={`px-2 py-0.5 text-[10px] sm:text-[11px] font-black rounded-lg border shadow-xs ${getRoleBadgeStyle(profile?.school_role)}`}>
                       {displayRoleLabel}
                     </span>
                   </div>
@@ -396,10 +398,11 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <div className="w-7 h-7 rounded-lg bg-emerald-800 border border-amber-400/40 flex items-center justify-center text-amber-300 font-bold text-xs shrink-0">
                   {profile?.name?.[0] || user.email?.[0]?.toUpperCase() || 'U'}
                 </div>
-                <div className="text-xs font-bold text-white truncate">
-                  <span>{displayName}</span>
-                  <span className="mx-1 text-emerald-300/60 font-normal">-</span>
-                  <span className="text-amber-300 font-bold">{displayRoleLabel}</span>
+                <div className="text-xs font-bold text-white flex items-center gap-1.5 truncate">
+                  <span className="truncate">{displayName}</span>
+                  <span className={`px-1.5 py-0.5 text-[10px] font-black rounded border shrink-0 ${getRoleBadgeStyle(profile?.school_role)}`}>
+                    {displayRoleLabel}
+                  </span>
                 </div>
               </div>
               <ChevronDown className={`w-4 h-4 text-emerald-300 shrink-0 transition-transform ${userDropdownOpen ? 'rotate-180' : ''}`} />

@@ -1,5 +1,6 @@
-// 1. Roles definition (7 approved school roles - Director is top management, no owner)
+// 1. Roles definition (System Owner is supreme authority, Director is executive school head)
 export type SchoolRole =
+  | 'system_owner'
   | 'director'
   | 'supervisor'
   | 'administrator'
@@ -153,6 +154,18 @@ export interface StaffRolePasscodes {
   counselor: string; // رمز المرشدة الطلابية
   updatedAt: string;
   updatedBy?: string;
+}
+
+// 4.6 Authorized Staff Email Entry (قائمة البريد المصرح له لمنسوبات المدرسة)
+export interface AuthorizedStaffEmail {
+  id: string;
+  email: string;
+  name?: string;
+  addedBy?: string;
+  addedAt: string;
+  isActivated: boolean;
+  activatedAt?: string;
+  assignedRole?: 'teacher' | 'supervisor' | 'administrator' | 'counselor';
 }
 
 export interface ParentStudentRelationship {

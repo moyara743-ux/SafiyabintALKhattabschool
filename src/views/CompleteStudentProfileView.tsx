@@ -7,6 +7,7 @@ import {
   validateNationalIdFormat,
 } from '../lib/studentService';
 import { StudentRecord } from '../types';
+import { isSystemOwner, isDesignatedPrincipal } from '../lib/principalService';
 import {
   GraduationCap,
   Sparkles,
@@ -27,7 +28,28 @@ interface CompleteStudentProfileViewProps {
 export const CompleteStudentProfileView: React.FC<CompleteStudentProfileViewProps> = ({
   onComplete,
 }) => {
-  const { profile, refreshProfile } = useAuth();
+  const { user, profile, refreshProfile } = useAuth();
+
+  const isOwner = Boolean(
+    (user?.email && isSystemOwner(user.email)) ||
+    (profile?.email && isSystemOwner(profile.email)) ||
+    profile?.school_role === 'system_owner'
+  );
+  const isPrin = Boolean(
+    (user?.email && isDesignatedPrincipal(user.email)) ||
+    (profile?.email && isDesignatedPrincipal(profile.email)) ||
+    profile?.school_role === 'director'
+  );
+
+  useEffect(() => {
+    if (isOwner || isPrin) {
+      onComplete?.();
+    }
+  }, [isOwner, isPrin, onComplete]);
+
+  if (isOwner || isPrin) {
+    return null;
+  }
 
   const [studentRecord, setStudentRecord] = useState<StudentRecord | null>(null);
   const [loadingRecord, setLoadingRecord] = useState(true);

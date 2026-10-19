@@ -22,17 +22,41 @@ import {
   Briefcase,
   Zap,
   ArrowLeft,
+  ExternalLink,
 } from 'lucide-react';
-import { getGoogleClientId, DIRECTOR_EMAIL } from '../lib/googleAuth';
+import {
+  getGoogleClientId,
+  isRealGoogleClientIdAvailable,
+  shouldUseExternalGoogleOAuth,
+  buildGoogleOAuthUrl,
+  DIRECTOR_EMAIL,
+  isUserProfileCompleted,
+  redirectToGoogleOAuth,
+} from '../lib/googleAuth';
 import {
   SYSTEM_OWNER_EMAIL,
   SYSTEM_OWNER_NAME,
   getDesignatedPrincipalEmail,
   getDesignatedPrincipalName,
 } from '../lib/principalService';
+import { StaffActivationModal } from '../components/StaffActivationModal';
+import { isStaffEmailAuthorized } from '../lib/authorizedStaffService';
+import { verifyGoogleEmailPreAuthorization } from '../lib/authSecurity';
 import { SchoolRole } from '../types';
 
-export const LoginView: React.FC = () => {
+interface LoginViewProps {
+  initialError?: string | null;
+  initialNotice?: string | null;
+  initialStaffActivationEmail?: string | null;
+  initialStaffActivationName?: string | null;
+}
+
+export const LoginView: React.FC<LoginViewProps> = ({
+  initialError,
+  initialNotice,
+  initialStaffActivationEmail,
+  initialStaffActivationName,
+}) => {
   const {
     login,
     loginStudent,
@@ -43,17 +67,8 @@ export const LoginView: React.FC = () => {
     resetPassword,
   } = useAuth();
 
-  // Primary View Mode: 'quick_login' (تسجيل الدخول السريع عبر Google) or 'first_time_register' (التسجيل لأول مرة)
-  const [viewMode, setViewMode] = useState<'quick_login' | 'first_time_register'>('quick_login');
-
-  // Interactive Google Sign-In Window State
-  const [showGoogleModal, setShowGoogleModal] = useState(false);
-  const [modalTargetRole, setModalTargetRole] = useState<SchoolRole | null>(null);
-  const [modalTitle, setModalTitle] = useState('تسجيل الدخول السريع عبر Google');
-  const [customGoogleEmail, setCustomGoogleEmail] = useState('');
-  const [staffPasscode, setStaffPasscode] = useState('');
-  const [selectedStaffRole, setSelectedStaffRole] = useState<'teacher' | 'supervisor' | 'administrator' | 'counselor' | 'director'>('teacher');
-  const [isEnteringCustomEmail, setIsEnteringCustomEmail] = useState(false);
+  // Primary View Mode: 'first_time_register' (التسجيل لأول مرة) or 'quick_login' (تسجيل الدخول السريع عبر Google)
+  const [viewMode, setViewMode] = useState<'quick_login' | 'first_time_register'>('first_time_register');
 
   // Alternative fallback login expansion (Preserves existing password/student code systems in collapsed drawer)
   const [showAlternativeLogin, setShowAlternativeLogin] = useState(false);
@@ -70,6 +85,12 @@ export const LoginView: React.FC = () => {
 
   const [showForgotPass, setShowForgotPass] = useState(false);
   const [forgotEmail, setForgotEmail] = useState('');
+
+  // Staff First-Time Activation Modal State (Option A)
+  const [staffActivationEmail, setStaffActivationEmail] = useState<string | null>(null);
+  const [staffActivationName, setStaffActivationName] = useState<string | undefined>(undefined);
+
+  const [pendingIntent, setPendingIntent] = useState<'quick_login' | 'register_staff' | 'register_student' | 'register_parent'>('quick_login');
 
   // Status & Feedback
   const [loading, setLoading] = useState(false);
@@ -128,102 +149,81 @@ export const LoginView: React.FC = () => {
     return () => clearTimeout(timer);
   }, [loginWithGoogleCredential]);
 
-  // Open Quick Google Login Modal
-  const handleOpenQuickLogin = async () => {
-    setError(null);
-    setSuccessMsg(null);
-    setModalTargetRole(null);
-    setModalTitle('تسجيل الدخول السريع عبر Google');
+  // Receive initial feedback/states from callback handler
+  useEffect(() => {
+    if (initialError) {
+      setError(initialError);
+    }
+    if (initialNotice) {
+      setSuccessMsg(initialNotice);
+    }
+    if (initialStaffActivationEmail) {
+      setStaffActivationEmail(initialStaffActivationEmail);
+      if (initialStaffActivationName) {
+        setStaffActivationName(initialStaffActivationName);
+      }
+    }
+  }, [initialError, initialNotice, initialStaffActivationEmail, initialStaffActivationName]);
 
-    // Try Google GIS prompt first if available
-    if (typeof window !== 'undefined' && window.google?.accounts?.id && getGoogleClientId()) {
+  // Listen for OAuth completion from external popup window
+  useEffect(() => {
+    const handleMessage = (e: MessageEvent) => {
+      if (e.data && e.data.type === 'SAFIAH_OAUTH_CALLBACK') {
+        const target = e.data.target;
+        if (target) {
+          if (target.error) setError(target.error);
+          if (target.notice) setSuccessMsg(target.notice);
+          if (target.staffActivationEmail) {
+            setStaffActivationEmail(target.staffActivationEmail);
+            if (target.staffActivationName) setStaffActivationName(target.staffActivationName);
+          }
+        }
+      }
+    };
+
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === 'safiah_oauth_event' && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          if (parsed?.target) {
+            const target = parsed.target;
+            if (target.error) setError(target.error);
+            if (target.notice) setSuccessMsg(target.notice);
+            if (target.staffActivationEmail) {
+              setStaffActivationEmail(target.staffActivationEmail);
+              if (target.staffActivationName) setStaffActivationName(target.staffActivationName);
+            }
+          }
+        } catch {}
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+    window.addEventListener('storage', handleStorage);
+    return () => {
+      window.removeEventListener('message', handleMessage);
+      window.removeEventListener('storage', handleStorage);
+    };
+  }, []);
+
+  // Official External Google OAuth Authentication (accounts.google.com)
+  const handleStartGoogleOAuth = (intent: 'quick_login' | 'register_staff' | 'register_student' | 'register_parent') => {
+    setError(null);
+    setPendingIntent(intent);
+
+    // Clean stale cache immediately
+    if (typeof window !== 'undefined') {
       try {
-        window.google.accounts.id.prompt();
-        return;
-      } catch (promptErr) {
-        console.warn('GIS prompt fallback:', promptErr);
-      }
+        localStorage.removeItem('safiah_oauth_event');
+        sessionStorage.removeItem('safiah_last_oauth_payload');
+        sessionStorage.removeItem('safiah_cached_callback');
+      } catch {}
     }
 
-    // Try Supabase OAuth redirect if available
-    if (getGoogleClientId()) {
-      try {
-        await signInWithGoogle();
-        return;
-      } catch (e) {
-        console.warn('Direct OAuth fallback to account selector:', e);
-      }
-    }
-
-    setShowGoogleModal(true);
+    setSuccessMsg('جارٍ التحويل إلى صفحة Google الرسمية (accounts.google.com)...');
+    redirectToGoogleOAuth(intent);
   };
 
-  // Open First-Time Registration for specific target
-  const handleOpenRegistrationModal = (category: 'student' | 'parent' | 'staff') => {
-    setError(null);
-    setSuccessMsg(null);
-    setIsEnteringCustomEmail(false);
-    setStaffPasscode('');
-
-    if (category === 'student') {
-      setModalTargetRole('student');
-      setModalTitle('تسجيل حساب الطالبة عبر Google');
-    } else if (category === 'parent') {
-      setModalTargetRole('parent');
-      setModalTitle('تسجيل حساب ولي الأمر عبر Google');
-    } else {
-      setModalTargetRole('teacher'); // default staff
-      setModalTitle('تسجيل الكادر المدرسي والإداري والمديرة عبر Google');
-    }
-
-    setShowGoogleModal(true);
-  };
-
-  // Submit Selected Google Account (Quick login or First-Time Registration)
-  const handleProcessGoogleAuth = async (targetEmail: string, displayName?: string) => {
-    setError(null);
-    setSuccessMsg('جارٍ فحص قاعدة البيانات والتحقق من حساب Google...');
-    setLoading(true);
-
-    try {
-      if (modalTargetRole) {
-        // First-Time Registration Flow with specific Role
-        await registerWithGoogle({
-          email: targetEmail,
-          role: modalTargetRole === 'teacher' ? (selectedStaffRole as SchoolRole) : modalTargetRole,
-          passcode: staffPasscode,
-          providedName: displayName,
-        });
-      } else {
-        // Quick Sign-In Flow:
-        // Supabase check:
-        // - If exists & completed -> enters in 1 second!
-        // - If incomplete/new -> redirects immediately to complete profile screen
-        await registerWithGoogle({
-          email: targetEmail,
-          providedName: displayName,
-        });
-      }
-
-      setShowGoogleModal(false);
-    } catch (err: any) {
-      console.error('[Google Login] Error:', err);
-      setError(err?.message || 'تعذر تسجيل الدخول بحساب Google المختار.');
-      setLoading(false);
-      setSuccessMsg(null);
-    }
-  };
-
-  // Custom Google Email Submission
-  const handleCustomGoogleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const cleanEmail = customGoogleEmail.trim().toLowerCase();
-    if (!cleanEmail || !cleanEmail.includes('@')) {
-      setError('يرجى إدخال عنوان بريد Google صحيح.');
-      return;
-    }
-    await handleProcessGoogleAuth(cleanEmail);
-  };
 
   // Alternative: Staff Login (Email + Password)
   const handleStaffLogin = async (e: React.FormEvent) => {
@@ -452,7 +452,7 @@ export const LoginView: React.FC = () => {
                 {/* Big Prominent Google Button */}
                 <button
                   type="button"
-                  onClick={handleOpenQuickLogin}
+                  onClick={() => handleStartGoogleOAuth('quick_login')}
                   disabled={loading}
                   className="w-full py-4 px-5 rounded-2xl bg-white hover:bg-slate-100 text-slate-900 border border-slate-200 transition-all flex items-center justify-center gap-3.5 font-extrabold text-sm sm:text-base shadow-xl hover:shadow-2xl cursor-pointer disabled:opacity-50 active:scale-[0.99]"
                 >
@@ -551,7 +551,7 @@ export const LoginView: React.FC = () => {
 
                 <button
                   type="button"
-                  onClick={() => handleOpenRegistrationModal('student')}
+                  onClick={() => handleStartGoogleOAuth('register_student')}
                   disabled={loading}
                   className="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs sm:text-sm flex items-center justify-center gap-2 shadow-md hover:shadow-lg transition-all cursor-pointer"
                 >
@@ -591,7 +591,7 @@ export const LoginView: React.FC = () => {
 
                 <button
                   type="button"
-                  onClick={() => handleOpenRegistrationModal('parent')}
+                  onClick={() => handleStartGoogleOAuth('register_parent')}
                   disabled={loading}
                   className="w-full py-3 px-4 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-black text-xs sm:text-sm flex items-center justify-center gap-2 shadow-md hover:shadow-lg transition-all cursor-pointer"
                 >
@@ -622,16 +622,15 @@ export const LoginView: React.FC = () => {
                   </div>
                 </div>
 
-                <ul className="text-xs text-slate-300 space-y-1.5 list-disc list-inside leading-relaxed pr-1">
-                  <li>تسجيل الدخول عبر Google للتحقق من البريد الإلكتروني.</li>
-                  <li>التحقق من وجود البريد في السجلات المعتمدة للمدرسة أو إدخال رمز الأمان الوظيفي.</li>
-                  <li>إكمال البيانات الأساسية (رقم الهوية/الإقامة، رقم الجوال، التخصص/المسمى الوظيفي).</li>
-                  <li className="text-emerald-300 font-semibold">الحسابات المعتمدة تفعل مباشرة وتدخل بصلاحياتها المحددة في قاعدة البيانات.</li>
+                <ul className="text-xs text-slate-300 space-y-1.5 list-disc list-inside leading-relaxed pr-1 break-words">
+                  <li>الخطوة 1 (المصادقة): تسجيل الدخول عبر Google للتحقق من وجود البريد في قائمة المنسوبات المصرح لهن.</li>
+                  <li>الخطوة 2 (التفعيل والرمز): اختيار المسمى الوظيفي المعتمد وإدخال رمز الأمان الوظيفي.</li>
+                  <li className="text-emerald-300 font-semibold">المستخدمات المفعلات سابقاً: يدخلن مباشرة بحسابهن ورتبتهن دون طلب الرمز مجدداً.</li>
                 </ul>
 
                 <button
                   type="button"
-                  onClick={() => handleOpenRegistrationModal('staff')}
+                  onClick={() => handleStartGoogleOAuth('register_staff')}
                   disabled={loading}
                   className="w-full py-3 px-4 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-black text-xs sm:text-sm flex items-center justify-center gap-2 shadow-md hover:shadow-lg transition-all cursor-pointer"
                 >
@@ -830,302 +829,25 @@ export const LoginView: React.FC = () => {
         </div>
       </main>
 
-      {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
-      {/* OFFICIAL GOOGLE SIGN-IN & REGISTRATION WINDOW               */}
-      {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
-      {showGoogleModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in" dir="rtl">
-          <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl border border-slate-200 p-6 sm:p-8 space-y-5 relative text-slate-900">
-            <button
-              type="button"
-              onClick={() => {
-                setShowGoogleModal(false);
-                setIsEnteringCustomEmail(false);
-              }}
-              className="absolute top-5 left-5 text-slate-400 hover:text-slate-700 p-1.5 rounded-full hover:bg-slate-100 transition-colors cursor-pointer"
-            >
-              <X className="w-5 h-5" />
-            </button>
 
-            {/* Google Brand Header */}
-            <div className="text-center space-y-2 pb-3 border-b border-slate-100">
-              <div className="flex items-center justify-center gap-2">
-                <svg className="w-7 h-7" viewBox="0 0 24 24">
-                  <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z" />
-                  <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.24v3.15C3.26 21.36 7.33 24 12 24z" />
-                  <path fill="#FBBC05" d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.24C.45 8.16 0 9.97 0 12s.45 3.84 1.24 5.42l4.04-3.15z" />
-                  <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.24 6.58l4.04 3.15c.95-2.83 3.6-4.98 6.72-4.98z" />
-                </svg>
-                <span className="text-xl font-bold text-slate-800">Google</span>
-              </div>
-              <h3 className="text-sm font-extrabold text-slate-800">
-                {modalTitle}
-              </h3>
-              <p className="text-xs text-slate-500">
-                المتابعة إلى <strong>مدرسة صفية بنت عمر الثانوية</strong>
-              </p>
-            </div>
 
-            {/* If Staff registration, show role selector & passcode field */}
-            {modalTargetRole === 'teacher' && !isEnteringCustomEmail && (
-              <div className="p-3.5 bg-purple-50 rounded-2xl border border-purple-200 space-y-2.5">
-                <label className="block text-xs font-bold text-purple-900">
-                  حدد رتبتك الوظيفية المعتمدة:
-                </label>
-                <select
-                  value={selectedStaffRole}
-                  onChange={(e: any) => setSelectedStaffRole(e.target.value)}
-                  className="w-full px-3 py-2 bg-white border border-purple-300 rounded-xl text-xs font-bold text-purple-950 focus:outline-none focus:border-purple-600"
-                >
-                  <option value="teacher">المعلمة</option>
-                  <option value="supervisor">المشرفة التربوية</option>
-                  <option value="administrator">الإدارية</option>
-                  <option value="counselor">المرشدة الطلابية</option>
-                </select>
-
-                <div>
-                  <label className="block text-[11px] font-bold text-purple-900 mb-1">
-                    رمز الأمان الوظيفي (Passcode) المعتمد من الإدارة:
-                  </label>
-                  <input
-                    type="password"
-                    value={staffPasscode}
-                    onChange={(e) => setStaffPasscode(e.target.value)}
-                    placeholder="رمز الأمان الوظيفي"
-                    className="w-full px-3 py-2 bg-white border border-purple-300 rounded-xl text-xs font-mono text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-purple-600"
-                  />
-                </div>
-              </div>
-            )}
-
-            {/* Quick Demo / Verified School Accounts Selector */}
-            {!isEnteringCustomEmail ? (
-              <div className="space-y-3">
-                <div className="text-[11px] font-bold text-slate-500 px-1">
-                  اختر حساب Google للمصادقة وتحديد الصلاحيات:
-                </div>
-
-                <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
-                  {/* System Owner Account (Official & Supreme Authority) */}
-                  <button
-                    type="button"
-                    onClick={() => handleProcessGoogleAuth(SYSTEM_OWNER_EMAIL, SYSTEM_OWNER_NAME)}
-                    className="w-full p-3.5 rounded-2xl border-2 border-amber-400 bg-amber-500/10 hover:bg-amber-500/20 text-right flex items-center justify-between transition-all cursor-pointer group shadow-sm"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-amber-600 to-amber-500 text-slate-950 font-black flex items-center justify-center text-sm shadow-md">
-                        <Shield className="w-5 h-5 text-slate-950" />
-                      </div>
-                      <div>
-                        <div className="text-xs font-black text-slate-900 group-hover:text-amber-950 flex items-center gap-1.5">
-                          <span>أ. يارا محمد راشد</span>
-                          <span className="px-2 py-0.5 rounded-md bg-amber-200 text-amber-950 text-[10px] font-black border border-amber-300">
-                            مالك النظام
-                          </span>
-                        </div>
-                        <div className="text-[11px] text-slate-600 font-mono" dir="ltr">
-                          {SYSTEM_OWNER_EMAIL}
-                        </div>
-                      </div>
-                    </div>
-                    <ArrowRight className="w-4 h-4 text-amber-700 rotate-180 opacity-0 group-hover:opacity-100 transition-opacity" />
-                  </button>
-
-                  {/* Designated Principal Account (المديرة) */}
-                  {(modalTargetRole === null || modalTargetRole === 'teacher') && (
-                    <button
-                      type="button"
-                      onClick={() => handleProcessGoogleAuth(getDesignatedPrincipalEmail(), getDesignatedPrincipalName())}
-                      className="w-full p-3.5 rounded-2xl border-2 border-purple-400 bg-purple-50/80 hover:bg-purple-100/90 text-right flex items-center justify-between transition-all cursor-pointer group shadow-sm"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-purple-700 text-white font-black flex items-center justify-center text-sm shadow-md">
-                          م
-                        </div>
-                        <div>
-                          <div className="text-xs font-black text-slate-900 group-hover:text-purple-950 flex items-center gap-1.5">
-                            <span>{getDesignatedPrincipalName().split('-')[0].trim()}</span>
-                            <span className="px-2 py-0.5 rounded-md bg-purple-200 text-purple-900 text-[10px] font-extrabold">
-                              المديرة
-                            </span>
-                          </div>
-                          <div className="text-[11px] text-slate-600 font-mono" dir="ltr">
-                            {getDesignatedPrincipalEmail()}
-                          </div>
-                        </div>
-                      </div>
-                      <ArrowRight className="w-4 h-4 text-purple-700 rotate-180 opacity-0 group-hover:opacity-100 transition-opacity" />
-                    </button>
-                  )}
-
-                  {/* Student Account: Mona Khaled */}
-                  {(modalTargetRole === null || modalTargetRole === 'student') && (
-                    <button
-                      type="button"
-                      onClick={() => handleProcessGoogleAuth('mona.khaled@gmail.com', 'منى خالد')}
-                      className="w-full p-3 rounded-2xl border border-slate-200 hover:border-emerald-400 hover:bg-slate-50 text-right flex items-center justify-between transition-all cursor-pointer group"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-full bg-emerald-600 text-white font-extrabold flex items-center justify-center text-xs shadow-sm">
-                          م
-                        </div>
-                        <div>
-                          <div className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
-                            <span>منى خالد</span>
-                            <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[10px] font-bold">
-                              طالبة (STU-467645)
-                            </span>
-                          </div>
-                          <div className="text-[11px] text-slate-500 font-mono" dir="ltr">
-                            mona.khaled@gmail.com
-                          </div>
-                        </div>
-                      </div>
-                      <ArrowRight className="w-4 h-4 text-slate-400 rotate-180 opacity-0 group-hover:opacity-100 transition-opacity" />
-                    </button>
-                  )}
-
-                  {/* Student Account: Sarah */}
-                  {(modalTargetRole === null || modalTargetRole === 'student') && (
-                    <button
-                      type="button"
-                      onClick={() => handleProcessGoogleAuth('sarah.safiah@gmail.com', 'سارة محمد راشد العتيبي')}
-                      className="w-full p-3 rounded-2xl border border-slate-200 hover:border-teal-400 hover:bg-slate-50 text-right flex items-center justify-between transition-all cursor-pointer group"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-full bg-teal-600 text-white font-extrabold flex items-center justify-center text-xs shadow-sm">
-                          س
-                        </div>
-                        <div>
-                          <div className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
-                            <span>سارة محمد راشد العتيبي</span>
-                            <span className="px-1.5 py-0.5 rounded bg-teal-100 text-teal-800 text-[10px] font-bold">
-                              طالبة (STU-000251)
-                            </span>
-                          </div>
-                          <div className="text-[11px] text-slate-500 font-mono" dir="ltr">
-                            sarah.safiah@gmail.com
-                          </div>
-                        </div>
-                      </div>
-                      <ArrowRight className="w-4 h-4 text-slate-400 rotate-180 opacity-0 group-hover:opacity-100 transition-opacity" />
-                    </button>
-                  )}
-
-                  {/* Staff - Teacher Account */}
-                  {(modalTargetRole === null || modalTargetRole === 'teacher') && (
-                    <button
-                      type="button"
-                      onClick={() => handleProcessGoogleAuth('teacher.safiah@gmail.com', 'أ. سحر أحمد - المعلمة')}
-                      className="w-full p-3 rounded-2xl border border-slate-200 hover:border-indigo-400 hover:bg-slate-50 text-right flex items-center justify-between transition-all cursor-pointer group"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-full bg-indigo-600 text-white font-extrabold flex items-center justify-center text-xs shadow-sm">
-                          ت
-                        </div>
-                        <div>
-                          <div className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
-                            <span>أ. سحر أحمد</span>
-                            <span className="px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-800 text-[10px] font-bold">
-                              معلمة
-                            </span>
-                          </div>
-                          <div className="text-[11px] text-slate-500 font-mono" dir="ltr">
-                            teacher.safiah@gmail.com
-                          </div>
-                        </div>
-                      </div>
-                      <ArrowRight className="w-4 h-4 text-slate-400 rotate-180 opacity-0 group-hover:opacity-100 transition-opacity" />
-                    </button>
-                  )}
-
-                  {/* Parent Account */}
-                  {(modalTargetRole === null || modalTargetRole === 'parent') && (
-                    <button
-                      type="button"
-                      onClick={() => handleProcessGoogleAuth('parent.safiah@gmail.com', 'محمد راشد العتيبي - ولي أمر')}
-                      className="w-full p-3 rounded-2xl border border-slate-200 hover:border-amber-400 hover:bg-slate-50 text-right flex items-center justify-between transition-all cursor-pointer group"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-full bg-amber-600 text-white font-extrabold flex items-center justify-center text-xs shadow-sm">
-                          و
-                        </div>
-                        <div>
-                          <div className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
-                            <span>محمد راشد العتيبي</span>
-                            <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 text-[10px] font-bold">
-                              ولي أمر
-                            </span>
-                          </div>
-                          <div className="text-[11px] text-slate-500 font-mono" dir="ltr">
-                            parent.safiah@gmail.com
-                          </div>
-                        </div>
-                      </div>
-                      <ArrowRight className="w-4 h-4 text-slate-400 rotate-180 opacity-0 group-hover:opacity-100 transition-opacity" />
-                    </button>
-                  )}
-                </div>
-
-                <div className="pt-2">
-                  <button
-                    type="button"
-                    onClick={() => setIsEnteringCustomEmail(true)}
-                    className="w-full py-2.5 px-4 rounded-xl border border-dashed border-slate-300 hover:border-emerald-600 hover:bg-emerald-50/50 text-xs font-bold text-slate-700 hover:text-emerald-900 transition-colors flex items-center justify-center gap-2 cursor-pointer"
-                  >
-                    <span>+ كتابة بريد Google آخر</span>
-                  </button>
-                </div>
-              </div>
-            ) : (
-              /* Custom Google Email Form */
-              <form onSubmit={handleCustomGoogleSubmit} className="space-y-4 animate-in fade-in">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                    البريد الإلكتروني لحساب Google:
-                  </label>
-                  <input
-                    type="email"
-                    required
-                    value={customGoogleEmail}
-                    onChange={(e) => setCustomGoogleEmail(e.target.value)}
-                    placeholder="yourname@gmail.com"
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-emerald-600 font-mono"
-                    dir="ltr"
-                    autoFocus
-                  />
-                  <p className="text-[11px] text-slate-500 mt-1.5 leading-relaxed">
-                    يتم فحص قاعدة البيانات وتوثيق الحساب وفق النظام المعتمد لمدرسة صفية بنت عمر الثانوية.
-                  </p>
-                </div>
-
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setIsEnteringCustomEmail(false)}
-                    className="flex-1 py-2.5 rounded-xl border border-slate-300 text-xs font-bold text-slate-700 hover:bg-slate-50 cursor-pointer"
-                  >
-                    رجوع
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={loading}
-                    className="flex-1 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-xs font-bold text-white shadow-md cursor-pointer disabled:opacity-50"
-                  >
-                    تأكيد والمتابعة
-                  </button>
-                </div>
-              </form>
-            )}
-
-            <div className="pt-2 border-t border-slate-100 text-center">
-              <span className="text-[11px] text-slate-400">
-                تسجيل دخول موحد عبر Google • مدرسة صفية بنت عمر الثانوية
-              </span>
-            </div>
-          </div>
-        </div>
+      {/* Staff First-Time Onboarding Activation Modal (Option A: Select Role & Enter Role Passcode) */}
+      {staffActivationEmail && (
+        <StaffActivationModal
+          email={staffActivationEmail}
+          initialName={staffActivationName}
+          onSuccess={async (activatedProfile) => {
+            setStaffActivationEmail(null);
+            setSuccessMsg(`تم تفعيل حساب (${activatedProfile.name}) بنجاح! مرحباً بكِ في المنصة.`);
+            await loginWithGoogleAccount(activatedProfile.email, activatedProfile.name);
+          }}
+          onCancel={() => {
+            setStaffActivationEmail(null);
+          }}
+        />
       )}
+
+
 
       {/* Footer */}
       <footer className="py-4 text-center text-xs text-slate-500 border-t border-slate-900 relative z-10">

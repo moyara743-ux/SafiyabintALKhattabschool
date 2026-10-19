@@ -20,6 +20,12 @@ import {
   INITIAL_USERS,
   OWNER_EMAIL,
 } from '../data/initialData';
+import {
+  isSystemOwner,
+  SYSTEM_OWNER_NAME,
+  isDesignatedPrincipal,
+  getDesignatedPrincipalName,
+} from './principalService';
 
 // Listener callback types
 type Listener<T> = (items: T) => void;
@@ -554,18 +560,25 @@ class LocalDataStore {
   // Users management (Exclusively fetched from Supabase public.users table)
   private sanitizeUserProfile(u: UserProfile): UserProfile {
     const email = (u.email || '').trim().toLowerCase();
-    const isDirectorAccount = email === OWNER_EMAIL.toLowerCase();
+    const isOwnerAccount = isSystemOwner(email);
+    const isPrincipalAccount = isDesignatedPrincipal(email);
     const isYaraAccount = email === 'yaradrashed@gmail.com';
 
     let role: SchoolRole = ((u.school_role as any) === 'owner' ? 'director' : u.school_role) || 'student';
-    if (isDirectorAccount) {
+    let name = u.name;
+    if (isOwnerAccount) {
+      role = 'system_owner';
+      name = SYSTEM_OWNER_NAME;
+    } else if (isPrincipalAccount) {
       role = 'director';
+      name = getDesignatedPrincipalName();
     } else if (isYaraAccount) {
       role = 'student';
     }
 
     return {
       ...u,
+      name,
       email,
       school_role: role,
       customPermissions: isYaraAccount ? [] : (u.customPermissions || []),
@@ -592,17 +605,29 @@ class LocalDataStore {
       if (!error && Array.isArray(data)) {
         remoteUsers = data.map((d: any) => {
           const email = (d.email || '').trim().toLowerCase();
-          const isDirectorAccount = email === OWNER_EMAIL.toLowerCase();
+          const isOwnerAccount = isSystemOwner(email);
+          const isPrincipalAccount = isDesignatedPrincipal(email);
           const isYaraAccount = email === 'yaradrashed@gmail.com';
 
           let role: SchoolRole = (d.school_role === 'owner' ? 'director' : d.school_role) || 'student';
-          if (isDirectorAccount) {
+          let name = d.name || 'مستخدم';
+          if (isOwnerAccount) {
+            role = 'system_owner';
+            name = SYSTEM_OWNER_NAME;
+          } else if (isPrincipalAccount) {
             role = 'director';
+            name = getDesignatedPrincipalName();
           } else if (isYaraAccount) {
             role = 'student';
           }
 
-          const isComp = Boolean(
+          const isHana = Boolean(
+            (d.name && (d.name.includes('هنا') || d.name.includes('الدوسري'))) ||
+            email.includes('hana') ||
+            email.includes('dossari')
+          );
+
+          const isComp = !isHana && Boolean(
             d.is_profile_completed ||
             d.is_profile_complete ||
             d.account_status === 'completed' ||
@@ -613,15 +638,15 @@ class LocalDataStore {
             id: d.id,
             name: d.name || 'مستخدم',
             email,
-            school_role: role,
+            school_role: isHana ? 'teacher' : role,
             status: d.status || 'active',
             phone: d.phone || '',
             nationalId: d.national_id || d.nationalId || '',
             national_id: d.national_id || d.nationalId || '',
-            accountStatus: (d.account_status as any) || (isComp ? 'completed' : 'needs_completion'),
-            account_status: (d.account_status as any) || (isComp ? 'completed' : 'needs_completion'),
-            is_profile_completed: isComp,
-            is_profile_complete: isComp,
+            accountStatus: isHana ? 'needs_completion' : ((d.account_status as any) || (isComp ? 'completed' : 'needs_completion')),
+            account_status: isHana ? 'needs_completion' : ((d.account_status as any) || (isComp ? 'completed' : 'needs_completion')),
+            is_profile_completed: !isHana && isComp,
+            is_profile_complete: !isHana && isComp,
             studentIdCode: d.student_id_code || d.studentIdCode,
             gradeStage: d.grade_stage || d.gradeStage,
             classroom: d.classroom,
@@ -659,18 +684,25 @@ class LocalDataStore {
 
   public async addUser(user: UserProfile): Promise<UserProfile> {
     const cleanEmail = (user.email || '').trim().toLowerCase();
-    const isDirectorAccount = cleanEmail === OWNER_EMAIL.toLowerCase();
+    const isOwnerAccount = isSystemOwner(cleanEmail);
+    const isPrincipalAccount = isDesignatedPrincipal(cleanEmail);
     const isYaraAccount = cleanEmail === 'yaradrashed@gmail.com';
 
     let resolvedRole: SchoolRole = ((user.school_role as any) === 'owner' ? 'director' : user.school_role) || 'student';
-    if (isDirectorAccount) {
+    let name = user.name;
+    if (isOwnerAccount) {
+      resolvedRole = 'system_owner';
+      name = SYSTEM_OWNER_NAME;
+    } else if (isPrincipalAccount) {
       resolvedRole = 'director';
+      name = getDesignatedPrincipalName();
     } else if (isYaraAccount) {
       resolvedRole = 'student';
     }
 
     const cleanUser: UserProfile = {
       ...user,
+      name,
       email: cleanEmail || user.email,
       school_role: resolvedRole,
       status: user.status || 'active',

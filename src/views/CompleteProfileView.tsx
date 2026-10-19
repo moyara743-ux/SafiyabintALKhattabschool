@@ -8,6 +8,7 @@ import {
 } from '../lib/studentService';
 import { StudentRecord, SchoolRole } from '../types';
 import { ROLE_LABELS_AR } from '../lib/permissions';
+import { isSystemOwner, isDesignatedPrincipal } from '../lib/principalService';
 import { dataStore } from '../lib/dataStore';
 import { supabase } from '../supabaseClient';
 import { logActivity } from '../lib/activityLogger';
@@ -33,6 +34,27 @@ interface CompleteProfileViewProps {
 
 export const CompleteProfileView: React.FC<CompleteProfileViewProps> = ({ onComplete }) => {
   const { user, profile, refreshProfile } = useAuth();
+
+  const isOwner = Boolean(
+    (user?.email && isSystemOwner(user.email)) ||
+    (profile?.email && isSystemOwner(profile.email)) ||
+    profile?.school_role === 'system_owner'
+  );
+  const isPrin = Boolean(
+    (user?.email && isDesignatedPrincipal(user.email)) ||
+    (profile?.email && isDesignatedPrincipal(profile.email)) ||
+    profile?.school_role === 'director'
+  );
+
+  useEffect(() => {
+    if (isOwner || isPrin) {
+      onComplete?.();
+    }
+  }, [isOwner, isPrin, onComplete]);
+
+  if (isOwner || isPrin) {
+    return null;
+  }
 
   const [studentRecord, setStudentRecord] = useState<StudentRecord | null>(null);
   const [loadingRecord, setLoadingRecord] = useState(false);
