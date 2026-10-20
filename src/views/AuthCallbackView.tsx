@@ -131,13 +131,14 @@ export const AuthCallbackView: React.FC<AuthCallbackViewProps> = ({ onRoute }) =
         let displayName = '';
         let photoURL = '';
 
+        // Extract email solely from the newly received OAuth token from Google
         if (idToken) {
           const decoded = decodeJwt(idToken);
           email = (decoded.email || '').trim().toLowerCase();
           displayName = decoded.name || '';
           photoURL = decoded.picture || '';
         } else if (accessToken) {
-          // Fast fetch from Google userinfo API
+          // Fast fetch directly from Google userinfo API
           try {
             const controller = new AbortController();
             const fetchTimeout = setTimeout(() => controller.abort(), 8000);
@@ -157,19 +158,10 @@ export const AuthCallbackView: React.FC<AuthCallbackViewProps> = ({ onRoute }) =
           }
         }
 
-        if (!email) {
-          // Direct check if email was passed in search params
-          const directEmail = searchParams.get('email');
-          if (directEmail) {
-            email = directEmail.trim().toLowerCase();
-            displayName = searchParams.get('name') || '';
-          }
-        }
-
         // Strict Check: Must have a valid Google email from the official OAuth response
         if (!email || !email.includes('@')) {
           clearTimeout(timeoutTimer);
-          setErrorMessage('لم يتم استلام بريد إلكتروني صالح من Google. يرجى الضغط أدناه لإعادة المحاولة.');
+          setErrorMessage('لم يتم استلام رمز مصادقة أو بريد صالح من Google. يرجى النقر أدناه لإعادة المحاولة.');
           return;
         }
 

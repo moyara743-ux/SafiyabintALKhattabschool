@@ -77,15 +77,58 @@ export function shouldUseExternalGoogleOAuth(): boolean {
 }
 
 /**
+ * Clears all previous tokens, session markers, and cache in localStorage and sessionStorage
+ * before redirecting to Google OAuth, preventing account mixing/bleed across sessions.
+ */
+export function clearAuthStorageForNewOAuth(intent: string = 'quick_login'): void {
+  if (typeof window === 'undefined') return;
+  try {
+    // 1. Remove active session emails and cache
+    localStorage.removeItem('school_active_session_email');
+    localStorage.removeItem('safiah_oauth_event');
+    localStorage.removeItem('safiah_cached_callback');
+    localStorage.removeItem('safiah_last_oauth_payload');
+    sessionStorage.removeItem('safiah_cached_callback');
+    sessionStorage.removeItem('safiah_last_oauth_payload');
+
+    // 2. Remove all Supabase auth and stale OAuth tokens from storage
+    const localKeysToRemove: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && (key.startsWith('sb-') || key.includes('supabase.auth.token') || key.includes('safiah_oauth_'))) {
+        if (key !== 'safiah_oauth_intent') {
+          localKeysToRemove.push(key);
+        }
+      }
+    }
+    localKeysToRemove.forEach((k) => localStorage.removeItem(k));
+
+    const sessionKeysToRemove: string[] = [];
+    for (let i = 0; i < sessionStorage.length; i++) {
+      const key = sessionStorage.key(i);
+      if (key && (key.startsWith('sb-') || key.includes('supabase.auth.token') || key.includes('safiah_oauth_'))) {
+        sessionKeysToRemove.push(key);
+      }
+    }
+    sessionKeysToRemove.forEach((k) => sessionStorage.removeItem(k));
+
+    // 3. Set fresh intent
+    localStorage.setItem('safiah_oauth_intent', intent);
+  } catch (err) {
+    console.warn('[GoogleAuth] Error clearing auth storage:', err);
+  }
+}
+
+/**
  * Redirects user directly to official external Google OAuth page (accounts.google.com)
  */
 export function redirectToGoogleOAuth(
   intent: string = 'quick_login'
 ): Window | null {
   if (typeof window === 'undefined') return null;
-  try {
-    localStorage.setItem('safiah_oauth_intent', intent);
-  } catch {}
+
+  // Clear all previous sessions and tokens before initiating Google login
+  clearAuthStorageForNewOAuth(intent);
 
   const googleAuthUrl = buildGoogleOAuthUrl(intent);
   const isIframe = typeof window !== 'undefined' && window.top !== window.self;
@@ -113,7 +156,7 @@ export async function initiateGoogleOAuthLogin(intent?: string): Promise<Window 
 }
 
 /**
- * Decodes a JWT token without external libraries
+ * Decodes a JWT token without external libraries, handling URL-safe base64 and missing padding
  */
 export function decodeJwt(token: string): {
   sub?: string;
@@ -123,9 +166,14 @@ export function decodeJwt(token: string): {
   [key: string]: any;
 } {
   try {
-    const base64Url = token.split('.')[1];
+    if (!token || typeof token !== 'string') return {};
+    const parts = token.split('.');
+    const base64Url = parts.length >= 2 ? parts[1] : parts[0];
     if (!base64Url) return {};
-    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    let base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    while (base64.length % 4 !== 0) {
+      base64 += '=';
+    }
     const jsonPayload = decodeURIComponent(
       atob(base64)
         .split('')

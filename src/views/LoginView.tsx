@@ -33,6 +33,7 @@ import {
   DIRECTOR_EMAIL,
   isUserProfileCompleted,
   redirectToGoogleOAuth,
+  clearAuthStorageForNewOAuth,
 } from '../lib/googleAuth';
 import {
   SYSTEM_OWNER_EMAIL,
@@ -212,14 +213,8 @@ export const LoginView: React.FC<LoginViewProps> = ({
     setError(null);
     setPendingIntent(intent);
 
-    // Clean stale cache immediately
-    if (typeof window !== 'undefined') {
-      try {
-        localStorage.removeItem('safiah_oauth_event');
-        sessionStorage.removeItem('safiah_last_oauth_payload');
-        sessionStorage.removeItem('safiah_cached_callback');
-      } catch {}
-    }
+    // Wipe all old tokens and storage immediately before Google redirect to force clean session
+    clearAuthStorageForNewOAuth(intent);
 
     setSuccessMsg('جارٍ التحويل إلى صفحة Google الرسمية (accounts.google.com)...');
     redirectToGoogleOAuth(intent);
