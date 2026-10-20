@@ -105,9 +105,15 @@ export const LoginView: React.FC<LoginViewProps> = ({
   useEffect(() => {
     if (initialError) {
       setError(initialError);
+      if (initialError.includes('التسجيل لأول مرة')) {
+        setViewMode('first_time_register');
+      }
     }
     if (initialNotice) {
       setSuccessMsg(initialNotice);
+      if (initialNotice.includes('تسجيل الدخول السريع') || initialNotice.includes('مسجل ومفعل')) {
+        setViewMode('quick_login');
+      }
     }
     if (initialStaffActivationEmail) {
       setStaffActivationEmail(initialStaffActivationEmail);
@@ -123,8 +129,18 @@ export const LoginView: React.FC<LoginViewProps> = ({
       if (e.data && e.data.type === 'SAFIAH_OAUTH_CALLBACK') {
         const target = e.data.target;
         if (target) {
-          if (target.error) setError(target.error);
-          if (target.notice) setSuccessMsg(target.notice);
+          if (target.error) {
+            setError(target.error);
+            if (target.error.includes('التسجيل لأول مرة')) {
+              setViewMode('first_time_register');
+            }
+          }
+          if (target.notice) {
+            setSuccessMsg(target.notice);
+            if (target.notice.includes('تسجيل الدخول السريع') || target.notice.includes('مسجل ومفعل')) {
+              setViewMode('quick_login');
+            }
+          }
           if (target.staffActivationEmail) {
             setStaffActivationEmail(target.staffActivationEmail);
             if (target.staffActivationName) setStaffActivationName(target.staffActivationName);
@@ -139,8 +155,18 @@ export const LoginView: React.FC<LoginViewProps> = ({
           const parsed = JSON.parse(e.newValue);
           if (parsed?.target) {
             const target = parsed.target;
-            if (target.error) setError(target.error);
-            if (target.notice) setSuccessMsg(target.notice);
+            if (target.error) {
+              setError(target.error);
+              if (target.error.includes('التسجيل لأول مرة')) {
+                setViewMode('first_time_register');
+              }
+            }
+            if (target.notice) {
+              setSuccessMsg(target.notice);
+              if (target.notice.includes('تسجيل الدخول السريع') || target.notice.includes('مسجل ومفعل')) {
+                setViewMode('quick_login');
+              }
+            }
             if (target.staffActivationEmail) {
               setStaffActivationEmail(target.staffActivationEmail);
               if (target.staffActivationName) setStaffActivationName(target.staffActivationName);
@@ -361,9 +387,26 @@ export const LoginView: React.FC<LoginViewProps> = ({
           )}
 
           {successMsg && (
-            <div className="p-4 bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 rounded-2xl text-xs sm:text-sm flex items-start gap-3 animate-in fade-in">
-              <div className="w-4 h-4 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin shrink-0 mt-0.5" />
-              <div className="leading-relaxed font-bold">{successMsg}</div>
+            <div
+              className={`p-4 rounded-2xl text-xs sm:text-sm flex items-start gap-3 animate-in fade-in ${
+                successMsg.includes('مسجل ومفعل') || successMsg.includes('يرجى')
+                  ? 'bg-amber-500/15 border-2 border-amber-500/40 text-amber-200'
+                  : 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-300'
+              }`}
+            >
+              {successMsg.includes('مسجل ومفعل') ? (
+                <CheckCircle2 className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+              ) : successMsg.includes('جارٍ') ? (
+                <div className="w-4 h-4 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin shrink-0 mt-0.5" />
+              ) : (
+                <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
+              )}
+              <div className="leading-relaxed font-bold">
+                {successMsg.includes('مسجل ومفعل') && (
+                  <span className="block text-white mb-0.5">تنبيه مدرسي:</span>
+                )}
+                {successMsg}
+              </div>
             </div>
           )}
 

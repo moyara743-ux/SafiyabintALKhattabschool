@@ -1,10 +1,10 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { decodeJwt, redirectToGoogleOAuth } from '../lib/googleAuth';
+import { decodeJwt, redirectToGoogleOAuth, isUserProfileCompleted } from '../lib/googleAuth';
 import { isStaffEmailAuthorized } from '../lib/authorizedStaffService';
 import { verifyGoogleEmailPreAuthorization } from '../lib/authSecurity';
 import { SYSTEM_OWNER_EMAIL, getDesignatedPrincipalEmail } from '../lib/principalService';
-import { GraduationCap, Shield, AlertCircle } from 'lucide-react';
+import { GraduationCap, Shield, AlertCircle, CheckCircle2 } from 'lucide-react';
 
 interface AuthCallbackViewProps {
   onRoute: (target: {
@@ -20,9 +20,20 @@ export const AuthCallbackView: React.FC<AuthCallbackViewProps> = ({ onRoute }) =
   const { registerWithGoogle } = useAuth();
   const [statusMessage, setStatusMessage] = useState('جارٍ معالجة مصادقة Google والتحقق من الحساب المعتمد...');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [blockedAccountNotice, setBlockedAccountNotice] = useState<string | null>(null);
+  const [redirectCountdown, setRedirectCountdown] = useState<number>(2);
 
   const processedRef = useRef(false);
   const hasRoutedRef = useRef(false);
+
+  useEffect(() => {
+    if (blockedAccountNotice && redirectCountdown > 0) {
+      const timer = setTimeout(() => {
+        setRedirectCountdown((prev) => prev - 1);
+      }, 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [blockedAccountNotice, redirectCountdown]);
 
   const handleRetryGoogleAuth = () => {
     const savedIntent =
@@ -193,142 +204,201 @@ export const AuthCallbackView: React.FC<AuthCallbackViewProps> = ({ onRoute }) =
 
         setStatusMessage(`تم تأكيد الهوية عبر Google (${email}). جارٍ فحص الاعتماد المدرسي...`);
 
-        // 2. Strict Redirection Logic:
-        // A. System Owner & Designated Principal:
+        // 2. Strict Redirection & Separation Logic:
         const isOwner = email === SYSTEM_OWNER_EMAIL.toLowerCase();
         const isPrincipal = email === getDesignatedPrincipalEmail().toLowerCase();
-
-        if (isOwner || isPrincipal) {
-          clearTimeout(timeoutTimer);
-          localStorage.setItem('school_active_session_email', email);
-          try {
-            await registerWithGoogle({
-              email,
-              providedName: displayName,
-              photoURL,
-            });
-          } catch {}
-          dispatchRoute({ view: 'admin_dashboard' });
-          return;
-        }
-
-        // B. Check Authorized Staff List:
         const staffAuth = await isStaffEmailAuthorized(email);
-
-        if (staffAuth.isAuthorized) {
-          clearTimeout(timeoutTimer);
-          if (!staffAuth.isActivated) {
-            // RULE 1:
-            // البريد معتمد ومُدرج في قائمة الإدارة وكان الحساب (غير مفعل / لأول مرة):
-            // يُعاد توجيه المنسوبة تلقائياً إلى صفحة إكمال البيانات والرمز
-            dispatchRoute({
-              view: 'login',
-              staffActivationEmail: email,
-              staffActivationName: displayName || staffAuth.record?.name || '',
-            });
-            return;
-          } else {
-            // الحساب مفعل مسبقاً في قاعدة بيانات المدرسة -> حفظ الجلسة والتوجيه المباشر للوحة التحكم
-            localStorage.setItem('school_active_session_email', email);
-            try {
-              await registerWithGoogle({
-                email,
-                providedName: displayName || staffAuth.record?.name,
-                photoURL,
-              });
-            } catch {}
-            dispatchRoute({ view: 'admin_dashboard' });
-            return;
-          }
-        }
-
-        // C. Check General School Database (Students & Parents):
         const preAuthCheck = await verifyGoogleEmailPreAuthorization(email);
 
+        // Check if the email exists in school database at all
+        const isKnownInSchool = isOwner || isPrincipal || staffAuth.isAuthorized || preAuthCheck.isAuthorized;
+
+        if (!isKnownInSchool) {
+          clearTimeout(timeoutTimer);
+          dispatchRoute({
+            view: 'login',
+            error: 'هذا البريد غير مسجل لدى إدارة المدرسة.',
+          });
+          return;
+        }
+
+        // Determine if account is already completed and active:
+        let isAlreadyCompleted = false;
+        let schoolRole: string | undefined = undefined;
+
+        if (isOwner) {
+          isAlreadyCompleted = true;
+          schoolRole = 'system_owner';
+        } else if (isPrincipal) {
+          isAlreadyCompleted = true;
+          schoolRole = 'director';
+        } else if (staffAuth.isAuthorized) {
+          isAlreadyCompleted = staffAuth.isActivated === true;
+          schoolRole = staffAuth.record?.assignedRole || 'teacher';
+        } else if (preAuthCheck.isAuthorized && preAuthCheck.profile) {
+          isAlreadyCompleted = isUserProfileCompleted(preAuthCheck.profile);
+          schoolRole = preAuthCheck.profile.school_role;
+        }
+
+        const isFirstTimeRegistrationIntent =
+          state === 'register_staff' ||
+          state === 'register_student' ||
+          state === 'register_parent' ||
+          state.startsWith('register_');
+
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        // RULE 1: مسار [التسجيل لأول مرة] (First-Time Registration Path)
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        if (isFirstTimeRegistrationIntent) {
+          clearTimeout(timeoutTimer);
+
+          // إذا كان الحساب مسجلاً ومكتمل البيانات مسبقاً (is_active / completed):
+          // اقفل المسار فوراً، واعرض تنبيه: «حسابك مسجل ومفعل بالفعل في النظام. يرجى استخدام تسجيل الدخول السريع عبر Google»، واعد توجيه الصفحة إلى شاشة الدخول الرئيسية خلال ثانيتين.
+          if (isAlreadyCompleted) {
+            const blockedNotice = 'حسابك مسجل ومفعل بالفعل في النظام. يرجى استخدام تسجيل الدخول السريع عبر Google.';
+            setBlockedAccountNotice(blockedNotice);
+            setRedirectCountdown(2);
+
+            // Notify opener / storage so main view knows about the block immediately
+            try {
+              if (window.opener && !window.opener.closed) {
+                window.opener.postMessage(
+                  { type: 'SAFIAH_OAUTH_CALLBACK', target: { view: 'login', notice: blockedNotice } },
+                  '*'
+                );
+              }
+              localStorage.setItem(
+                'safiah_oauth_event',
+                JSON.stringify({
+                  timestamp: Date.now(),
+                  target: { view: 'login', notice: blockedNotice },
+                })
+              );
+            } catch {}
+
+            // Auto-redirect to main login after 2 seconds
+            setTimeout(() => {
+              dispatchRoute({
+                view: 'login',
+                notice: blockedNotice,
+              });
+            }, 2000);
+            return;
+          }
+
+          // إذا كان الحساب غير مكتمل (لأول مرة بالفعل):
+          if (state === 'register_staff') {
+            if (staffAuth.isAuthorized && !staffAuth.isActivated) {
+              dispatchRoute({
+                view: 'login',
+                staffActivationEmail: email,
+                staffActivationName: displayName || staffAuth.record?.name || '',
+              });
+              return;
+            } else {
+              dispatchRoute({
+                view: 'login',
+                error: 'هذا البريد غير مسجل لدى إدارة المدرسة.',
+              });
+              return;
+            }
+          }
+
+          if (state === 'register_student') {
+            if (preAuthCheck.isAuthorized) {
+              localStorage.setItem('school_active_session_email', email);
+              try {
+                await registerWithGoogle({
+                  email,
+                  role: 'student',
+                  providedName: displayName,
+                  photoURL,
+                });
+              } catch {}
+              dispatchRoute({ view: 'home' });
+              return;
+            } else {
+              dispatchRoute({
+                view: 'login',
+                error: 'هذا البريد غير مسجل لدى إدارة المدرسة.',
+              });
+              return;
+            }
+          }
+
+          if (state === 'register_parent') {
+            if (preAuthCheck.isAuthorized) {
+              localStorage.setItem('school_active_session_email', email);
+              try {
+                await registerWithGoogle({
+                  email,
+                  role: 'parent',
+                  providedName: displayName,
+                  photoURL,
+                });
+              } catch {}
+              dispatchRoute({ view: 'home' });
+              return;
+            } else {
+              dispatchRoute({
+                view: 'login',
+                error: 'هذا البريد غير مسجل لدى إدارة المدرسة.',
+              });
+              return;
+            }
+          }
+
+          dispatchRoute({
+            view: 'login',
+            error: 'تعذر تحديد قسم التسجيل المطلوب. يرجى المحاولة مرة أخرى.',
+          });
+          return;
+        }
+
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        // RULE 2: مسار [تسجيل الدخول السريع عبر Google] (Quick Google Login)
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
         clearTimeout(timeoutTimer);
 
-        if (state === 'register_student') {
-          if (
-            preAuthCheck.isAuthorized &&
-            preAuthCheck.profile &&
-            (preAuthCheck.profile.is_profile_completed ||
-              preAuthCheck.profile.accountStatus === 'completed')
-          ) {
-            dispatchRoute({
-              view: 'login',
-              notice:
-                'حساب الطالبة مفعل ومكتمل مسبقاً في النظام. يرجى استخدام «تسجيل الدخول السريع عبر Google» للدخول المباشر.',
-            });
-            return;
-          }
-          if (preAuthCheck.isAuthorized) {
-            try {
-              await registerWithGoogle({
-                email,
-                role: 'student',
-                providedName: displayName,
-                photoURL,
-              });
-            } catch {}
-            dispatchRoute({ view: 'home' });
-            return;
-          }
-          // Student not registered
+        // إذا كان البريد غير مكتمل البيانات في هذا المسار: اعرض تنبيه «يرجى إكمال عملية التسجيل لأول مرة أولاً».
+        if (!isAlreadyCompleted) {
+          const incompleteError = 'يرجى إكمال عملية التسجيل لأول مرة أولاً.';
           dispatchRoute({
             view: 'login',
-            error: 'هذا البريد غير مسجل لدى إدارة المدرسة.',
+            error: incompleteError,
+            staffActivationEmail: staffAuth.isAuthorized && !staffAuth.isActivated ? email : undefined,
+            staffActivationName: displayName || staffAuth.record?.name,
           });
           return;
         }
 
-        if (state === 'register_parent') {
-          if (preAuthCheck.isAuthorized && preAuthCheck.profile?.accountStatus === 'completed') {
-            dispatchRoute({
-              view: 'login',
-              notice:
-                'حساب ولي الأمر مفعل ومكتمل مسبقاً في النظام. يرجى استخدام «تسجيل الدخول السريع عبر Google» للدخول المباشر.',
-            });
-            return;
-          }
-          if (preAuthCheck.isAuthorized) {
-            try {
-              await registerWithGoogle({
-                email,
-                role: 'parent',
-                providedName: displayName,
-                photoURL,
-              });
-            } catch {}
-            dispatchRoute({ view: 'home' });
-            return;
-          }
-          // Parent not registered
-          dispatchRoute({
-            view: 'login',
-            error: 'هذا البريد غير مسجل لدى إدارة المدرسة.',
+        // إذا تبين أن البريد القادم من Google في هذا المسار مكتمل البيانات: انقل المستخدمة فوراً وبشكل تلقائي إلى [لوحة التحكم].
+        localStorage.setItem('school_active_session_email', email);
+        try {
+          await registerWithGoogle({
+            email,
+            providedName: displayName || staffAuth.record?.name || preAuthCheck.profile?.name,
+            photoURL,
           });
-          return;
+        } catch (authErr) {
+          console.warn('[AuthCallbackView] registerWithGoogle notice:', authErr);
         }
 
-        // Quick Sign-In -> Save session and direct to admin dashboard immediately
-        if (preAuthCheck.isAuthorized) {
-          localStorage.setItem('school_active_session_email', email);
-          try {
-            await registerWithGoogle({
-              email,
-              providedName: displayName,
-              photoURL,
-            });
-          } catch {}
+        if (
+          isOwner ||
+          isPrincipal ||
+          schoolRole === 'director' ||
+          schoolRole === 'system_owner' ||
+          schoolRole === 'teacher' ||
+          schoolRole === 'supervisor' ||
+          schoolRole === 'administrator' ||
+          schoolRole === 'counselor'
+        ) {
           dispatchRoute({ view: 'admin_dashboard' });
-          return;
+        } else {
+          dispatchRoute({ view: 'home' });
         }
-
-        // Strict Rejection for any email not in the school database:
-        dispatchRoute({
-          view: 'login',
-          error: 'هذا البريد غير مسجل لدى إدارة المدرسة.',
-        });
+        return;
       } catch (err: any) {
         clearTimeout(timeoutTimer);
         console.warn('[AuthCallbackView] Callback processing notice:', err?.message || err);
@@ -362,7 +432,29 @@ export const AuthCallbackView: React.FC<AuthCallbackViewProps> = ({ onRoute }) =
           </div>
         </div>
 
-        {errorMessage ? (
+        {blockedAccountNotice ? (
+          <div className="space-y-4 animate-in fade-in">
+            <div className="p-4 bg-amber-500/15 border-2 border-amber-500/40 text-amber-200 rounded-2xl text-xs sm:text-sm text-right flex items-start gap-3">
+              <CheckCircle2 className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+              <div className="leading-relaxed flex-1">
+                <strong className="block mb-1 text-white text-sm">تنبيه النظام:</strong>
+                {blockedAccountNotice}
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-300 font-medium">
+              جارٍ تحويلك تلقائياً إلى صفحة الدخول السريع عبر Google خلال {redirectCountdown} ثوانٍ...
+            </p>
+
+            <button
+              type="button"
+              onClick={() => onRoute({ view: 'login', notice: blockedAccountNotice })}
+              className="w-full py-3.5 px-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl text-xs sm:text-sm font-black flex items-center justify-center gap-2 shadow-lg shadow-emerald-950/40 cursor-pointer active:scale-[0.99] transition-all"
+            >
+              <span>الانتقال المباشر لتسجيل الدخول السريع الآن ←</span>
+            </button>
+          </div>
+        ) : errorMessage ? (
           <div className="space-y-4">
             <div className="p-4 bg-rose-500/15 border border-rose-500/30 text-rose-300 rounded-2xl text-xs sm:text-sm text-right flex items-start gap-3">
               <AlertCircle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
