@@ -68,8 +68,8 @@ export const LoginView: React.FC<LoginViewProps> = ({
     resetPassword,
   } = useAuth();
 
-  // Primary View Mode: 'first_time_register' (التسجيل لأول مرة) or 'quick_login' (تسجيل الدخول السريع عبر Google)
-  const [viewMode, setViewMode] = useState<'quick_login' | 'first_time_register'>('first_time_register');
+  // Primary View Mode: 'quick_login' (تسجيل الدخول عبر Google) or 'first_time_register' (التسجيل لأول مرة)
+  const [viewMode, setViewMode] = useState<'quick_login' | 'first_time_register'>('quick_login');
 
   // Alternative fallback login expansion (Preserves existing password/student code systems in collapsed drawer)
   const [showAlternativeLogin, setShowAlternativeLogin] = useState(false);
@@ -371,7 +371,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
               }`}
             >
               <Zap className="w-4 h-4 text-amber-300" />
-              <span>تسجيل الدخول السريع عبر Google</span>
+              <span>تسجيل الدخول عبر Google</span>
             </button>
 
             <button
@@ -423,14 +423,14 @@ export const LoginView: React.FC<LoginViewProps> = ({
           )}
 
           {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
-          {/* TAB 1: QUICK GOOGLE SIGN-IN (أولاً: تسجيل الدخول السريع)        */}
+          {/* TAB 1: QUICK GOOGLE SIGN-IN (أولاً: تسجيل الدخول عبر Google)   */}
           {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
           {viewMode === 'quick_login' && (
             <div className="space-y-5 animate-in fade-in">
               <div className="p-4 sm:p-5 bg-gradient-to-b from-slate-800/90 to-slate-800/40 rounded-2xl border border-slate-700/80 space-y-4">
                 <div className="flex items-center gap-2.5 text-emerald-400 font-extrabold text-sm sm:text-base">
                   <Zap className="w-5 h-5 text-amber-400 shrink-0" />
-                  <span>أولاً: زر التسجيل والدخول السريع (Quick Google Sign-In)</span>
+                  <span>تسجيل الدخول عبر Google (المصادقة الرسمية المباشرة)</span>
                 </div>
 
                 <p className="text-xs text-slate-300 leading-relaxed">
@@ -462,33 +462,46 @@ export const LoginView: React.FC<LoginViewProps> = ({
                 {/* GIS Render Anchor if ready */}
                 <div className="flex justify-center" ref={googleBtnContainerRef} />
 
-                {/* Big Prominent Google Button */}
-                <button
-                  type="button"
-                  onClick={() => handleStartGoogleOAuth('quick_login')}
-                  disabled={loading}
-                  className="w-full py-4 px-5 rounded-2xl bg-white hover:bg-slate-100 text-slate-900 border border-slate-200 transition-all flex items-center justify-center gap-3.5 font-extrabold text-sm sm:text-base shadow-xl hover:shadow-2xl cursor-pointer disabled:opacity-50 active:scale-[0.99]"
-                >
-                  <svg className="w-6 h-6 shrink-0" viewBox="0 0 24 24">
-                    <path
-                      fill="#4285F4"
-                      d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z"
-                    />
-                    <path
-                      fill="#34A853"
-                      d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.24v3.15C3.26 21.36 7.33 24 12 24z"
-                    />
-                    <path
-                      fill="#FBBC05"
-                      d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.24C.45 8.16 0 9.97 0 12s.45 3.84 1.24 5.42l4.04-3.15z"
-                    />
-                    <path
-                      fill="#EA4335"
-                      d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.24 6.58l4.04 3.15c.95-2.83 3.6-4.98 6.72-4.98z"
-                    />
-                  </svg>
-                  <span>تسجيل الدخول السريع عبر Google</span>
-                </button>
+                {/* Big Prominent Direct Google Button */}
+                <div className="space-y-2.5 pt-1">
+                  <a
+                    href={buildGoogleOAuthUrl('quick_login')}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => handleStartGoogleOAuth('quick_login')}
+                    className="w-full py-4 px-5 rounded-2xl bg-white hover:bg-slate-100 text-slate-900 border-2 border-slate-200 hover:border-emerald-500 transition-all flex flex-col sm:flex-row items-center justify-center gap-3.5 font-extrabold text-sm sm:text-base shadow-xl hover:shadow-2xl cursor-pointer active:scale-[0.99] text-center no-underline group"
+                  >
+                    <svg className="w-6 h-6 shrink-0 group-hover:scale-105 transition-transform" viewBox="0 0 24 24">
+                      <path
+                        fill="#4285F4"
+                        d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z"
+                      />
+                      <path
+                        fill="#34A853"
+                        d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.24v3.15C3.26 21.36 7.33 24 12 24z"
+                      />
+                      <path
+                        fill="#FBBC05"
+                        d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.24C.45 8.16 0 9.97 0 12s.45 3.84 1.24 5.42l4.04-3.15z"
+                      />
+                      <path
+                        fill="#EA4335"
+                        d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.24 6.58l4.04 3.15c.95-2.83 3.6-4.98 6.72-4.98z"
+                      />
+                    </svg>
+                    <span className="text-base sm:text-lg font-black text-slate-900">
+                      تسجيل الدخول عبر Google
+                    </span>
+                    <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-800 bg-emerald-100 px-2.5 py-0.5 rounded-full border border-emerald-300">
+                      <ExternalLink className="w-3 h-3 text-emerald-700" />
+                      <span>accounts.google.com</span>
+                    </span>
+                  </a>
+
+                  <p className="text-[11px] text-center text-slate-400 font-medium">
+                    توثيق رسمي موحد بدون محاكاة • ينقلك مباشرة لاختيار حسابك في Google والتحقق من اعتماده
+                  </p>
+                </div>
               </div>
 
               {/* Roles Badge List */}
@@ -562,19 +575,20 @@ export const LoginView: React.FC<LoginViewProps> = ({
                   <li className="text-amber-300 font-semibold">يمنع منعاً باتاً تصفح الموقع أو الانتقال لأي قسم إلا بعد حفظ كامل البيانات المطلوبة.</li>
                 </ul>
 
-                <button
-                  type="button"
+                <a
+                  href={buildGoogleOAuthUrl('register_student')}
+                  target="_blank"
+                  rel="noopener noreferrer"
                   onClick={() => handleStartGoogleOAuth('register_student')}
-                  disabled={loading}
-                  className="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs sm:text-sm flex items-center justify-center gap-2 shadow-md hover:shadow-lg transition-all cursor-pointer"
+                  className="w-full py-3.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs sm:text-sm flex items-center justify-center gap-2 shadow-md hover:shadow-lg transition-all cursor-pointer no-underline text-center active:scale-[0.99]"
                 >
                   <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
                     <path fill="#fff" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.24v3.15C3.26 21.36 7.33 24 12 24z" />
                     <path fill="#fff" d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.24C.45 8.16 0 9.97 0 12s.45 3.84 1.24 5.42l4.04-3.15z" />
                     <path fill="#fff" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.24 6.58l4.04 3.15c.95-2.83 3.6-4.98 6.72-4.98z" />
                   </svg>
-                  <span>تسجيل الطالبة عبر Google ←</span>
-                </button>
+                  <span>تسجيل الطالبة عبر Google (accounts.google.com) ←</span>
+                </a>
               </div>
 
               {/* 🔵 CARD 2: تسجيل أولياء الأمور */}
@@ -602,19 +616,20 @@ export const LoginView: React.FC<LoginViewProps> = ({
                   <li className="text-amber-300 font-semibold">لا يمكن الدخول للنظام وتصفحه إلا بعد الربط وإكمال البيانات.</li>
                 </ul>
 
-                <button
-                  type="button"
+                <a
+                  href={buildGoogleOAuthUrl('register_parent')}
+                  target="_blank"
+                  rel="noopener noreferrer"
                   onClick={() => handleStartGoogleOAuth('register_parent')}
-                  disabled={loading}
-                  className="w-full py-3 px-4 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-black text-xs sm:text-sm flex items-center justify-center gap-2 shadow-md hover:shadow-lg transition-all cursor-pointer"
+                  className="w-full py-3.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-black text-xs sm:text-sm flex items-center justify-center gap-2 shadow-md hover:shadow-lg transition-all cursor-pointer no-underline text-center active:scale-[0.99]"
                 >
                   <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
                     <path fill="#fff" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.24v3.15C3.26 21.36 7.33 24 12 24z" />
                     <path fill="#fff" d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.24C.45 8.16 0 9.97 0 12s.45 3.84 1.24 5.42l4.04-3.15z" />
                     <path fill="#fff" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.24 6.58l4.04 3.15c.95-2.83 3.6-4.98 6.72-4.98z" />
                   </svg>
-                  <span>تسجيل ولي الأمر عبر Google ←</span>
-                </button>
+                  <span>تسجيل ولي الأمر عبر Google (accounts.google.com) ←</span>
+                </a>
               </div>
 
               {/* 🟣 CARD 3: تسجيل الكادر المدرسي والإداري والمديرة */}
@@ -641,19 +656,20 @@ export const LoginView: React.FC<LoginViewProps> = ({
                   <li className="text-emerald-300 font-semibold">المستخدمات المفعلات سابقاً: يدخلن مباشرة بحسابهن ورتبتهن دون طلب الرمز مجدداً.</li>
                 </ul>
 
-                <button
-                  type="button"
+                <a
+                  href={buildGoogleOAuthUrl('register_staff')}
+                  target="_blank"
+                  rel="noopener noreferrer"
                   onClick={() => handleStartGoogleOAuth('register_staff')}
-                  disabled={loading}
-                  className="w-full py-3 px-4 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-black text-xs sm:text-sm flex items-center justify-center gap-2 shadow-md hover:shadow-lg transition-all cursor-pointer"
+                  className="w-full py-3.5 px-4 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-black text-xs sm:text-sm flex items-center justify-center gap-2 shadow-md hover:shadow-lg transition-all cursor-pointer no-underline text-center active:scale-[0.99]"
                 >
                   <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
                     <path fill="#fff" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.24v3.15C3.26 21.36 7.33 24 12 24z" />
                     <path fill="#fff" d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.24C.45 8.16 0 9.97 0 12s.45 3.84 1.24 5.42l4.04-3.15z" />
                     <path fill="#fff" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.24 6.58l4.04 3.15c.95-2.83 3.6-4.98 6.72-4.98z" />
                   </svg>
-                  <span>تسجيل الكادر والمديرة عبر Google ←</span>
-                </button>
+                  <span>تسجيل الكادر والمديرة عبر Google (accounts.google.com) ←</span>
+                </a>
               </div>
             </div>
           )}
