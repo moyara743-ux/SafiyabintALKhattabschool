@@ -80,16 +80,22 @@ function AppContent() {
     principalName: 'أ. هدى الغامدي',
   });
 
-  // Check if browser currently is on /auth/callback or has tokens from Google OAuth
-  const isAuthCallbackUrl = typeof window !== 'undefined' && (
-    window.location.pathname.includes('/auth/callback') ||
+  // Check if browser currently has incoming tokens from Google OAuth
+  const hasTokensInUrl = typeof window !== 'undefined' && (
     window.location.hash.includes('id_token') ||
     window.location.hash.includes('access_token') ||
     window.location.search.includes('id_token=') ||
     (window.location.search.includes('code=') && !window.location.search.includes('mock='))
   );
 
-  const [isProcessingCallback, setIsProcessingCallback] = useState(isAuthCallbackUrl);
+  const isAuthCallbackPath = typeof window !== 'undefined' && window.location.pathname.includes('/auth/callback');
+  const activeSessionEmail = typeof window !== 'undefined' ? localStorage.getItem('school_active_session_email') : null;
+
+  // Only trigger processing view if there are incoming tokens to parse, or if at /auth/callback without a session
+  const [isProcessingCallback, setIsProcessingCallback] = useState(
+    Boolean(hasTokensInUrl || (isAuthCallbackPath && !activeSessionEmail))
+  );
+
   const [callbackRouteState, setCallbackRouteState] = useState<{
     staffActivationEmail?: string;
     staffActivationName?: string;
@@ -316,6 +322,23 @@ function AppContent() {
       window.removeEventListener('storage', handleStorage);
     };
   }, []);
+
+  // Auto Bypass: Direct authenticated sessions immediately to admin_dashboard and clean url
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.location.pathname.includes('/auth/callback') && !hasTokensInUrl) {
+      if (window.history?.replaceState) {
+        window.history.replaceState({}, document.title, '/');
+      }
+    }
+    if (user && !authLoading) {
+      if (isProcessingCallback) {
+        setIsProcessingCallback(false);
+      }
+      if (currentView === 'home' || isAuthCallbackPath) {
+        setCurrentView('admin_dashboard');
+      }
+    }
+  }, [user, authLoading, isProcessingCallback, hasTokensInUrl, isAuthCallbackPath]);
 
   const handleOpenAuth = (_mode: 'login' | 'register' = 'login') => {
     redirectToGoogleOAuth('quick_login');

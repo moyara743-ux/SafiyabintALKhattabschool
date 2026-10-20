@@ -310,28 +310,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               return;
             }
 
-            const allUsers = await dataStore.getUsers();
-            const found = allUsers.find(
-              (u) => u.email && u.email.trim().toLowerCase() === cleanLocal
-            );
-
-            if (found && (found.name?.includes('هنا') || found.name?.includes('الدوسري'))) {
-              localStorage.removeItem('school_active_session_email');
-              if (isMounted) {
-                setUser(null);
-                setProfile(null);
-              }
-              return;
-            }
-
-            if (found && found.status !== 'disabled') {
+            // Authoritative pre-auth check for persistent session auto-login
+            const authCheck = await verifyGoogleEmailPreAuthorization(cleanLocal);
+            if (authCheck.isAuthorized && authCheck.profile) {
+              const activeProf = authCheck.profile;
               setUser({
-                id: found.id,
-                uid: found.id,
-                email: found.email,
-                displayName: found.name,
+                id: activeProf.id,
+                uid: activeProf.id,
+                email: activeProf.email,
+                displayName: activeProf.name,
               });
-              setProfile(found);
+              setProfile(activeProf);
+            } else {
+              const allUsers = await dataStore.getUsers();
+              const found = allUsers.find(
+                (u) => u.email && u.email.trim().toLowerCase() === cleanLocal
+              );
+              if (found && found.status !== 'disabled') {
+                setUser({
+                  id: found.id,
+                  uid: found.id,
+                  email: found.email,
+                  displayName: found.name,
+                });
+                setProfile(found);
+              }
             }
           }
         }

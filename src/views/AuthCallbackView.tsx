@@ -127,6 +127,22 @@ export const AuthCallbackView: React.FC<AuthCallbackViewProps> = ({ onRoute }) =
           (typeof window !== 'undefined' ? localStorage.getItem('safiah_oauth_intent') : null) ||
           'quick_login';
 
+        // 1. Handling Reload / Missing Tokens smoothly without flashing error:
+        if (!idToken && !accessToken) {
+          clearTimeout(timeoutTimer);
+          const activeEmail = typeof window !== 'undefined' ? localStorage.getItem('school_active_session_email') : null;
+          if (activeEmail && activeEmail.includes('@')) {
+            const check = await verifyGoogleEmailPreAuthorization(activeEmail);
+            if (check.isAuthorized) {
+              dispatchRoute({ view: 'admin_dashboard' });
+              return;
+            }
+          }
+          // Smooth redirection to login view if no tokens and no active session
+          dispatchRoute({ view: 'login' });
+          return;
+        }
+
         let email = '';
         let displayName = '';
         let photoURL = '';
@@ -161,7 +177,7 @@ export const AuthCallbackView: React.FC<AuthCallbackViewProps> = ({ onRoute }) =
         // Strict Check: Must have a valid Google email from the official OAuth response
         if (!email || !email.includes('@')) {
           clearTimeout(timeoutTimer);
-          setErrorMessage('لم يتم استلام رمز مصادقة أو بريد صالح من Google. يرجى النقر أدناه لإعادة المحاولة.');
+          dispatchRoute({ view: 'login', error: 'لم يتم استلام رمز مصادقة أو بريد صالح من Google. يرجى المحاولة مرة أخرى.' });
           return;
         }
 
@@ -184,6 +200,7 @@ export const AuthCallbackView: React.FC<AuthCallbackViewProps> = ({ onRoute }) =
 
         if (isOwner || isPrincipal) {
           clearTimeout(timeoutTimer);
+          localStorage.setItem('school_active_session_email', email);
           try {
             await registerWithGoogle({
               email,
@@ -211,26 +228,17 @@ export const AuthCallbackView: React.FC<AuthCallbackViewProps> = ({ onRoute }) =
             });
             return;
           } else {
-            // الحساب مفعل مسبقاً في قاعدة بيانات المدرسة
-            if (state === 'register_staff') {
-              // إذا حاولت منسوبة مفعلة التسجيل عبر "شاشة أول مرة"
-              dispatchRoute({
-                view: 'login',
-                error: 'حسابكِ مفعل مسبقاً في النظام برتبة معتمدة. يرجى استخدام «تسجيل الدخول السريع عبر Google» للدخول المباشر إلى المنصة.',
+            // الحساب مفعل مسبقاً في قاعدة بيانات المدرسة -> حفظ الجلسة والتوجيه المباشر للوحة التحكم
+            localStorage.setItem('school_active_session_email', email);
+            try {
+              await registerWithGoogle({
+                email,
+                providedName: displayName || staffAuth.record?.name,
+                photoURL,
               });
-              return;
-            } else {
-              // الدخول السريع لحساب مفعل مسبقاً
-              try {
-                await registerWithGoogle({
-                  email,
-                  providedName: displayName || staffAuth.record?.name,
-                  photoURL,
-                });
-              } catch {}
-              dispatchRoute({ view: 'home' });
-              return;
-            }
+            } catch {}
+            dispatchRoute({ view: 'admin_dashboard' });
+            return;
           }
         }
 
@@ -302,8 +310,9 @@ export const AuthCallbackView: React.FC<AuthCallbackViewProps> = ({ onRoute }) =
           return;
         }
 
-        // Quick Sign-In
+        // Quick Sign-In -> Save session and direct to admin dashboard immediately
         if (preAuthCheck.isAuthorized) {
+          localStorage.setItem('school_active_session_email', email);
           try {
             await registerWithGoogle({
               email,
@@ -311,7 +320,7 @@ export const AuthCallbackView: React.FC<AuthCallbackViewProps> = ({ onRoute }) =
               photoURL,
             });
           } catch {}
-          dispatchRoute({ view: 'home' });
+          dispatchRoute({ view: 'admin_dashboard' });
           return;
         }
 
