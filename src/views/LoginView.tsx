@@ -72,22 +72,6 @@ export const LoginView: React.FC<LoginViewProps> = ({
   // Primary View Mode: 'quick_login' (تسجيل الدخول عبر Google) or 'first_time_register' (التسجيل لأول مرة)
   const [viewMode, setViewMode] = useState<'quick_login' | 'first_time_register'>('quick_login');
 
-  // Alternative fallback login expansion (Preserves existing password/student code systems in collapsed drawer)
-  const [showAlternativeLogin, setShowAlternativeLogin] = useState(false);
-  const [altRoleTab, setAltRoleTab] = useState<'staff' | 'student' | 'parent'>('staff');
-
-  // Alternative Form states
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-
-  const [studentName, setStudentName] = useState('');
-  const [studentSecret, setStudentSecret] = useState('');
-  const [showStudentSecret, setShowStudentSecret] = useState(false);
-
-  const [showForgotPass, setShowForgotPass] = useState(false);
-  const [forgotEmail, setForgotEmail] = useState('');
-
   // Staff First-Time Activation Modal State (Option A)
   const [staffActivationEmail, setStaffActivationEmail] = useState<string | null>(null);
   const [staffActivationName, setStaffActivationName] = useState<string | undefined>(undefined);
@@ -98,8 +82,6 @@ export const LoginView: React.FC<LoginViewProps> = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
-
-
 
   // Receive initial feedback/states from callback handler
   useEffect(() => {
@@ -185,7 +167,10 @@ export const LoginView: React.FC<LoginViewProps> = ({
   }, []);
 
   // Official External Google OAuth Authentication (accounts.google.com)
-  const handleStartGoogleOAuth = (intent: 'quick_login' | 'register_staff' | 'register_student' | 'register_parent') => {
+  const handleStartGoogleOAuth = (
+    intent: 'quick_login' | 'register_staff' | 'register_student' | 'register_parent',
+    isAnchorClick: boolean = false
+  ) => {
     setError(null);
     setPendingIntent(intent);
 
@@ -193,86 +178,10 @@ export const LoginView: React.FC<LoginViewProps> = ({
     clearAuthStorageForNewOAuth(intent);
 
     setSuccessMsg('جارٍ التحويل إلى صفحة Google الرسمية (accounts.google.com)...');
-    redirectToGoogleOAuth(intent);
-  };
 
-
-  // Alternative: Staff Login (Email + Password)
-  const handleStaffLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    setSuccessMsg(null);
-
-    const cleanEmail = email.trim().toLowerCase();
-    if (!cleanEmail || !cleanEmail.includes('@')) {
-      setError('يرجى إدخال عنوان بريد إلكتروني صحيح.');
-      return;
-    }
-    if (!password) {
-      setError('يرجى إدخال كلمة المرور.');
-      return;
-    }
-
-    setLoading(true);
-    setSuccessMsg('جارٍ التحقق من الحساب وتسجيل الدخول...');
-
-    try {
-      await login(cleanEmail, password);
-    } catch (err: any) {
-      setError(err?.message || 'بيانات الدخول غير صحيحة.');
-      setLoading(false);
-      setSuccessMsg(null);
-    }
-  };
-
-  // Alternative: Student Login (Name + Student Code)
-  const handleStudentLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    setSuccessMsg(null);
-
-    const cleanName = studentName.trim();
-    const cleanSecret = studentSecret.trim();
-
-    if (!cleanName) {
-      setError('يرجى كتابة اسم الطالبة الرباعي.');
-      return;
-    }
-    if (!cleanSecret) {
-      setError('يرجى إدخال الرمز المخصص لك من إدارة المدرسة.');
-      return;
-    }
-
-    setLoading(true);
-    setSuccessMsg('جارٍ مطابقة اسم الطالبة والرمز المخصص...');
-
-    try {
-      await loginStudent(cleanName, cleanSecret);
-    } catch (err: any) {
-      setError(err?.message || 'بيانات الدخول غير صحيحة. يرجى مراجعة إدارة المدرسة.');
-      setLoading(false);
-      setSuccessMsg(null);
-    }
-  };
-
-  // Password Reset Handler
-  const handleResetPassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    if (!forgotEmail.trim() || !forgotEmail.includes('@')) {
-      setError('يرجى كتابة البريد الإلكتروني لإرسال رابط الاستعادة.');
-      return;
-    }
-    setLoading(true);
-    try {
-      await resetPassword(forgotEmail.trim());
-      setSuccessMsg('تم إرسال رابط استعادة كلمة المرور بنجاح.');
-      setShowForgotPass(false);
-      setForgotEmail('');
-    } catch (err: any) {
-      setError(err?.message || 'تعذر إرسال رابط استعادة كلمة المرور.');
-    } finally {
-      setLoading(false);
+    // If triggered from a non-anchor button (e.g. retry button), perform programmatic redirect
+    if (!isAnchorClick) {
+      redirectToGoogleOAuth(intent);
     }
   };
 
@@ -453,7 +362,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
                     href={buildGoogleOAuthUrl('quick_login')}
                     target="_blank"
                     rel="noopener noreferrer"
-                    onClick={() => handleStartGoogleOAuth('quick_login')}
+                    onClick={() => handleStartGoogleOAuth('quick_login', true)}
                     className="w-full py-4 px-5 rounded-2xl bg-white hover:bg-slate-100 text-slate-900 border-2 border-slate-200 hover:border-emerald-500 transition-all flex flex-col sm:flex-row items-center justify-center gap-3.5 font-extrabold text-sm sm:text-base shadow-xl hover:shadow-2xl cursor-pointer active:scale-[0.99] text-center no-underline group"
                   >
                     <svg className="w-6 h-6 shrink-0 group-hover:scale-105 transition-transform" viewBox="0 0 24 24">
@@ -564,7 +473,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
                   href={buildGoogleOAuthUrl('register_student')}
                   target="_blank"
                   rel="noopener noreferrer"
-                  onClick={() => handleStartGoogleOAuth('register_student')}
+                  onClick={() => handleStartGoogleOAuth('register_student', true)}
                   className="w-full py-3.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs sm:text-sm flex items-center justify-center gap-2 shadow-md hover:shadow-lg transition-all cursor-pointer no-underline text-center active:scale-[0.99]"
                 >
                   <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
@@ -605,7 +514,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
                   href={buildGoogleOAuthUrl('register_parent')}
                   target="_blank"
                   rel="noopener noreferrer"
-                  onClick={() => handleStartGoogleOAuth('register_parent')}
+                  onClick={() => handleStartGoogleOAuth('register_parent', true)}
                   className="w-full py-3.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-black text-xs sm:text-sm flex items-center justify-center gap-2 shadow-md hover:shadow-lg transition-all cursor-pointer no-underline text-center active:scale-[0.99]"
                 >
                   <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
@@ -645,7 +554,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
                   href={buildGoogleOAuthUrl('register_staff')}
                   target="_blank"
                   rel="noopener noreferrer"
-                  onClick={() => handleStartGoogleOAuth('register_staff')}
+                  onClick={() => handleStartGoogleOAuth('register_staff', true)}
                   className="w-full py-3.5 px-4 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-black text-xs sm:text-sm flex items-center justify-center gap-2 shadow-md hover:shadow-lg transition-all cursor-pointer no-underline text-center active:scale-[0.99]"
                 >
                   <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">

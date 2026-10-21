@@ -255,7 +255,7 @@ export const AuthCallbackView: React.FC<AuthCallbackViewProps> = ({ onRoute }) =
           // إذا كان الحساب مسجلاً ومكتمل البيانات مسبقاً (is_active / completed):
           // اقفل المسار فوراً، واعرض تنبيه: «حسابك مسجل ومفعل بالفعل في النظام. يرجى استخدام تسجيل الدخول السريع عبر Google»، واعد توجيه الصفحة إلى شاشة الدخول الرئيسية خلال ثانيتين.
           if (isAlreadyCompleted) {
-            const blockedNotice = 'حسابك مسجل ومفعل بالفعل في النظام. يرجى استخدام تسجيل الدخول السريع عبر Google.';
+            const blockedNotice = 'حسابك مسجل ومفعل بالفعل، يرجى استخدام تسجيل الدخول السريع.';
             setBlockedAccountNotice(blockedNotice);
             setRedirectCountdown(2);
 
