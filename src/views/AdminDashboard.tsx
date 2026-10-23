@@ -376,6 +376,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     { title: 'الإنجازات والجوائز', count: counts.achievements, icon: Award, color: 'text-purple-900 bg-purple-50 border-purple-200 hover:border-purple-400', view: 'achievements' as PageView },
     { title: 'الصور بالمعرض', count: counts.photos, icon: ImageIcon, color: 'text-blue-900 bg-blue-50 border-blue-200 hover:border-blue-400', view: 'gallery' as PageView },
     { title: 'المستخدمين والمنسوبين', count: counts.users, icon: Users, color: 'text-slate-900 bg-slate-50 border-slate-200 hover:border-slate-400', view: 'users_management' as PageView },
+    { title: 'الصلاحيات الإضافية والمؤقتة', count: 'إدارة وتفويض', icon: KeyRound, color: 'text-amber-950 bg-amber-100/70 border-amber-300 hover:border-amber-500', view: 'delegated_permissions' as PageView },
   ];
 
   return (
@@ -398,6 +399,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
         <div className="flex flex-wrap items-center gap-2 self-start md:self-auto">
           <button
+            onClick={() => onNavigate('delegated_permissions')}
+            className="px-4 py-2 bg-gradient-to-r from-amber-400 to-amber-300 hover:from-amber-300 hover:to-amber-200 text-slate-950 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-md border border-amber-300 transition-transform hover:scale-105 cursor-pointer"
+          >
+            <KeyRound className="w-4 h-4 text-emerald-950" />
+            <span>نظام الصلاحيات الإضافية</span>
+          </button>
+
+          <button
             onClick={() => onNavigate('students_management')}
             className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md border border-emerald-400 transition-transform hover:scale-105 cursor-pointer"
           >
@@ -408,9 +417,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           {hasPerm('manageUsers') && (
             <button
               onClick={() => onNavigate('users_management')}
-              className="px-4 py-2 bg-amber-400 hover:bg-amber-300 text-slate-950 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md border border-amber-300 transition-transform hover:scale-105 cursor-pointer"
+              className="px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs border border-white/20 transition-transform hover:scale-105 cursor-pointer"
             >
-              <Users className="w-4 h-4 text-emerald-950" />
+              <Users className="w-4 h-4 text-amber-300" />
               <span>إدارة الرتب والمستخدمين</span>
             </button>
           )}
@@ -508,7 +517,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       </div>
 
       {/* Live Stats Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-4">
         {statCards.map((c, idx) => {
           const Icon = c.icon;
           return (

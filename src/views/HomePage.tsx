@@ -45,6 +45,7 @@ import {
   Plus,
   Edit,
   FolderPlus,
+  KeyRound,
 } from 'lucide-react';
 
 interface HomePageProps {
@@ -267,6 +268,16 @@ export const HomePage: React.FC<HomePageProps> = ({
       accent: 'hover:border-blue-500 hover:bg-blue-900/30',
       isDropdown: true,
     },
+    {
+      id: 'delegated_permissions_portal',
+      title: 'الصلاحيات الإضافية والمؤقتة',
+      subtitle: 'نظام تفويض وإسناد المهام بمواعيد محددة للمنسوبات',
+      icon: KeyRound,
+      action: () => (user ? onNavigate('delegated_permissions') : onOpenAuth()),
+      tag: 'إدارة وتفويض',
+      accent: 'hover:border-amber-400 hover:bg-amber-900/30',
+      isDropdown: false,
+    },
   ];
 
   return (
@@ -472,7 +483,7 @@ export const HomePage: React.FC<HomePageProps> = ({
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 lg:gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 lg:gap-6">
           {quickPortals.map((portal, idx) => {
             const Icon = portal.icon;
 

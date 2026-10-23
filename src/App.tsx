@@ -24,6 +24,7 @@ import { CreateAlbumModal } from './components/CreateAlbumModal';
 import { DailyMessageModal } from './components/DailyMessageModal';
 import { PostDetailsModal } from './components/PostDetailsModal';
 import { FloatingAddButton } from './components/FloatingAddButton';
+import { TemporaryPermissionsManager } from './components/TemporaryPermissionsManager';
 import { AuthCallbackView } from './views/AuthCallbackView';
 import { redirectToGoogleOAuth } from './lib/googleAuth';
 
@@ -664,6 +665,41 @@ function AppContent() {
             )}
 
             {currentView === 'users_management' && <UsersManagementView />}
+
+            {currentView === 'delegated_permissions' && (
+              <div className="space-y-6 pb-16" dir="rtl">
+                <div className="bg-gradient-to-l from-emerald-950 via-[#064e3b] to-emerald-900 rounded-3xl p-6 sm:p-8 text-white flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xl border-2 border-amber-400/40">
+                  <div>
+                    <div className="flex items-center gap-2.5 mb-2">
+                      <div className="w-10 h-10 rounded-2xl bg-amber-400/20 text-amber-300 flex items-center justify-center border border-amber-400/40 shadow-xs">
+                        <Shield className="w-5 h-5 text-amber-300" />
+                      </div>
+                      <h1 className="text-xl sm:text-2xl font-extrabold text-white">
+                        نظام الصلاحيات الإضافية والتفويض المؤقت
+                      </h1>
+                    </div>
+                    <p className="text-xs sm:text-sm text-emerald-100/90 max-w-xl leading-relaxed font-normal">
+                      تفويض وإسناد مهام محددة بوقت وتاريخ بداية ونهاية للمنسوبات، مع انتهاء الصلاحية تلقائياً دون المساس بالدور الأساسي للموظفة، وحظر تفويض صلاحيات مالك النظام والمديرة.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 self-start md:self-auto">
+                    <button
+                      onClick={() => setCurrentView('admin_dashboard')}
+                      className="px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-xl text-xs font-bold transition-all border border-white/20 cursor-pointer shadow-xs"
+                    >
+                      ← لوحة الإدارة
+                    </button>
+                    <button
+                      onClick={() => setCurrentView('users_management')}
+                      className="px-4 py-2 bg-amber-400 hover:bg-amber-300 text-slate-950 rounded-xl text-xs font-bold transition-all border border-amber-300 cursor-pointer shadow-md"
+                    >
+                      إدارة المستخدمين
+                    </button>
+                  </div>
+                </div>
+                <TemporaryPermissionsManager />
+              </div>
+            )}
 
             {currentView === 'activity_log' && <ActivityLogView />}
 

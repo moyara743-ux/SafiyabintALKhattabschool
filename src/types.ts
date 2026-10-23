@@ -388,6 +388,7 @@ export type PageView =
   | 'admin_dashboard'
   | 'users_management'
   | 'students_management'
+  | 'delegated_permissions'
   | 'parent_link'
   | 'complete_student_profile'
   | 'activity_log'

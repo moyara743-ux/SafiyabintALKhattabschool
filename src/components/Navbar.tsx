@@ -30,6 +30,7 @@ import {
   Settings as SettingsIcon,
   Activity,
   HeartHandshake,
+  KeyRound,
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -92,8 +93,23 @@ export const Navbar: React.FC<NavbarProps> = ({
     }
   };
 
-  const canAccessAdmin =
-    hasPerm('manageUsers') || isDirector || hasPerm('viewActivityLog') || hasPerm('manageSiteSettings');
+  const canAccessAdmin = Boolean(
+    isSystemOwner ||
+    isDirector ||
+    profile?.school_role === 'supervisor' ||
+    profile?.school_role === 'administrator' ||
+    hasPerm('manageUsers') ||
+    hasPerm('managePermissions') ||
+    hasPerm('viewActivityLog') ||
+    hasPerm('manageSiteSettings')
+  );
+
+  const canManageDelegations = Boolean(
+    isSystemOwner ||
+    isDirector ||
+    profile?.school_role === 'supervisor' ||
+    hasPerm('managePermissions')
+  );
 
   // Complete navigation links list
   const navLinks: { view: PageView; label: string; icon: any; adminOnly?: boolean }[] = [
@@ -133,15 +149,31 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   if (canAccessAdmin) {
     navLinks.push({
-      view: 'students_management',
-      label: 'إدارة الطالبات',
-      icon: GraduationCap,
-      adminOnly: true,
-    });
-    navLinks.push({
       view: 'admin_dashboard',
       label: 'لوحة الإدارة والإحصائيات',
       icon: Shield,
+      adminOnly: true,
+    });
+    if (canManageDelegations) {
+      navLinks.push({
+        view: 'delegated_permissions',
+        label: 'نظام الصلاحيات الإضافية والمؤقتة',
+        icon: KeyRound,
+        adminOnly: true,
+      });
+    }
+    if (hasPerm('manageUsers') || isDirector || isSystemOwner) {
+      navLinks.push({
+        view: 'users_management',
+        label: 'إدارة المستخدمين والرتب',
+        icon: Users,
+        adminOnly: true,
+      });
+    }
+    navLinks.push({
+      view: 'students_management',
+      label: 'إدارة الطالبات والربط',
+      icon: GraduationCap,
       adminOnly: true,
     });
   }
@@ -320,6 +352,19 @@ export const Navbar: React.FC<NavbarProps> = ({
                         </button>
                       )}
 
+                      {canManageDelegations && (
+                        <button
+                          onClick={() => {
+                            onNavigate('delegated_permissions');
+                            setUserDropdownOpen(false);
+                          }}
+                          className="w-full px-4 py-2.5 text-right text-xs text-amber-900 hover:bg-amber-50 flex items-center gap-2.5 font-bold transition-colors cursor-pointer"
+                        >
+                          <KeyRound className="w-4 h-4 text-amber-600" />
+                          <span>نظام الصلاحيات الإضافية والمؤقتة</span>
+                        </button>
+                      )}
+
                       {hasPerm('manageUsers') && (
                         <button
                           onClick={() => {
@@ -457,6 +502,19 @@ export const Navbar: React.FC<NavbarProps> = ({
                     >
                       <Shield className="w-4 h-4 text-amber-600" />
                       <span>لوحة الإدارة والإحصائيات</span>
+                    </button>
+                  )}
+
+                  {canManageDelegations && (
+                    <button
+                      onClick={() => {
+                        onNavigate('delegated_permissions');
+                        setUserDropdownOpen(false);
+                      }}
+                      className="w-full px-4 py-2.5 text-right text-xs text-amber-900 hover:bg-amber-50 flex items-center gap-2.5 font-bold cursor-pointer"
+                    >
+                      <KeyRound className="w-4 h-4 text-amber-600" />
+                      <span>نظام الصلاحيات الإضافية والمؤقتة</span>
                     </button>
                   )}
                 </div>
