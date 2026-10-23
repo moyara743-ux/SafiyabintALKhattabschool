@@ -33,6 +33,8 @@ import {
   Check,
   AlertTriangle,
   Sparkles,
+  RefreshCw,
+  UserCheck,
 } from 'lucide-react';
 
 export const TemporaryPermissionsManager: React.FC = () => {
@@ -43,9 +45,12 @@ export const TemporaryPermissionsManager: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
 
-  // Grant Modal States
+  // Grant Modal States & Interactive User Search
   const [showGrantModal, setShowGrantModal] = useState(false);
-  const [selectedUserId, setSelectedUserId] = useState('');
+  const [selectedBeneficiary, setSelectedBeneficiary] = useState<UserProfile | null>(null);
+  const [userSearchQuery, setUserSearchQuery] = useState('');
+  const [isSearchingUsers, setIsSearchingUsers] = useState(false);
+  const [userSearchResults, setUserSearchResults] = useState<UserProfile[]>([]);
   const [selectedPerm, setSelectedPerm] = useState<PermissionKey>('createPosts');
   const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
   const [startTime, setStartTime] = useState('08:00');
@@ -90,28 +95,93 @@ export const TemporaryPermissionsManager: React.FC = () => {
         dataStore.getUsers(),
       ]);
 
-      // Filter out System Owner, current Director, and yaradrashed from beneficiary options
+      // Filter out System Owner, current Director, and protected accounts from beneficiary options
       const cleanUsers = allUsers.filter((u) => {
         const email = (u.email || '').toLowerCase().trim();
         return (
           email !== 'moyara743@gmail.com' &&
           u.school_role !== 'system_owner' &&
-          email !== 'yaradrashed@gmail.com' &&
-          u.status !== 'disabled'
+          email !== 'yaradrashed@gmail.com'
         );
       });
 
       setDelegations(allDel);
       setAvailableUsers(cleanUsers);
-      if (cleanUsers.length > 0 && !selectedUserId) {
-        setSelectedUserId(cleanUsers[0].id);
-      }
     } catch (err) {
       console.error('[TemporaryPermissionsManager] Error loading data:', err);
     } finally {
       setLoading(false);
     }
   };
+
+  // Helper to get role badge colors
+  const getUserRoleBadge = (role: SchoolRole) => {
+    const label = ROLE_LABELS_AR[role] || role;
+    switch (role) {
+      case 'supervisor':
+        return { label, bg: 'bg-teal-50 text-teal-800 border-teal-300' };
+      case 'administrator':
+        return { label, bg: 'bg-indigo-50 text-indigo-800 border-indigo-300' };
+      case 'teacher':
+        return { label, bg: 'bg-emerald-50 text-emerald-800 border-emerald-300' };
+      case 'counselor':
+        return { label, bg: 'bg-purple-50 text-purple-800 border-purple-300' };
+      case 'parent':
+        return { label, bg: 'bg-amber-50 text-amber-800 border-amber-300' };
+      case 'student':
+        return { label, bg: 'bg-slate-100 text-slate-700 border-slate-300' };
+      default:
+        return { label, bg: 'bg-slate-50 text-slate-700 border-slate-200' };
+    }
+  };
+
+  // Live progressive search effect
+  useEffect(() => {
+    const query = userSearchQuery.trim();
+    if (query.length < 2) {
+      setUserSearchResults([]);
+      setIsSearchingUsers(false);
+      return;
+    }
+
+    setIsSearchingUsers(true);
+    const timer = setTimeout(() => {
+      const normalize = (str: string) =>
+        str
+          .toLowerCase()
+          .replace(/[أإآ]/g, 'ا')
+          .replace(/ة/g, 'ه')
+          .replace(/[يى]/g, 'ي')
+          .replace(/[\u064B-\u065F]/g, '');
+
+      const normQ = normalize(query);
+      const qLower = query.toLowerCase();
+
+      const matched = availableUsers.filter((u) => {
+        // Exclude current actor to prevent self-escalation
+        if (profile && (u.id === profile.id || (u.email && u.email.toLowerCase() === profile.email.toLowerCase()))) {
+          return false;
+        }
+
+        const normName = normalize(u.name || '');
+        const email = (u.email || '').toLowerCase();
+        const code = (u.studentIdCode || '').toLowerCase();
+        const roleLabel = normalize(ROLE_LABELS_AR[u.school_role] || '');
+
+        return (
+          normName.includes(normQ) ||
+          email.includes(qLower) ||
+          code.includes(qLower) ||
+          roleLabel.includes(normQ)
+        );
+      });
+
+      setUserSearchResults(matched.slice(0, 15));
+      setIsSearchingUsers(false);
+    }, 150);
+
+    return () => clearTimeout(timer);
+  }, [userSearchQuery, availableUsers, profile]);
 
   useEffect(() => {
     if (canManage) {
@@ -159,24 +229,52 @@ export const TemporaryPermissionsManager: React.FC = () => {
     if (!profile) return;
     setGrantError(null);
 
-    const beneficiary = availableUsers.find((u) => u.id === selectedUserId);
-    if (!beneficiary) {
-      setGrantError('يرجى اختيار الموظفة المستفيدة.');
+    if (!selectedBeneficiary) {
+      setGrantError('يرجى البحث واختيار الموظفة المستفيدة أولاً.');
+      return;
+    }
+
+    // 1. Prevent self-escalation
+    if (
+      selectedBeneficiary.id === profile.id ||
+      (selectedBeneficiary.email && selectedBeneficiary.email.toLowerCase() === profile.email.toLowerCase())
+    ) {
+      setGrantError('قاعدة أمنية: لا يمكنكِ منح صلاحيات إضافية لنفسك.');
+      return;
+    }
+
+    // 2. Validate dates & times
+    const startDateTime = new Date(`${startDate}T${startTime}`);
+    const endDateTime = new Date(`${endDate}T${endTime}`);
+    const now = new Date();
+
+    if (isNaN(startDateTime.getTime()) || isNaN(endDateTime.getTime())) {
+      setGrantError('يرجى التأكد من صحة التاريخ والوقت المدخلين.');
+      return;
+    }
+
+    if (endDateTime <= startDateTime) {
+      setGrantError('تاريخ ووقت نهاية الصلاحية يجب أن يكون بعد تاريخ ووقت البداية.');
+      return;
+    }
+
+    if (endDateTime <= now) {
+      setGrantError('لا يمكن تحديد موعد انتهاء في الماضي؛ يجب أن تكون الصلاحية صالحة للاستخدام المستقبلي.');
       return;
     }
 
     if (!grantReason.trim()) {
-      setGrantError('يرجى كتابة سبب واضح لمنح الصلاحية المؤقتة.');
+      setGrantError('يرجى كتابة سبب واضح لمنح الصلاحية المؤقتة لتوثيقها في سجل التدقيق.');
       return;
     }
 
     setGranting(true);
     try {
       await grantTemporaryPermission({
-        userId: beneficiary.id,
-        userName: beneficiary.name,
-        userEmail: beneficiary.email,
-        userRole: beneficiary.school_role,
+        userId: selectedBeneficiary.id,
+        userName: selectedBeneficiary.name,
+        userEmail: selectedBeneficiary.email,
+        userRole: selectedBeneficiary.school_role,
         permission: selectedPerm,
         startDate,
         startTime,
@@ -186,9 +284,11 @@ export const TemporaryPermissionsManager: React.FC = () => {
         actor: profile,
       });
 
-      showToast(`تم منح صلاحية (${PERMISSION_LABELS_AR[selectedPerm] || selectedPerm}) للموظفة ${beneficiary.name} بنجاح.`);
+      showToast(`تم منح صلاحية (${PERMISSION_LABELS_AR[selectedPerm] || selectedPerm}) للموظفة ${selectedBeneficiary.name} بنجاح.`);
       setShowGrantModal(false);
       setGrantReason('');
+      setSelectedBeneficiary(null);
+      setUserSearchQuery('');
       await loadData();
     } catch (err: any) {
       setGrantError(err?.message || 'تعذر منح الصلاحية المؤقتة.');
@@ -289,6 +389,14 @@ export const TemporaryPermissionsManager: React.FC = () => {
           type="button"
           onClick={() => {
             setGrantError(null);
+            setUserSearchQuery('');
+            setSelectedBeneficiary(null);
+            setUserSearchResults([]);
+            setStartDate(new Date().toISOString().split('T')[0]);
+            setStartTime('08:00');
+            setEndDate(new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString().split('T')[0]);
+            setEndTime('16:00');
+            setGrantReason('');
             setShowGrantModal(true);
           }}
           className="px-4 py-2.5 rounded-xl bg-indigo-700 hover:bg-indigo-800 text-white text-xs font-black transition-all shadow-md hover:shadow-lg flex items-center gap-2 cursor-pointer self-start sm:self-auto shrink-0"
@@ -636,25 +744,187 @@ export const TemporaryPermissionsManager: React.FC = () => {
             )}
 
             <form onSubmit={handleGrantSubmit} className="space-y-4 text-xs">
-              {/* Beneficiary selection */}
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">
-                  1. الموظفة المستفيدة (المعلمة / الإدارية / المرشدة):
+              {/* Smart Beneficiary Search & Confirmation */}
+              <div className="space-y-2">
+                <label className="block font-bold text-slate-700">
+                  1. الموظفة المستفيدة (البحث في قاعدة البيانات الحقيقية):
                 </label>
-                <select
-                  value={selectedUserId}
-                  onChange={(e) => setSelectedUserId(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-indigo-600 cursor-pointer font-bold"
-                >
-                  {availableUsers.map((u) => (
-                    <option key={u.id} value={u.id}>
-                      {u.name} — ({ROLE_LABELS_AR[u.school_role] || u.school_role}) [{u.email}]
-                    </option>
-                  ))}
-                </select>
-                <p className="text-[10px] text-slate-400 mt-1">
-                  ملاحظة أمنية: يمنع منح صلاحيات إضافية لحساب مالك النظام أو المديرة أو النفس.
-                </p>
+
+                {selectedBeneficiary ? (
+                  /* Confirmed Selected Beneficiary Card */
+                  <div className="p-3.5 bg-gradient-to-r from-indigo-50/90 via-slate-50 to-emerald-50/80 border-2 border-indigo-300 rounded-2xl shadow-xs transition-all">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-black shadow-xs shrink-0">
+                          <UserCheck className="w-5 h-5 text-white" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-sm font-black text-slate-900">
+                              {selectedBeneficiary.name}
+                            </span>
+                            {(() => {
+                              const badge = getUserRoleBadge(selectedBeneficiary.school_role);
+                              return (
+                                <span className={`px-2 py-0.5 rounded-md text-[10px] font-black border ${badge.bg}`}>
+                                  الدور: {badge.label}
+                                </span>
+                              );
+                            })()}
+                            <span
+                              className={`px-2 py-0.5 rounded-md text-[10px] font-bold border ${
+                                selectedBeneficiary.status === 'disabled'
+                                  ? 'bg-rose-50 text-rose-700 border-rose-200'
+                                  : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                              }`}
+                            >
+                              {selectedBeneficiary.status === 'disabled' ? 'الحساب معطّل' : 'الحساب نشط'}
+                            </span>
+                          </div>
+                          <div className="text-[11px] text-slate-500 font-mono mt-0.5">
+                            {selectedBeneficiary.email}
+                          </div>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedBeneficiary(null);
+                          setUserSearchQuery('');
+                        }}
+                        className="px-2.5 py-1 text-xs font-bold text-indigo-700 hover:text-indigo-900 bg-white hover:bg-indigo-50 border border-indigo-200 rounded-lg shadow-2xs transition-all cursor-pointer shrink-0"
+                      >
+                        تغيير
+                      </button>
+                    </div>
+
+                    <div className="mt-2.5 pt-2 border-t border-indigo-100/80 flex items-center gap-1.5 text-[11px] text-emerald-800 font-medium">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                      <span>
+                        تم التحقق: يبقى الدور الأساسي للموظفة كما هو دون تغيير، وستُمنح الصلاحية الإضافية مؤقتاً فقط.
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  /* Interactive Search Box & Results */
+                  <div className="space-y-2">
+                    <div className="relative">
+                      <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-slate-400">
+                        {isSearchingUsers ? (
+                          <RefreshCw className="w-4 h-4 animate-spin text-indigo-600" />
+                        ) : (
+                          <Search className="w-4 h-4 text-slate-400" />
+                        )}
+                      </div>
+                      <input
+                        type="text"
+                        value={userSearchQuery}
+                        onChange={(e) => setUserSearchQuery(e.target.value)}
+                        placeholder="ابحثي بالاسم الكامل، البريد الإلكتروني، أو الدور (اكتبي حرفين على الأقل)..."
+                        className="w-full pr-9 pl-8 py-2.5 bg-slate-50 border border-slate-300 focus:bg-white rounded-xl text-xs text-slate-900 focus:outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-100 transition-all font-medium"
+                      />
+                      {userSearchQuery && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setUserSearchQuery('');
+                            setUserSearchResults([]);
+                          }}
+                          className="absolute inset-y-0 left-0 pl-2.5 flex items-center text-slate-400 hover:text-slate-600 cursor-pointer"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Search helper notice when query is short */}
+                    {userSearchQuery.trim().length < 2 && (
+                      <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-[11px] text-slate-500 leading-relaxed flex items-center gap-2">
+                        <Users className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                        <span>
+                          اكتبي حرفين على الأقل للبحث الفوري بين ({availableUsers.length}) مستخدم مسجل في المدرسة.
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Live Results Dropdown List */}
+                    {userSearchQuery.trim().length >= 2 && (
+                      <div className="border border-slate-200 rounded-2xl bg-white shadow-md overflow-hidden animate-in fade-in">
+                        {isSearchingUsers ? (
+                          <div className="p-4 text-center text-xs text-slate-500 flex items-center justify-center gap-2">
+                            <RefreshCw className="w-4 h-4 animate-spin text-indigo-600" />
+                            <span>جاري البحث في قاعدة البيانات...</span>
+                          </div>
+                        ) : userSearchResults.length === 0 ? (
+                          <div className="p-4 text-center space-y-1">
+                            <div className="text-xs font-bold text-slate-700">
+                              لم يتم العثور على أي مستخدم مطابق لـ «{userSearchQuery}»
+                            </div>
+                            <p className="text-[11px] text-slate-500">
+                              تأكدي من صحة كتابة الاسم أو البريد، أو ابحثي بجزء آخر من الاسم.
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="p-2 space-y-1 max-h-60 overflow-y-auto">
+                            <div className="px-2 py-1 text-[10px] font-black text-slate-400">
+                              تم العثور على {userSearchResults.length} مستخدم (اضغطي لاختيار الموظفة):
+                            </div>
+                            {userSearchResults.map((u) => {
+                              const badge = getUserRoleBadge(u.school_role);
+                              return (
+                                <button
+                                  key={u.id}
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedBeneficiary(u);
+                                    setUserSearchQuery('');
+                                    setUserSearchResults([]);
+                                    setGrantError(null);
+                                  }}
+                                  className="w-full text-right p-2.5 rounded-xl hover:bg-indigo-50/70 border border-transparent hover:border-indigo-200 transition-all flex items-center justify-between gap-2 cursor-pointer group"
+                                >
+                                  <div className="flex items-center gap-2.5 min-w-0">
+                                    <div className="w-8 h-8 rounded-lg bg-indigo-100 group-hover:bg-indigo-600 text-indigo-800 group-hover:text-white flex items-center justify-center font-bold text-xs transition-colors shrink-0">
+                                      {u.name?.charAt(0) || 'م'}
+                                    </div>
+                                    <div className="min-w-0">
+                                      <div className="font-bold text-xs text-slate-900 group-hover:text-indigo-950 truncate">
+                                        {u.name}
+                                      </div>
+                                      <div className="text-[10px] text-slate-500 font-mono truncate">
+                                        {u.email}
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  <div className="flex items-center gap-1.5 shrink-0">
+                                    <span className={`px-2 py-0.5 rounded text-[10px] font-black border ${badge.bg}`}>
+                                      {badge.label}
+                                    </span>
+                                    <span
+                                      className={`px-1.5 py-0.5 rounded text-[9px] font-bold border ${
+                                        u.status === 'disabled'
+                                          ? 'bg-rose-50 text-rose-700 border-rose-200'
+                                          : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                      }`}
+                                    >
+                                      {u.status === 'disabled' ? 'معطّل' : 'نشط'}
+                                    </span>
+                                  </div>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    <p className="text-[10px] text-slate-400">
+                      ملاحظة أمنية: تُستبعد حسابات مالك النظام والمديرة تلقائياً لحمايتها، ولا يُسمح بمنح صلاحيات إضافية للنفس.
+                    </p>
+                  </div>
+                )}
               </div>
 
               {/* Permission selection */}
