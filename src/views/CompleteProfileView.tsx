@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import {
-  getStudentRecordForStudentProfile,
   findStudentRecordByNationalIdOrEmail,
   completeStudentProfileByStudentId,
   validateNationalIdFormat,
@@ -9,6 +8,7 @@ import {
 import { StudentRecord, SchoolRole } from '../types';
 import { ROLE_LABELS_AR } from '../lib/permissions';
 import { isSystemOwner, isDesignatedPrincipal } from '../lib/principalService';
+import { validateProfileCompleteness } from '../lib/profileGuard';
 import { dataStore } from '../lib/dataStore';
 import { supabase } from '../supabaseClient';
 import { logActivity } from '../lib/activityLogger';
@@ -26,6 +26,8 @@ import {
   Briefcase,
   Users,
   CheckCircle2,
+  KeyRound,
+  IdCard,
 } from 'lucide-react';
 
 interface CompleteProfileViewProps {
@@ -63,6 +65,7 @@ export const CompleteProfileView: React.FC<CompleteProfileViewProps> = ({ onComp
   const [name, setName] = useState(profile?.name || '');
   const [nationalId, setNationalId] = useState(
     profile?.nationalId ||
+      profile?.national_id ||
       (profile?.customPermissions?.find((p) => typeof p === 'string' && p.startsWith('nid:')) as string || '')
         .replace('nid:', '')
   );
@@ -71,14 +74,26 @@ export const CompleteProfileView: React.FC<CompleteProfileViewProps> = ({ onComp
   // Role-specific fields
   const [specialization, setSpecialization] = useState(profile?.specialization || '');
   const [guardianRelation, setGuardianRelation] = useState(profile?.guardianRelation || 'أب');
+  const [staffCode, setStaffCode] = useState(
+    profile?.staffCode ||
+      profile?.employeeIdCode ||
+      profile?.jobCode ||
+      (profile?.customPermissions?.find((p) => typeof p === 'string' && (p.startsWith('staff_code:') || p.startsWith('emp:'))) as string || '')
+        .replace(/^(staff_code:|emp:)/, '') ||
+      ''
+  );
+  const [studentCode, setStudentCode] = useState(profile?.studentIdCode || '');
+  const [gradeStage, setGradeStage] = useState(profile?.gradeStage || 'الأول الثانوي');
+  const [classroom, setClassroom] = useState(profile?.classroom || '1/1');
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const role: SchoolRole = profile?.school_role || 'student';
   const roleLabel = ROLE_LABELS_AR[role] || 'مستخدم المنصة';
+  const isStaff = ['teacher', 'supervisor', 'administrator', 'counselor'].includes(role);
 
-  // For students, fetch their authoritative school record
+  // For students, fetch authoritative school record
   useEffect(() => {
     let isMounted = true;
     if (role === 'student' && profile) {
@@ -86,7 +101,7 @@ export const CompleteProfileView: React.FC<CompleteProfileViewProps> = ({ onComp
       findStudentRecordByNationalIdOrEmail({
         nationalId: nationalId || profile.nationalId,
         email: profile.email,
-        studentIdCode: profile.studentIdCode,
+        studentIdCode: studentCode || profile.studentIdCode,
         name: profile.name,
       })
         .then((record) => {
@@ -94,6 +109,9 @@ export const CompleteProfileView: React.FC<CompleteProfileViewProps> = ({ onComp
             setStudentRecord(record);
             if (record.is_profile_complete && record.national_id && !nationalId) setNationalId(record.national_id);
             if (record.is_profile_complete && record.phone && !phone) setPhone(record.phone);
+            if (record.student_id_code && !studentCode) setStudentCode(record.student_id_code);
+            if (record.grade_stage) setGradeStage(record.grade_stage);
+            if (record.classroom) setClassroom(record.classroom);
           }
         })
         .catch((err) => console.warn('Record fetch notice:', err))
@@ -121,6 +139,9 @@ export const CompleteProfileView: React.FC<CompleteProfileViewProps> = ({ onComp
         if (found) {
           setStudentRecord(found);
           if (found.phone && !phone) setPhone(found.phone);
+          if (found.student_id_code && !studentCode) setStudentCode(found.student_id_code);
+          if (found.grade_stage) setGradeStage(found.grade_stage);
+          if (found.classroom) setClassroom(found.classroom);
           setError(null);
         }
       } catch (err) {
@@ -134,10 +155,11 @@ export const CompleteProfileView: React.FC<CompleteProfileViewProps> = ({ onComp
     if (!profile) return;
     setError(null);
 
-    const cleanNationalId = nationalId.trim();
-    const cleanPhone = phone.trim();
+    const cleanNationalId = nationalId.trim().replace(/\D/g, '');
+    const cleanPhone = phone.trim().replace(/\D/g, '');
+    const cleanName = name.trim() || profile.name;
 
-    // 1. National ID Validation (Mandatory for all roles)
+    // 1. National ID Validation (Mandatory for all roles, 10 digits starting with 1 or 2)
     if (!cleanNationalId) {
       setError('يرجى إدخال رقم الهوية الوطنية أو الإقامة (حقل إلزامي).');
       return;
@@ -148,52 +170,74 @@ export const CompleteProfileView: React.FC<CompleteProfileViewProps> = ({ onComp
       return;
     }
 
-    // 2. Mobile Phone Validation (Mandatory for all roles)
+    // 2. Mobile Phone Validation (Mandatory for all roles: 05XXXXXXXX)
     if (!cleanPhone) {
       setError('يرجى إدخال رقم الجوال (حقل إلزامي).');
       return;
     }
-    if (!cleanPhone.startsWith('05') || cleanPhone.replace(/\D/g, '').length !== 10) {
+    if (!cleanPhone.startsWith('05') || cleanPhone.length !== 10) {
       setError('يرجى إدخال رقم جوال سعودي صحيح يبدأ بـ 05 ويتكون من 10 أرقام.');
       return;
+    }
+
+    // 3. Role specific validation
+    if (role === 'student') {
+      if (!gradeStage.trim()) {
+        setError('يرجى تحديد المرحلة الدراسية للطالبة.');
+        return;
+      }
+      if (!classroom.trim()) {
+        setError('يرجى تحديد الصف / الفصل.');
+        return;
+      }
+    } else if (isStaff) {
+      if (!staffCode.trim()) {
+        setError('يرجى إدخال الرمز الوظيفي المعتمد للمنسوبة (حقل إلزامي لفتح الصلاحيات).');
+        return;
+      }
+      if (!specialization.trim()) {
+        setError('يرجى إدخال الرتبة أو التخصص التعليمي/الإداري (حقل إلزامي).');
+        return;
+      }
+    } else if (role === 'parent') {
+      if (!guardianRelation.trim()) {
+        setError('يرجى تحديد صلة القرابة بالطالبة.');
+        return;
+      }
     }
 
     setSaving(true);
 
     try {
       if (role === 'student') {
-        // Student completion flow: Find authoritative Student ID via National ID, Email, or code
-        let studentIdCode =
+        // Authoritative Student completion flow
+        let finalStudentCode =
+          studentCode.trim() ||
           studentRecord?.student_id_code ||
           profile.studentIdCode ||
           (profile.email.includes('@') && profile.email.split('@')[0].toUpperCase().startsWith('STU-')
             ? profile.email.split('@')[0].toUpperCase()
-            : '');
+            : `STU-${cleanNationalId.slice(-6)}`);
 
-        // If not found yet, perform authoritative lookup by National ID or Email
-        if (!studentIdCode || studentIdCode === 'STU-000000') {
-          const matched = await findStudentRecordByNationalIdOrEmail({
-            nationalId: cleanNationalId,
-            email: profile.email,
-            name: profile.name,
-          });
-          if (matched) {
-            studentIdCode = matched.student_id_code;
-            setStudentRecord(matched);
-          } else {
-            // Assign verified code based on National ID
-            studentIdCode = `STU-${cleanNationalId.slice(-6)}`;
-          }
+        // Perform authoritative lookup if still needed
+        const matched = await findStudentRecordByNationalIdOrEmail({
+          nationalId: cleanNationalId,
+          email: profile.email,
+          name: profile.name,
+        });
+        if (matched) {
+          finalStudentCode = matched.student_id_code;
+          setStudentRecord(matched);
         }
 
         await completeStudentProfileByStudentId({
-          studentIdCode,
+          studentIdCode: finalStudentCode,
           nationalId: cleanNationalId,
           phone: cleanPhone,
           actor: profile,
         });
-      } else {
-        // Staff, Director, or Parent Completion Flow
+
+        // Also update local/remote user record
         const updatedCustomPerms = Array.isArray(profile.customPermissions)
           ? [...profile.customPermissions.filter((p) => typeof p === 'string' && !p.startsWith('nid:'))]
           : [];
@@ -202,25 +246,85 @@ export const CompleteProfileView: React.FC<CompleteProfileViewProps> = ({ onComp
           updatedCustomPerms.push('profile_completed' as any);
         }
 
+        const studentPayload: any = {
+          name: cleanName,
+          phone: cleanPhone,
+          national_id: cleanNationalId,
+          nationalId: cleanNationalId,
+          studentIdCode: finalStudentCode,
+          student_id_code: finalStudentCode,
+          gradeStage: gradeStage.trim(),
+          grade_stage: gradeStage.trim(),
+          classroom: classroom.trim(),
+          account_status: 'completed',
+          accountStatus: 'completed',
+          is_profile_completed: true,
+          is_profile_complete: true,
+          status: 'active',
+          updated_at: new Date().toISOString(),
+          custom_permissions: updatedCustomPerms,
+          customPermissions: updatedCustomPerms,
+        };
+
+        try {
+          await supabase.from('users').update({
+            name: cleanName,
+            phone: cleanPhone,
+            national_id: cleanNationalId,
+            student_id_code: finalStudentCode,
+            grade_stage: gradeStage.trim(),
+            classroom: classroom.trim(),
+            account_status: 'completed',
+            status: 'active',
+            is_profile_completed: true,
+            custom_permissions: updatedCustomPerms,
+            updated_at: new Date().toISOString(),
+          }).eq('id', profile.id);
+        } catch (dbErr) {
+          console.warn('[CompleteProfileView] Supabase student update notice:', dbErr);
+        }
+
+        await dataStore.updateUser(profile.id, {
+          ...profile,
+          ...studentPayload,
+        });
+      } else {
+        // Staff or Parent Completion Flow
+        const updatedCustomPerms = Array.isArray(profile.customPermissions)
+          ? [...profile.customPermissions.filter((p) => typeof p === 'string' && !p.startsWith('nid:') && !p.startsWith('staff_code:'))]
+          : [];
+        updatedCustomPerms.push(`nid:${cleanNationalId}` as any);
+        if (staffCode.trim()) {
+          updatedCustomPerms.push(`staff_code:${staffCode.trim()}` as any);
+        }
+        if (!updatedCustomPerms.includes('profile_completed' as any)) {
+          updatedCustomPerms.push('profile_completed' as any);
+        }
+
         const updatePayload: any = {
-          name: name.trim() || profile.name,
+          name: cleanName,
           phone: cleanPhone,
           national_id: cleanNationalId,
           nationalId: cleanNationalId,
           account_status: 'completed',
           status: 'active',
           accountStatus: 'completed',
+          is_profile_completed: true,
+          is_profile_complete: true,
           googleLinked: true,
           updated_at: new Date().toISOString(),
           custom_permissions: updatedCustomPerms,
           customPermissions: updatedCustomPerms,
         };
 
-        if (role === 'parent') {
+        if (isStaff) {
+          updatePayload.staffCode = staffCode.trim();
+          updatePayload.employeeIdCode = staffCode.trim();
+          updatePayload.jobCode = staffCode.trim();
+          updatePayload.specialization = specialization.trim();
+        } else if (role === 'parent') {
           updatePayload.guardian_relation = guardianRelation;
           updatePayload.guardianRelation = guardianRelation;
-        } else if (role !== 'director') {
-          updatePayload.specialization = specialization.trim();
         }
 
         // 1. Update in Supabase public.users if row exists
@@ -228,11 +332,13 @@ export const CompleteProfileView: React.FC<CompleteProfileViewProps> = ({ onComp
           await supabase
             .from('users')
             .update({
-              name: updatePayload.name,
-              phone: updatePayload.phone,
+              name: cleanName,
+              phone: cleanPhone,
               national_id: cleanNationalId,
+              specialization: updatePayload.specialization || null,
               account_status: 'completed',
               status: 'active',
+              is_profile_completed: true,
               custom_permissions: updatedCustomPerms,
               updated_at: new Date().toISOString(),
             })
@@ -250,19 +356,21 @@ export const CompleteProfileView: React.FC<CompleteProfileViewProps> = ({ onComp
         // 3. Log Audit
         await logActivity({
           actorId: profile.id,
-          actorName: updatePayload.name,
+          actorName: cleanName,
           actorEmail: profile.email,
           action: 'PROFILE_COMPLETED',
           entity: 'users',
           entityId: profile.id,
-          details: `اكتمال توثيق بيانات الحساب لأول مرة (${updatePayload.name}) - الرتبة: (${roleLabel})`,
+          details: `اكتمال توثيق بيانات الحساب الرسمية (${cleanName}) - الرتبة: (${roleLabel}) - الرمز: (${staffCode.trim() || 'N/A'})`,
         });
       }
 
+      // Refresh global Auth state
       if (refreshProfile) {
         await refreshProfile();
       }
 
+      // Unlock route guard
       if (onComplete) {
         onComplete();
       }
@@ -276,36 +384,42 @@ export const CompleteProfileView: React.FC<CompleteProfileViewProps> = ({ onComp
 
   const studentDisplayName = studentRecord?.name || profile?.name || 'الطالبة';
   const studentCodeDisplay =
+    studentCode ||
     studentRecord?.student_id_code ||
     profile?.studentIdCode ||
     (profile?.email.includes('@') && profile.email.split('@')[0].toUpperCase().startsWith('STU-')
       ? profile.email.split('@')[0].toUpperCase()
-      : (nationalId === '1465786665' || studentDisplayName.includes('منى')
-          ? 'STU-467645'
-          : (nationalId && nationalId.length === 10 ? `STU-${nationalId.slice(-6)}` : 'STU-467645')));
-  const gradeDisplay = studentRecord?.grade_stage || profile?.gradeStage || 'الأول الثانوي';
-  const classroomDisplay = studentRecord?.classroom || profile?.classroom || '1/1';
+      : (nationalId && nationalId.length === 10 ? `STU-${nationalId.slice(-6)}` : 'STU-467645'));
 
   return (
-    <div className="max-w-2xl mx-auto py-8 sm:py-12 px-4" dir="rtl">
-      <div className="bg-white rounded-3xl border border-slate-200/90 shadow-xl p-6 sm:p-9 space-y-7 relative overflow-hidden">
+    <div className="max-w-2xl mx-auto py-4 sm:py-8 px-4" dir="rtl">
+      <div className="bg-white rounded-3xl border-2 border-emerald-600/30 shadow-2xl p-6 sm:p-9 space-y-7 relative overflow-hidden">
         {/* Top Gradient Ribbon */}
-        <div className="absolute top-0 right-0 left-0 h-2 bg-gradient-to-r from-emerald-600 via-teal-500 to-emerald-700" />
+        <div className="absolute top-0 right-0 left-0 h-2.5 bg-gradient-to-r from-emerald-600 via-amber-400 to-teal-600" />
+
+        {/* Lockout Warning Banner */}
+        <div className="p-4 bg-amber-500/15 border-2 border-amber-500/50 rounded-2xl flex items-start gap-3 text-amber-950">
+          <Shield className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
+          <div className="text-xs sm:text-sm leading-relaxed">
+            <span className="font-extrabold block mb-0.5">حارس المسارات الإجباري (Mandatory Profile Guard):</span>
+            تم تقييد التصفح وحظر الوصول لكافة أقسام المنصة ولوحات التحكم لحين إكمال البيانات الإلزامية المطلوبة (رقم الجوال، الرمز الوظيفي/سجل الطالبة، الرتبة/الصف) والضغط على زر <strong className="font-black text-amber-950 underline">[حفظ واكتمال البيانات]</strong>.
+          </div>
+        </div>
 
         {/* Header */}
         <div className="text-center space-y-2.5 border-b border-slate-100 pb-6">
-          <div className="w-16 h-16 mx-auto bg-gradient-to-tr from-emerald-800 to-teal-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-emerald-950/20">
-            <GraduationCap className="w-8 h-8" />
+          <div className="w-16 h-16 mx-auto bg-gradient-to-tr from-emerald-800 to-teal-700 rounded-2xl flex items-center justify-center text-white shadow-xl shadow-emerald-950/25 border-2 border-amber-400/40">
+            <GraduationCap className="w-9 h-9 text-amber-300" />
           </div>
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 text-xs font-bold border border-emerald-200">
             <Sparkles className="w-3.5 h-3.5 text-amber-500" />
             <span>مدرسة صفية بنت عمر الثانوية • المنصة الرسمية</span>
           </div>
           <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
-            {role === 'student' ? 'إكمال البيانات الأساسية للطالبة' : `إكمال بيانات الحساب (${roleLabel})`}
+            {role === 'student' ? 'إكمال البيانات الأساسية للطالبة' : `إكمال وتوثيق بيانات الحساب (${roleLabel})`}
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 max-w-md mx-auto leading-relaxed">
-            مرحباً بكِ <strong className="text-slate-800 font-bold">{profile?.name || 'في المنصة'}</strong>. لتفعيل دخولكِ الرسمي عبر Google والوصول لخدمات المدرسة، يُطلب إكمال البيانات التالية لمرة واحدة فقط.
+            مرحباً بكِ <strong className="text-slate-800 font-bold">{profile?.name || 'في المنصة'}</strong>. لتفعيل حسابكِ المعتمد وفتح صلاحيات المنصة كاملة، يُرجى تعبئة الحقول الإلزامية أدناه.
           </p>
         </div>
 
@@ -326,7 +440,7 @@ export const CompleteProfileView: React.FC<CompleteProfileViewProps> = ({ onComp
                 <div className="flex items-center gap-2">
                   <School className="w-4 h-4 text-emerald-700" />
                   <h2 className="text-xs sm:text-sm font-extrabold text-slate-900">
-                    البيانات المدرسية المعتمدة (للقراءة فقط)
+                    البيانات المدرسية المعتمدة في سجل المدرسة
                   </h2>
                 </div>
                 <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
@@ -356,29 +470,25 @@ export const CompleteProfileView: React.FC<CompleteProfileViewProps> = ({ onComp
                 <div className="bg-white p-3 rounded-xl border border-slate-200/70">
                   <span className="block text-[11px] text-slate-400 font-medium mb-1">المرحلة الدراسية:</span>
                   <span className="font-bold text-slate-800 block">
-                    {gradeDisplay}
+                    {gradeStage}
                   </span>
                 </div>
 
                 <div className="bg-white p-3 rounded-xl border border-slate-200/70">
                   <span className="block text-[11px] text-slate-400 font-medium mb-1">الصف / الفصل:</span>
                   <span className="font-bold text-slate-800 block">
-                    {classroomDisplay}
+                    {classroom}
                   </span>
                 </div>
               </div>
-
-              <p className="text-[10px] text-slate-400 leading-relaxed pt-1">
-                * هذه البيانات مسجلة تلقائياً من إدارة المدرسة ولا تتطلب منكِ إعادة إدخالها، وتُعدل حصراً عبر لوحة الإدارة.
-              </p>
             </div>
 
-            {/* Student Completion Form (Strictly National ID + Mobile) */}
+            {/* Student Completion Form (Strictly National ID + Mobile + Grade/Classroom) */}
             <form onSubmit={handleSubmit} className="space-y-5">
               <div className="space-y-4">
                 <div>
                   <label className="block text-xs sm:text-sm font-bold text-slate-800 mb-1.5">
-                    رقم الهوية الوطنية / الإقامة *
+                    رقم الهوية الوطنية / الإقامة للطالبة *
                   </label>
                   <div className="relative">
                     <input
@@ -394,7 +504,7 @@ export const CompleteProfileView: React.FC<CompleteProfileViewProps> = ({ onComp
                     <Shield className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5 pointer-events-none" />
                   </div>
                   <p className="text-[11px] text-slate-500 mt-1.5 leading-relaxed">
-                    رقم الهوية الوطنية للمواطنات أو الإقامة النظامية للمقيمات (10 أرقام). حقل إلزامي يتم التحقق من صحة تنسيقه وعدم تكراره في قاعدة بيانات المدرسة.
+                    رقم الهوية الوطنية للمواطنات أو الإقامة النظامية للمقيمات (10 أرقام).
                   </p>
                 </div>
 
@@ -416,8 +526,39 @@ export const CompleteProfileView: React.FC<CompleteProfileViewProps> = ({ onComp
                     <Phone className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5 pointer-events-none" />
                   </div>
                   <p className="text-[11px] text-slate-500 mt-1.5 leading-relaxed">
-                    رقم الجوال الخاص بكِ؛ سيظهر في حسابكِ تحت بياناتكِ الشخصية، وهو الرقم المعتمد الذي سيُستخدم لاحقاً للتحقق في عملية «ربط حساب ولي الأمر».
+                    رقم الجوال المعتمد؛ يُستخدم لإرسال رمز التحقق وربط حساب ولي الأمر.
                   </p>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  <div>
+                    <label className="block text-xs sm:text-sm font-bold text-slate-800 mb-1.5">
+                      المرحلة الدراسية *
+                    </label>
+                    <select
+                      value={gradeStage}
+                      onChange={(e) => setGradeStage(e.target.value)}
+                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-900 focus:outline-none focus:border-emerald-600 focus:bg-white transition-colors"
+                    >
+                      <option value="الأول الثانوي">الأول الثانوي</option>
+                      <option value="الثاني الثانوي">الثاني الثانوي</option>
+                      <option value="الثالث الثانوي">الثالث الثانوي</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs sm:text-sm font-bold text-slate-800 mb-1.5">
+                      الصف / الفصل *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={classroom}
+                      onChange={(e) => setClassroom(e.target.value)}
+                      placeholder="مثال: 1/1"
+                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-900 focus:outline-none focus:border-emerald-600 focus:bg-white transition-colors"
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -425,17 +566,17 @@ export const CompleteProfileView: React.FC<CompleteProfileViewProps> = ({ onComp
                 <button
                   type="submit"
                   disabled={saving || loadingRecord}
-                  className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-emerald-700 via-teal-700 to-emerald-800 hover:from-emerald-800 hover:to-teal-800 text-xs sm:text-sm font-extrabold text-white shadow-lg shadow-emerald-950/20 transition-all flex items-center justify-center gap-2.5 cursor-pointer disabled:opacity-60"
+                  className="w-full py-4 px-4 rounded-xl bg-gradient-to-r from-emerald-700 via-teal-700 to-emerald-800 hover:from-emerald-800 hover:to-teal-800 text-sm sm:text-base font-black text-white shadow-xl shadow-emerald-950/25 transition-all flex items-center justify-center gap-2.5 cursor-pointer disabled:opacity-60"
                 >
                   {saving ? (
                     <>
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      <span>جارٍ حفظ البيانات وتوثيق الحساب...</span>
+                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <span>جارٍ التحقق وحفظ واكتمال البيانات...</span>
                     </>
                   ) : (
                     <>
-                      <FileCheck className="w-5 h-5 text-emerald-200" />
-                      <span>حفظ البيانات وتفعيل الدخول للمنصة</span>
+                      <CheckCircle2 className="w-5 h-5 text-amber-300" />
+                      <span>[حفظ واكتمال البيانات]</span>
                     </>
                   )}
                 </button>
@@ -443,7 +584,7 @@ export const CompleteProfileView: React.FC<CompleteProfileViewProps> = ({ onComp
             </form>
           </>
         ) : (
-          /* 2. STAFF, DIRECTOR, AND PARENT VIEW */
+          /* 2. STAFF AND PARENT VIEW */
           <form onSubmit={handleSubmit} className="space-y-5">
             {/* Account Info Read-only Card */}
             <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-4 sm:p-5 space-y-3">
@@ -471,21 +612,19 @@ export const CompleteProfileView: React.FC<CompleteProfileViewProps> = ({ onComp
 
             {/* Editable Required Fields */}
             <div className="space-y-4">
-              {role === 'parent' && (
-                <div>
-                  <label className="block text-xs sm:text-sm font-bold text-slate-800 mb-1.5">
-                    الاسم الكامل لولي الأمر *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="الاسم الثلاثي أو الرباعي"
-                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-emerald-600 focus:bg-white transition-colors"
-                  />
-                </div>
-              )}
+              <div>
+                <label className="block text-xs sm:text-sm font-bold text-slate-800 mb-1.5">
+                  الاسم الكامل *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="الاسم الثلاثي أو الرباعي"
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-emerald-600 focus:bg-white transition-colors"
+                />
+              </div>
 
               <div>
                 <label className="block text-xs sm:text-sm font-bold text-slate-800 mb-1.5">
@@ -525,6 +664,50 @@ export const CompleteProfileView: React.FC<CompleteProfileViewProps> = ({ onComp
                 </div>
               </div>
 
+              {/* Staff-specific: Staff Job Code (الرمز الوظيفي) & Rank/Specialization (الرتبة/التخصص) */}
+              {isStaff && (
+                <>
+                  <div>
+                    <label className="block text-xs sm:text-sm font-bold text-slate-800 mb-1.5">
+                      الرمز الوظيفي المعتمد للمنسوبة *
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        required
+                        value={staffCode}
+                        onChange={(e) => setStaffCode(e.target.value)}
+                        placeholder="مثال: TCH-2024 أو ADM-101 أو رمز السجل الوظيفي"
+                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-emerald-600 focus:bg-white font-mono transition-colors"
+                        dir="ltr"
+                      />
+                      <KeyRound className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5 pointer-events-none" />
+                    </div>
+                    <p className="text-[11px] text-slate-500 mt-1">
+                      الرمز الوظيفي الصادر من إدارة المدرسة المعتمد للتحقق من هوية المنسوبة وتفعيل الصلاحيات.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs sm:text-sm font-bold text-slate-800 mb-1.5">
+                      الرتبة / التخصص والقسم المدرسي *
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        required
+                        value={specialization}
+                        onChange={(e) => setSpecialization(e.target.value)}
+                        placeholder="مثال: معلمة لغة عربية، مسؤولة القبول والتسجيل، مشرفة تربوية..."
+                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-emerald-600 focus:bg-white transition-colors"
+                      />
+                      <Briefcase className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5 pointer-events-none" />
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* Parent-specific: Guardian relation */}
               {role === 'parent' && (
                 <div>
                   <label className="block text-xs sm:text-sm font-bold text-slate-800 mb-1.5">
@@ -539,28 +722,6 @@ export const CompleteProfileView: React.FC<CompleteProfileViewProps> = ({ onComp
                     <option value="أم">أم</option>
                     <option value="ولي أمر شرعي">ولي أمر شرعي</option>
                   </select>
-                  <p className="text-[11px] text-amber-700 bg-amber-50 p-2.5 rounded-xl border border-amber-200 mt-2">
-                    ملاحظة أمنية: بعد إكمال هذه البيانات، ستتمكن من ربط الحساب بطالبتك عبر إدخال «رمز ربط الطالبة» ورمز التحقق من جوال الطالبة، ولن تظهر بيانات أي طالبة إلا بعد اكتمال عملية الربط المعتمدة.
-                  </p>
-                </div>
-              )}
-
-              {role !== 'parent' && role !== 'director' && (
-                <div>
-                  <label className="block text-xs sm:text-sm font-bold text-slate-800 mb-1.5">
-                    التخصص / القسم المدرسي *
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="text"
-                      required
-                      value={specialization}
-                      onChange={(e) => setSpecialization(e.target.value)}
-                      placeholder="مثال: لغة عربية، رياضيات، الإرشاد الطلابي..."
-                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-emerald-600 focus:bg-white transition-colors"
-                    />
-                    <Briefcase className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5 pointer-events-none" />
-                  </div>
                 </div>
               )}
             </div>
@@ -569,17 +730,17 @@ export const CompleteProfileView: React.FC<CompleteProfileViewProps> = ({ onComp
               <button
                 type="submit"
                 disabled={saving}
-                className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-emerald-700 via-teal-700 to-emerald-800 hover:from-emerald-800 hover:to-teal-800 text-xs sm:text-sm font-extrabold text-white shadow-lg shadow-emerald-950/20 transition-all flex items-center justify-center gap-2.5 cursor-pointer disabled:opacity-60"
+                className="w-full py-4 px-4 rounded-xl bg-gradient-to-r from-emerald-700 via-teal-700 to-emerald-800 hover:from-emerald-800 hover:to-teal-800 text-sm sm:text-base font-black text-white shadow-xl shadow-emerald-950/25 transition-all flex items-center justify-center gap-2.5 cursor-pointer disabled:opacity-60"
               >
                 {saving ? (
                   <>
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    <span>جارٍ حفظ وتوثيق بيانات الحساب...</span>
+                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <span>جارٍ حفظ واكتمال البيانات وتفعيل الحساب...</span>
                   </>
                 ) : (
                   <>
-                    <FileCheck className="w-5 h-5 text-emerald-200" />
-                    <span>حفظ البيانات وتفعيل الدخول المباشر عبر Google</span>
+                    <CheckCircle2 className="w-5 h-5 text-amber-300" />
+                    <span>[حفظ واكتمال البيانات]</span>
                   </>
                 )}
               </button>
@@ -591,11 +752,11 @@ export const CompleteProfileView: React.FC<CompleteProfileViewProps> = ({ onComp
         <div className="pt-2 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-2 text-[11px] text-slate-400">
           <div className="flex items-center gap-1.5">
             <Lock className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-            <span>يتم حفظ وتشفير البيانات وتوثيقها وفق أعلى معايير الأمان المدرسية</span>
+            <span>يتم تشفير وتوثيق البيانات وفق المعايير الأمنية المعتمدة للمنصة</span>
           </div>
           <div className="flex items-center gap-1">
             <UserCheck className="w-3.5 h-3.5 text-slate-400" />
-            <span>حساب Google الموثق: {profile?.email}</span>
+            <span>حساب Google المعتمد: {profile?.email}</span>
           </div>
         </div>
       </div>

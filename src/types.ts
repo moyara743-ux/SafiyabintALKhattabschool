@@ -81,6 +81,9 @@ export interface UserProfile {
   specialization?: string;
   guardianRelation?: string;
   studentIdCode?: string;
+  staffCode?: string;
+  employeeIdCode?: string;
+  jobCode?: string;
   gradeStage?: string;
   classroom?: string;
   linkedStudentIds?: string[];

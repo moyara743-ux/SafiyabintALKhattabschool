@@ -13,6 +13,7 @@ import {
   isSystemOwner,
   isDesignatedPrincipal,
 } from './principalService';
+import { isProfileComplete } from './profileGuard';
 
 export const DIRECTOR_EMAIL = SYSTEM_OWNER_EMAIL;
 export const OWNER_EMAIL = SYSTEM_OWNER_EMAIL;
@@ -343,50 +344,7 @@ export async function authenticateGoogleAccountDirectly(
  * For students: Requires valid 10-digit National ID AND 10-digit Saudi mobile phone AND completed status.
  */
 export function isUserProfileCompleted(profile: UserProfile): boolean {
-  const cleanEmail = (profile.email || '').trim().toLowerCase();
-
-  // System Owner and Principal are strictly exempt from profile completion
-  if (
-    isSystemOwner(cleanEmail) ||
-    isDesignatedPrincipal(cleanEmail) ||
-    profile.school_role === 'director' ||
-    (profile.school_role as any) === 'owner' ||
-    (profile.school_role as any) === 'system_owner'
-  ) {
-    return true;
-  }
-
-  if (profile.school_role === 'student') {
-    const hasNid = Boolean(
-      (profile.nationalId && profile.nationalId.trim().length === 10) ||
-      (profile.national_id && profile.national_id.trim().length === 10) ||
-      (profile.customPermissions &&
-        profile.customPermissions.some((p) => typeof p === 'string' && p.startsWith('nid:')))
-    );
-    const hasPhone = Boolean(profile.phone && profile.phone.trim().length >= 10 && profile.phone.trim().startsWith('05'));
-    const isStatusCompleted = Boolean(
-      profile.is_profile_completed === true ||
-      profile.is_profile_complete === true ||
-      profile.accountStatus === 'completed' ||
-      profile.account_status === 'completed' ||
-      profile.customPermissions?.includes('profile_completed' as any)
-    );
-    return hasNid && hasPhone && isStatusCompleted;
-  }
-
-  return Boolean(
-    profile.is_profile_completed ||
-    profile.is_profile_complete ||
-    (profile.accountStatus as string) === 'completed' ||
-    (profile.account_status as string) === 'completed' ||
-    (profile.phone &&
-      Boolean(
-        profile.nationalId ||
-        profile.national_id ||
-        (profile.customPermissions &&
-          profile.customPermissions.some((p) => typeof p === 'string' && p.startsWith('nid:')))
-      ))
-  );
+  return isProfileComplete(profile, profile.email);
 }
 
 /**
@@ -471,10 +429,11 @@ export async function registerOrAuthenticateWithGoogle(params: {
 
     profile.school_role = staffRole;
     profile.name = resolvedName;
-    profile.accountStatus = 'completed';
-    profile.account_status = 'completed';
-    profile.is_profile_completed = true;
-    profile.is_profile_complete = true;
+    const isCompleted = isProfileComplete(profile, cleanEmail);
+    profile.accountStatus = isCompleted ? 'completed' : 'needs_completion';
+    profile.account_status = isCompleted ? 'completed' : 'needs_completion';
+    profile.is_profile_completed = isCompleted;
+    profile.is_profile_complete = isCompleted;
     profile.status = 'active';
 
     // Mark as activated in authorizedStaffService
@@ -495,10 +454,10 @@ export async function registerOrAuthenticateWithGoogle(params: {
         email: cleanEmail,
         name: resolvedName,
         school_role: staffRole,
-        account_status: 'completed',
+        account_status: profile.accountStatus,
         status: 'active',
-        is_profile_completed: true,
-        is_profile_complete: true,
+        is_profile_completed: isCompleted,
+        is_profile_complete: isCompleted,
         updated_at: new Date().toISOString(),
       });
     } catch (e) {
@@ -526,7 +485,7 @@ export async function registerOrAuthenticateWithGoogle(params: {
         displayName: resolvedName,
       },
       profile,
-      isFirstTime: false,
+      isFirstTime: !isCompleted,
     };
   }
 

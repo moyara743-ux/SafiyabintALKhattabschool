@@ -34,6 +34,7 @@ import {
   isSystemOwner as checkIsSystemOwner,
   isDesignatedPrincipal as checkIsDesignatedPrincipal,
 } from '../lib/principalService';
+import { isProfileComplete } from '../lib/profileGuard';
 
 export const DIRECTOR_EMAIL = SYSTEM_OWNER_EMAIL;
 export const OWNER_EMAIL = SYSTEM_OWNER_EMAIL;
@@ -134,18 +135,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         resolvedRole = 'student';
       }
 
-      const isComp = isOwnerAccount || isPrincipalAccount || Boolean(
-        dbUser.is_profile_completed ||
-        dbUser.is_profile_complete ||
-        dbUser.account_status === 'completed' ||
-        (Array.isArray(dbUser.custom_permissions) && dbUser.custom_permissions.includes('profile_completed'))
-      );
 
       const resolvedName = isOwnerAccount
         ? SYSTEM_OWNER_NAME
         : (isPrincipalAccount ? getDesignatedPrincipalName() : (dbUser.name || currentName));
 
-      activeProfile = {
+      const candidateProfile: UserProfile = {
         id: dbUser.id || currentId,
         name: resolvedName,
         email: currentEmail,
@@ -154,11 +149,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         phone: dbUser.phone || '',
         nationalId: dbUser.national_id || dbUser.nationalId || '',
         national_id: dbUser.national_id || dbUser.nationalId || '',
-        accountStatus: (isOwnerAccount || isPrincipalAccount) ? 'completed' : ((dbUser.account_status as any) || (isComp ? 'completed' : 'needs_completion')),
-        account_status: (isOwnerAccount || isPrincipalAccount) ? 'completed' : ((dbUser.account_status as any) || (isComp ? 'completed' : 'needs_completion')),
-        is_profile_completed: isComp,
-        is_profile_complete: isComp,
+        accountStatus: 'needs_completion',
+        account_status: 'needs_completion',
+        is_profile_completed: false,
+        is_profile_complete: false,
         studentIdCode: dbUser.student_id_code || dbUser.studentIdCode,
+        staffCode: dbUser.staff_code || dbUser.staffCode || dbUser.employeeIdCode,
+        employeeIdCode: dbUser.employee_id_code || dbUser.employeeIdCode,
+        jobCode: dbUser.job_code || dbUser.jobCode,
         gradeStage: dbUser.grade_stage || dbUser.gradeStage,
         classroom: dbUser.classroom,
         specialization: dbUser.specialization,
@@ -169,6 +167,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         lastLoginAt: new Date().toISOString(),
       };
 
+      const isComp = isOwnerAccount || isPrincipalAccount || isProfileComplete(candidateProfile, currentEmail);
+      candidateProfile.is_profile_completed = isComp;
+      candidateProfile.is_profile_complete = isComp;
+      candidateProfile.accountStatus = isComp ? 'completed' : 'needs_completion';
+      candidateProfile.account_status = isComp ? 'completed' : 'needs_completion';
+
+      activeProfile = candidateProfile;
       dataStore.syncUserProfileFromRemote(activeProfile);
     } else {
       // Check dataStore
@@ -178,18 +183,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       let resolvedRole: SchoolRole = isOwnerAccount ? 'system_owner' : (isPrincipalAccount ? 'director' : (localExisting?.school_role || defaultRole));
       if (isYaraAccount) resolvedRole = 'student';
 
-      const isComp = isOwnerAccount || isPrincipalAccount || Boolean(
-        localExisting?.is_profile_completed ||
-        localExisting?.is_profile_complete ||
-        localExisting?.accountStatus === 'completed' ||
-        (Array.isArray(localExisting?.customPermissions) && localExisting?.customPermissions.includes('profile_completed' as any))
-      );
-
       const resolvedName = isOwnerAccount
         ? SYSTEM_OWNER_NAME
         : (isPrincipalAccount ? getDesignatedPrincipalName() : (localExisting?.name || currentName));
 
-      activeProfile = {
+      const candidateProfile: UserProfile = {
         id: localExisting?.id || currentId,
         name: resolvedName,
         email: currentEmail,
@@ -198,11 +196,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         phone: localExisting?.phone || '',
         nationalId: localExisting?.nationalId || localExisting?.national_id || '',
         national_id: localExisting?.national_id || localExisting?.nationalId || '',
-        accountStatus: (isOwnerAccount || isPrincipalAccount) ? 'completed' : ((localExisting?.accountStatus as any) || (isComp ? 'completed' : 'needs_completion')),
-        account_status: (isOwnerAccount || isPrincipalAccount) ? 'completed' : ((localExisting?.account_status as any) || (isComp ? 'completed' : 'needs_completion')),
-        is_profile_completed: isComp,
-        is_profile_complete: isComp,
+        accountStatus: 'needs_completion',
+        account_status: 'needs_completion',
+        is_profile_completed: false,
+        is_profile_complete: false,
         studentIdCode: localExisting?.studentIdCode,
+        staffCode: localExisting?.staffCode || localExisting?.employeeIdCode,
+        employeeIdCode: localExisting?.employeeIdCode,
+        jobCode: localExisting?.jobCode,
         gradeStage: localExisting?.gradeStage,
         classroom: localExisting?.classroom,
         specialization: localExisting?.specialization,
@@ -213,6 +214,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         lastLoginAt: new Date().toISOString(),
       };
 
+      const isComp = isOwnerAccount || isPrincipalAccount || isProfileComplete(candidateProfile, currentEmail);
+      candidateProfile.is_profile_completed = isComp;
+      candidateProfile.is_profile_complete = isComp;
+      candidateProfile.accountStatus = isComp ? 'completed' : 'needs_completion';
+      candidateProfile.account_status = isComp ? 'completed' : 'needs_completion';
+
+      activeProfile = candidateProfile;
       dataStore.syncUserProfileFromRemote(activeProfile);
     }
 

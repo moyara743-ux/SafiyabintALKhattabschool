@@ -53,11 +53,12 @@ import {
   getDesignatedPrincipalEmail,
   isDesignatedPrincipal,
 } from './lib/principalService';
+import { isProfileComplete as checkProfileComplete } from './lib/profileGuard';
 
 import { GraduationCap, Shield, Phone, Mail, MapPin, Sparkles } from 'lucide-react';
 
 function AppContent() {
-  const { user, profile, hasPerm, isDirector, loading: authLoading } = useAuth();
+  const { user, profile, logout, hasPerm, isDirector, loading: authLoading } = useAuth();
 
   const [currentView, setCurrentView] = useState<PageView>('home');
   const [searchQuery, setSearchQuery] = useState('');
@@ -187,31 +188,12 @@ function AppContent() {
     ))
   );
 
-  // Universal profile completion check:
-  // - System Owner and Principal are strictly exempt from profile completion (enter directly!)
-  // - Students: strictly governed by isStudentProfileComplete (cannot enter without ID + Mobile + completion)
+  // Strict Universal Profile Guard: Mandatory Mobile (05) + National ID + Role Code/Record + Rank/Grade
+  // System Owner and Principal are exempt; all other accounts MUST have 100% completed data
   const isProfileComplete = Boolean(
     isSystemOwner ||
     isPrincipal ||
-    (profile &&
-      (profile.school_role === 'student'
-        ? isStudentProfileComplete
-        : (profile.accountStatus === 'completed' ||
-           profile.account_status === 'completed' ||
-           profile.is_profile_completed === true ||
-           profile.is_profile_complete === true ||
-           (profile.school_role !== 'student' &&
-             profile.school_role !== 'parent' &&
-             profile.phone &&
-             (profile.nationalId ||
-               profile.national_id ||
-               (profile.customPermissions &&
-                 profile.customPermissions.some(
-                   (p) => typeof p === 'string' && p.startsWith('nid:')
-                 )))) ||
-           (profile.school_role === 'parent' &&
-             profile.phone &&
-             (profile.nationalId || profile.accountStatus === 'completed')))))
+    checkProfileComplete(profile, user?.email)
   );
 
   // System Owner immediate redirection: take directly to the Admin Dashboard
@@ -500,6 +482,72 @@ function AppContent() {
     );
   }
 
+  // Universal Mandatory Profile Guard & Isolated Profile Completion Screen
+  // If isProfileComplete is false, strictly block all navigation, hide navbar, search bar, drawer, and platform buttons
+  if (!isProfileComplete) {
+    return (
+      <div
+        className="min-h-screen bg-slate-50 text-slate-800 font-sans flex flex-col justify-between selection:bg-emerald-900 selection:text-amber-200 overflow-x-hidden w-full"
+        dir="rtl"
+      >
+        {/* Minimal Isolated Header - NO navigation links, NO search bar, NO drawer */}
+        <header className="sticky top-0 z-50 bg-gradient-to-l from-emerald-950 via-[#064e3b] to-emerald-900 text-white shadow-xl border-b-2 border-amber-400/40 px-4 sm:px-8 py-3.5">
+          <div className="max-w-5xl mx-auto flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-11 h-11 bg-gradient-to-tr from-emerald-800 to-teal-700 rounded-2xl flex items-center justify-center text-amber-300 border-2 border-amber-400/40 shadow-md">
+                <GraduationCap className="w-6 h-6 text-amber-300" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h1 className="text-sm sm:text-base font-extrabold text-white">
+                    {settings.schoolName || 'مدرسة صفية بنت عمر الثانوية'}
+                  </h1>
+                  <span className="px-2 py-0.5 rounded-full bg-amber-400/20 text-amber-300 border border-amber-400/40 text-[10px] font-black">
+                    حارس المسارات الإجباري
+                  </span>
+                </div>
+                <p className="text-[11px] text-emerald-100/80">
+                  بوابة توثيق بيانات الحساب الرسمية قبل منح صلاحيات الدخول
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <div className="hidden sm:flex flex-col text-left text-xs">
+                <span className="font-bold text-slate-200">{profile?.name || user.email}</span>
+                <span className="text-[10px] text-emerald-200 font-mono">{user.email}</span>
+              </div>
+              <button
+                type="button"
+                onClick={logout}
+                className="px-3.5 py-1.5 rounded-xl bg-white/10 hover:bg-rose-600/80 text-white border border-white/20 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
+              >
+                <span>تسجيل الخروج</span>
+              </button>
+            </div>
+          </div>
+        </header>
+
+        {/* Main Isolated Form Content */}
+        <main className="flex-1 max-w-5xl w-full mx-auto px-4 py-8 sm:py-12">
+          <CompleteProfileView
+            onComplete={() => {
+              setCurrentView(isSystemOwner ? 'admin_dashboard' : 'home');
+            }}
+          />
+        </main>
+
+        {/* Minimal Isolated Security Footer */}
+        <footer className="bg-emerald-950 text-white/70 border-t border-emerald-900 py-4 text-center text-xs">
+          <div className="max-w-5xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
+            <span>جميع الحقوق محفوظة © مدرسة صفية بنت عمر الثانوية</span>
+            <span className="text-amber-400/90 font-medium">نظام الحظر والعبور الصارم للمسارات (Route Guard Active)</span>
+          </div>
+        </footer>
+      </div>
+    );
+  }
+
   return (
     <div
       className="min-h-screen bg-white text-slate-800 font-sans flex flex-col justify-between selection:bg-emerald-900 selection:text-amber-200 overflow-x-hidden w-full max-w-full"
@@ -533,12 +581,8 @@ function AppContent() {
           </div>
         )}
 
-        {/* Universal Profile Gatekeeper: Must complete profile before accessing system */}
-        {user && !isProfileComplete ? (
-          <div className="space-y-6">
-            <CompleteProfileView onComplete={() => setCurrentView('home')} />
-          </div>
-        ) : user && profile?.school_role === 'parent' && !isLinkedParent ? (
+        {/* Parent Gatekeeper: Unlinked parent cannot access site before linking */}
+        {user && profile?.school_role === 'parent' && !isLinkedParent ? (
           /* Parent Gatekeeper: Unlinked parent cannot access site before linking */
           <div className="space-y-6">
             <div className="p-4 bg-amber-500/15 border-2 border-amber-500/40 rounded-2xl flex items-center gap-3 text-amber-900">
