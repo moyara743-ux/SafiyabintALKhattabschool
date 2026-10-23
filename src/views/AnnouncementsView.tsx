@@ -17,6 +17,7 @@ import {
   Loader2,
   ImageIcon,
   Eye,
+  Archive,
 } from 'lucide-react';
 
 interface AnnouncementsViewProps {
@@ -31,7 +32,7 @@ export const AnnouncementsView: React.FC<AnnouncementsViewProps> = ({
   onEditAnnouncement,
 }) => {
   const { user, profile, hasPerm, isDirector } = useAuth();
-  const [filterType, setFilterType] = useState<'all' | 'important'>('all');
+  const [filterType, setFilterType] = useState<'all' | 'important' | 'archived'>('all');
   const [searchQuery, setSearchQuery] = useState('');
 
   // Selected announcement for details view modal (Available to ALL users)
@@ -51,12 +52,43 @@ export const AnnouncementsView: React.FC<AnnouncementsViewProps> = ({
   const canEdit = hasPerm('editAnnouncements') || isSchoolDirector;
   const canDelete = hasPerm('deleteAnnouncements') || isSchoolDirector;
 
+  const handleArchiveToggle = async (item: Announcement) => {
+    if (!user || !profile) return;
+    const newArchived = !item.isArchived;
+    try {
+      await dataStore.updateAnnouncement(item.id, {
+        isArchived: newArchived,
+        archivedAt: newArchived ? new Date().toISOString() : undefined,
+        archivedBy: newArchived ? profile.name : undefined,
+      });
+
+      await logActivity({
+        actorId: user.id || user.uid,
+        actorName: profile.name,
+        actorEmail: user.email || '',
+        action: 'UPDATE',
+        entity: 'announcements',
+        entityId: item.id,
+        details: newArchived ? `أرشفة إعلان: ${item.title}` : `استعادة إعلان من الأرشيف: ${item.title}`,
+      });
+    } catch (err: any) {
+      alert(err?.message || 'تعذر تغيير حالة أرشفة الإعلان.');
+    }
+  };
+
   const filtered = announcements.filter((item) => {
-    const matchesType = filterType === 'all' || item.isImportant;
+    // Handling Archive vs Normal View
+    if (filterType === 'archived') {
+      if (!item.isArchived) return false;
+    } else {
+      if (item.isArchived) return false;
+      if (filterType === 'important' && !item.isImportant) return false;
+    }
+
     const matchesSearch =
       item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       item.content.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesType && matchesSearch;
+    return matchesSearch;
   });
 
   const handleInitiateDelete = (item: Announcement) => {

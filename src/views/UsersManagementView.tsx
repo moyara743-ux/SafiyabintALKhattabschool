@@ -18,6 +18,7 @@ import {
   ALL_PERMISSIONS,
   canUserManageTarget,
   canAssignRole,
+  canDeleteUser,
 } from '../lib/permissions';
 import { logActivity } from '../lib/activityLogger';
 import { getTodayDateString } from '../lib/dateUtils';
@@ -100,6 +101,10 @@ export const UsersManagementView: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // User Deletion State
+  const [userToDelete, setUserToDelete] = useState<UserProfile | null>(null);
+  const [deletingUser, setDeletingUser] = useState(false);
 
   const canManage = hasPerm('manageUsers') || isDirector;
 
@@ -205,6 +210,53 @@ export const UsersManagementView: React.FC = () => {
     setTimeout(() => setToastMessage(null), 4000);
   };
 
+  // Initiate User Deletion (Strict Rule: Supervisor cannot delete Director!)
+  const handleInitiateDeleteUser = (target: UserProfile) => {
+    if (!currentProfile) return;
+    const check = canDeleteUser(currentProfile, target);
+    if (!check.allowed) {
+      alert(check.reason || 'غير مصرح لكِ بحذف هذا المستخدم.');
+      return;
+    }
+    setUserToDelete(target);
+  };
+
+  // Confirm User Deletion
+  const handleConfirmDeleteUser = async () => {
+    if (!userToDelete || !currentProfile) return;
+    const check = canDeleteUser(currentProfile, userToDelete);
+    if (!check.allowed) {
+      alert(check.reason || 'غير مصرح لكِ بحذف هذا المستخدم.');
+      setUserToDelete(null);
+      return;
+    }
+
+    setDeletingUser(true);
+    try {
+      await dataStore.deleteUser(userToDelete.id, userToDelete.email);
+      await logActivity({
+        actorId: currentProfile.id,
+        actorName: currentProfile.name,
+        actorEmail: currentProfile.email,
+        action: 'DELETE',
+        entity: 'users',
+        entityId: userToDelete.id,
+        details: `حذف حساب المستخدم (${userToDelete.name}) ورتبته (${ROLE_LABELS_AR[userToDelete.school_role]}) نهائياً من قاعدة البيانات`,
+      });
+
+      showToast(`تم حذف حساب المستخدم ${userToDelete.name} نهائياً بنجاح`);
+      setUserToDelete(null);
+      if (editingUser?.id === userToDelete.id) {
+        setEditingUser(null);
+      }
+      await loadUsers();
+    } catch (err: any) {
+      alert(err?.message || 'تعذر إتمام عملية حذف المستخدم.');
+    } finally {
+      setDeletingUser(false);
+    }
+  };
+
   // Open Edit User Modal
   const openEditModal = (target: UserProfile) => {
     if (!currentProfile) return;
@@ -263,6 +315,12 @@ export const UsersManagementView: React.FC = () => {
     // STRICT RULE: System Owner account cannot be modified
     if (targetEmail === 'moyara743@gmail.com' || editingUser.school_role === 'system_owner') {
       setErrorMessage('حساب [مالك النظام] هو الحساب الأعلى صلاحية في المنصة ولا يمكن تعديله أو تغيير رتبته.');
+      return;
+    }
+
+    // STRICT RULE: Director account cannot be modified by supervisor or lower roles
+    if ((editingUser.school_role === 'director' || targetEmail === 'director.safiah@gmail.com') && !canManageDirectorAccount(currentUser.email || currentProfile.email, currentProfile.school_role)) {
+      setErrorMessage('قاعدة أمنية عليا: لا يمكن للمشرفة أو أي مستخدم تعديل أو إلغاء حساب مديرة المدرسة المعتمد.');
       return;
     }
 
@@ -834,6 +892,15 @@ export const UsersManagementView: React.FC = () => {
                             <Edit className="w-3.5 h-3.5 text-emerald-700" />
                             <span>تعديل</span>
                           </button>
+
+                          <button
+                            onClick={() => handleInitiateDeleteUser(u)}
+                            className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-xl text-xs font-bold transition-colors inline-flex items-center gap-1 border border-rose-200 cursor-pointer"
+                            title="حذف المستخدم نهائياً"
+                          >
+                            <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                            <span>حذف</span>
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -1334,32 +1401,126 @@ export const UsersManagementView: React.FC = () => {
             </div>
 
             {/* Modal Actions */}
-            <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+            <div className="flex items-center justify-between gap-3 pt-4 border-t border-slate-100">
               <button
                 type="button"
-                onClick={() => setEditingUser(null)}
-                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                onClick={() => {
+                  if (editingUser) handleInitiateDeleteUser(editingUser);
+                }}
+                className="px-3.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold transition-colors cursor-pointer inline-flex items-center gap-1.5"
               >
-                إلغاء
+                <Trash2 className="w-4 h-4 text-rose-600" />
+                <span>حذف المستخدم نهائياً</span>
+              </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingUser(null)}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                >
+                  إلغاء
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleSaveUser}
+                  disabled={saving}
+                  className="px-5 py-2 bg-emerald-800 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition-all shadow-md cursor-pointer flex items-center gap-2"
+                >
+                  {saving ? (
+                    <>
+                      <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <span>جارٍ الحفظ في Supabase...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Check className="w-4 h-4" />
+                      <span>حفظ التعديلات في Supabase</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CONFIRM DELETE USER MODAL */}
+      {userToDelete && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs animate-in fade-in"
+          dir="rtl"
+        >
+          <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl border-2 border-rose-200 p-6 space-y-4 text-slate-900">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-rose-100 text-rose-700 flex items-center justify-center shrink-0">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-extrabold text-slate-900">
+                  تأكيد حذف المستخدم نهائياً
+                </h3>
+                <span className="text-[11px] text-slate-500 font-medium">
+                  إدارة الصلاحيات وحسابات المدرسة
+                </span>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-800 leading-relaxed font-bold">
+              هل أنتِ متأكدة من رغبتكِ في حذف حساب المستخدم نهائياً من قاعدة بيانات Supabase والنظام؟
+            </p>
+
+            <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl space-y-1.5 text-xs">
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500 font-medium">اسم المستخدم:</span>
+                <span className="font-bold text-slate-900">{userToDelete.name}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500 font-medium">البريد الإلكتروني:</span>
+                <span className="font-mono font-bold text-slate-900" dir="ltr">
+                  {userToDelete.email}
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500 font-medium">الرتبة والدور:</span>
+                <span className="font-bold text-emerald-800">
+                  {ROLE_LABELS_AR[userToDelete.school_role]}
+                </span>
+              </div>
+            </div>
+
+            <div className="p-3 bg-rose-50 border border-rose-200 rounded-2xl text-[11px] text-rose-900 flex items-start gap-2.5">
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+              <span className="leading-relaxed font-bold">
+                تنبيه: سيتم حذف هذا الحساب نهائياً وإلغاء كافة صلاحياته ومشاركاته وروابطه المسجلة.
+              </span>
+            </div>
+
+            <div className="pt-2 flex gap-2.5">
+              <button
+                type="button"
+                onClick={handleConfirmDeleteUser}
+                disabled={deletingUser}
+                className="flex-1 py-3 px-4 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-black transition-colors cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm"
+              >
+                {deletingUser ? (
+                  <span>جارٍ الحذف...</span>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4" />
+                    <span>نعم، حذف الحساب نهائياً</span>
+                  </>
+                )}
               </button>
 
               <button
                 type="button"
-                onClick={handleSaveUser}
-                disabled={saving}
-                className="px-5 py-2 bg-emerald-800 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition-all shadow-md cursor-pointer flex items-center gap-2"
+                onClick={() => setUserToDelete(null)}
+                disabled={deletingUser}
+                className="py-3 px-4 rounded-xl border border-slate-300 text-slate-700 hover:bg-slate-100 text-xs font-bold transition-colors cursor-pointer"
               >
-                {saving ? (
-                  <>
-                    <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    <span>جارٍ الحفظ في Supabase...</span>
-                  </>
-                ) : (
-                  <>
-                    <Check className="w-4 h-4" />
-                    <span>حفظ التعديلات في Supabase</span>
-                  </>
-                )}
+                إلغاء
               </button>
             </div>
           </div>

@@ -930,6 +930,44 @@ class LocalDataStore {
     const savedUser = updated.find((u) => u.id === finalId || (targetEmail && u.email?.trim().toLowerCase() === targetEmail));
     return savedUser || existing!;
   }
+
+  public async deleteUser(id: string, email?: string): Promise<boolean> {
+    const list = this.getCollection<UserProfile[]>('users');
+    const cleanEmail = email ? email.trim().toLowerCase() : undefined;
+    const target = list.find((u) => u.id === id || (cleanEmail && u.email?.trim().toLowerCase() === cleanEmail));
+
+    if (target) {
+      const targetEmail = (target.email || '').trim().toLowerCase();
+      if (targetEmail === OWNER_EMAIL.toLowerCase() || target.school_role === 'system_owner') {
+        throw new Error('قاعدة أمنية عليا: لا يمكن حذف حساب مالك النظام الرئيسي نهائياً.');
+      }
+    }
+
+    // 1. Remove from local storage cache
+    const updated = list.filter((u) => u.id !== id && (!cleanEmail || !u.email || u.email.trim().toLowerCase() !== cleanEmail));
+    this.setStorage('users', updated);
+
+    // 2. Remove from Supabase public.users table
+    try {
+      if (id) {
+        await supabase.from('users').delete().eq('id', id);
+      }
+      if (cleanEmail) {
+        await supabase.from('users').delete().ilike('email', cleanEmail);
+      }
+    } catch (err) {
+      console.warn('Supabase delete user exception:', err);
+    }
+
+    // 3. Remove any parent-student relationship records tied to this user
+    try {
+      await supabase.from('parent_student_relationships').delete().or(`parent_user_id.eq.${id},student_user_id.eq.${id}`);
+    } catch (err) {
+      console.warn('Supabase delete user relationships notice:', err);
+    }
+
+    return true;
+  }
 }
 
 export const dataStore = new LocalDataStore();

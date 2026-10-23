@@ -4,7 +4,7 @@ import { DailyMessage } from '../types';
 import { dataStore } from '../lib/dataStore';
 import { getTodayDateString } from '../lib/dateUtils';
 import { logActivity } from '../lib/activityLogger';
-import { X, MessageSquare, AlertCircle } from 'lucide-react';
+import { X, MessageSquare, AlertCircle, Trash2, Archive } from 'lucide-react';
 
 interface DailyMessageModalProps {
   isOpen: boolean;
@@ -58,6 +58,34 @@ export const DailyMessageModal: React.FC<DailyMessageModalProps> = ({
       </div>
     );
   }
+
+  const canDelete = hasPerm('deleteDailyMessage') || hasPerm('editDailyMessage');
+
+  const handleDeleteMessage = async () => {
+    if (!messageToEdit) return;
+    if (!window.confirm('هل أنتِ متأكدة من حذف هذه الرسالة اليومية نهائياً من النظام؟')) return;
+    if (!user || !profile) return;
+
+    setLoading(true);
+    try {
+      await dataStore.deleteDailyMessage(messageToEdit.id);
+      await logActivity({
+        actorId: user.id || user.uid,
+        actorName: profile.name,
+        actorEmail: user.email || '',
+        action: 'DELETE',
+        entity: 'dailyMessages',
+        entityId: messageToEdit.id,
+        details: 'حذف الرسالة اليومية نهائياً من النظام',
+      });
+      onSuccess?.();
+      onClose();
+    } catch (err: any) {
+      setError(err?.message || 'تعذر حذف الرسالة اليومية.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -188,26 +216,44 @@ export const DailyMessageModal: React.FC<DailyMessageModalProps> = ({
                 onChange={(e) => setIsActive(e.target.checked)}
                 className="rounded text-orange-500 focus:ring-orange-400 w-4 h-4 bg-slate-800 border-slate-700"
               />
-              <span className="text-xs font-bold text-slate-300">تفعيل الرسالة وجعلها ظاهرة في الصفحة الرئيسية</span>
+              <span className="text-xs font-bold text-slate-300">
+                {isActive ? 'الرسالة مفعلة وتظهر في الصفحة الرئيسية (إلغاء التحديد = أرشفة)' : 'الرسالة مؤرشفة ومخفية من العرض العام'}
+              </span>
             </label>
           </div>
 
-          <div className="pt-4 flex items-center justify-end gap-3 border-t border-slate-800">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={loading}
-              className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-xl"
-            >
-              إلغاء
-            </button>
-            <button
-              type="submit"
-              disabled={loading}
-              className="px-6 py-2.5 bg-orange-600 hover:bg-orange-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-orange-950/40 transition-all disabled:opacity-50"
-            >
-              {loading ? 'جارٍ الحفظ والتحقق...' : messageToEdit ? 'حفظ التعديلات' : 'نشر رسالة اليوم'}
-            </button>
+          <div className="pt-4 flex items-center justify-between gap-3 border-t border-slate-800">
+            {messageToEdit && canDelete ? (
+              <button
+                type="button"
+                onClick={handleDeleteMessage}
+                disabled={loading}
+                className="px-3.5 py-2 bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 text-xs font-bold rounded-xl flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>حذف نهائي</span>
+              </button>
+            ) : (
+              <div />
+            )}
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={onClose}
+                disabled={loading}
+                className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-xl cursor-pointer"
+              >
+                إلغاء
+              </button>
+              <button
+                type="submit"
+                disabled={loading}
+                className="px-6 py-2.5 bg-orange-600 hover:bg-orange-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-orange-950/40 transition-all disabled:opacity-50 cursor-pointer"
+              >
+                {loading ? 'جارٍ النشر والحفظ...' : messageToEdit ? 'حفظ ونشر التعديل' : 'نشر رسالة اليوم مباشرة'}
+              </button>
+            </div>
           </div>
         </form>
       </div>

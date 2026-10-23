@@ -51,6 +51,7 @@ export type PermissionKey =
   | 'viewDailyMessage'
   | 'createDailyMessage'
   | 'editDailyMessage'
+  | 'deleteDailyMessage'
   | 'manageUsers'
   | 'changeRoles'
   | 'managePermissions'
@@ -193,13 +194,16 @@ export interface Announcement {
   isImportant?: boolean;
   authorId: string;
   authorName: string;
+  isArchived?: boolean;
+  archivedAt?: string;
+  archivedBy?: string;
   createdAt: string;
   updatedAt?: string;
 }
 
 // 6. News & Posts (الأخبار والمنشورات)
 export type PostType = 'news' | 'today_summary';
-export type PostStatus = 'published' | 'draft';
+export type PostStatus = 'published' | 'draft' | 'archived';
 
 export interface Post {
   id: string;
@@ -215,6 +219,9 @@ export interface Post {
   authorEmail?: string;
   status: PostStatus;
   isPinned?: boolean;
+  isArchived?: boolean;
+  archivedAt?: string;
+  archivedBy?: string;
   likesCount?: number;
   likedBy?: string[];
   createdAt: string;
@@ -222,7 +229,7 @@ export interface Post {
 }
 
 // 7. Events (الفعاليات)
-export type EventStatus = 'upcoming' | 'completed' | 'cancelled';
+export type EventStatus = 'upcoming' | 'completed' | 'cancelled' | 'archived';
 
 export interface SchoolEvent {
   id: string;
@@ -237,6 +244,9 @@ export interface SchoolEvent {
   category?: string;
   authorId: string;
   authorName: string;
+  isArchived?: boolean;
+  archivedAt?: string;
+  archivedBy?: string;
   createdAt: string;
   updatedAt?: string;
 }
@@ -251,6 +261,9 @@ export interface Achievement {
   category?: string;
   authorId: string;
   authorName: string;
+  isArchived?: boolean;
+  archivedAt?: string;
+  archivedBy?: string;
   createdAt: string;
   updatedAt?: string;
 }
@@ -266,6 +279,9 @@ export interface SchoolPhoto {
   date: string; // YYYY-MM-DD
   authorId: string;
   authorName: string;
+  isArchived?: boolean;
+  archivedAt?: string;
+  archivedBy?: string;
   createdAt: string;
   updatedAt?: string;
 }
@@ -281,6 +297,9 @@ export interface SchoolAlbum {
   date: string; // YYYY-MM-DD
   authorId: string;
   authorName: string;
+  isArchived?: boolean;
+  archivedAt?: string;
+  archivedBy?: string;
   createdAt: string;
   updatedAt?: string;
 }
@@ -295,6 +314,9 @@ export interface DailyMessage {
   createdAt: string;
   updatedAt?: string;
   isActive?: boolean;
+  isArchived?: boolean;
+  archivedAt?: string;
+  archivedBy?: string;
 }
 
 // 12. Activity Log (سجل النشاط)
@@ -322,7 +344,9 @@ export type ActivityAction =
   | 'ACCOUNT_LOCKED_TEMPORARY'
   | 'FAILED_LOGIN_ATTEMPT'
   | 'UNAUTHORIZED_LOGIN_ATTEMPT'
-  | 'PROFILE_COMPLETED';
+  | 'PROFILE_COMPLETED'
+  | 'ARCHIVE'
+  | 'RESTORE';
 
 export interface ActivityLog {
   id: string;

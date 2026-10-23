@@ -55,6 +55,7 @@ import {
   isSystemOwner as checkIsSystemOwner,
   isDesignatedPrincipal,
 } from '../lib/principalService';
+import { TemporaryPermissionsManager } from '../components/TemporaryPermissionsManager';
 
 interface AdminDashboardProps {
   onNavigate: (view: PageView) => void;
@@ -257,6 +258,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   };
 
   const handleInitiateRemoveStaff = (targetEmail: string, name?: string) => {
+    const clean = targetEmail.trim().toLowerCase();
+    const designatedDirector = getDesignatedPrincipalEmail().toLowerCase();
+    if (clean === designatedDirector || clean === 'director.safiah@gmail.com') {
+      alert('قاعدة أمنية عليا: لا يمكن للمشرفة أو أي مستخدم حذف حساب مديرة المدرسة المعتمد.');
+      return;
+    }
+    if (clean === 'moyara743@gmail.com') {
+      alert('قاعدة أمنية عليا: لا يمكن حذف حساب مالك النظام الأعلى صلاحية.');
+      return;
+    }
     setStaffListErrorMsg(null);
     setStaffListSuccessMsg(null);
     setStaffToDelete({ email: targetEmail, name });
@@ -299,10 +310,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   };
 
   const canAccess =
-    hasPerm('accessAdminDashboard') ||
+    isDirector ||
+    isSystemOwner ||
+    profile?.school_role === 'supervisor' ||
+    profile?.school_role === 'administrator' ||
     hasPerm('manageUsers') ||
-    hasPerm('viewActivityLogs') ||
-    isDirector;
+    hasPerm('managePermissions') ||
+    hasPerm('viewActivityLog') ||
+    hasPerm('createPosts') ||
+    hasPerm('createAnnouncements');
 
   useEffect(() => {
     const fetchStats = async () => {
@@ -1426,6 +1442,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           <p className="text-xs text-slate-400 text-center py-4">لا توجد عمليات مسجلة حديثاً.</p>
         )}
       </div>
+
+      {/* -------------------------------------------------------------------------- */}
+      {/* SECTION: نظام الصلاحيات الإضافية والتفويض المؤقت (مالك النظام والمديرة والمشرفة) */}
+      {/* -------------------------------------------------------------------------- */}
+      {(isSystemOwner || isDirector || profile?.school_role === 'supervisor' || hasPerm('managePermissions')) && (
+        <TemporaryPermissionsManager />
+      )}
 
       {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
       {/* QUICK CONFIRMATION MODAL: REVOKE / DELETE STAFF MEMBER       */}

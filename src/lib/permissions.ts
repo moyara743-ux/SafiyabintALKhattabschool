@@ -60,6 +60,7 @@ export const PERMISSION_LABELS_AR: Record<PermissionKey, string> = {
   viewDailyMessage: 'مشاهدة الرسالة اليومية',
   createDailyMessage: 'إضافة الرسالة اليومية',
   editDailyMessage: 'تعديل الرسالة اليومية',
+  deleteDailyMessage: 'حذف أو أرشفة الرسالة اليومية',
 
   manageUsers: 'إدارة المستخدمين',
   changeRoles: 'تغيير ألقاب وأدوار المستخدمين',
@@ -82,7 +83,7 @@ export const ROLE_PERMISSIONS: Record<SchoolRole, PermissionKey[]> = {
     'viewAchievements', 'createAchievements', 'editAchievements', 'deleteAchievements',
     'viewPhotos', 'createPhotos', 'editPhotos', 'deletePhotos',
     'viewAlbums', 'createAlbums', 'editAlbums', 'deleteAlbums',
-    'viewDailyMessage', 'createDailyMessage', 'editDailyMessage',
+    'viewDailyMessage', 'createDailyMessage', 'editDailyMessage', 'deleteDailyMessage',
     'manageUsers', 'changeRoles', 'managePermissions',
     'manageParentRelationships',
     'viewActivityLog',
@@ -96,7 +97,7 @@ export const ROLE_PERMISSIONS: Record<SchoolRole, PermissionKey[]> = {
     'viewAchievements', 'createAchievements', 'editAchievements', 'deleteAchievements',
     'viewPhotos', 'createPhotos', 'editPhotos', 'deletePhotos',
     'viewAlbums', 'createAlbums', 'editAlbums', 'deleteAlbums',
-    'viewDailyMessage', 'createDailyMessage', 'editDailyMessage',
+    'viewDailyMessage', 'createDailyMessage', 'editDailyMessage', 'deleteDailyMessage',
     'manageUsers', 'changeRoles', 'managePermissions',
     'manageParentRelationships',
     'viewActivityLog',
@@ -115,13 +116,13 @@ export const ROLE_PERMISSIONS: Record<SchoolRole, PermissionKey[]> = {
   ],
 
   administrator: [
-    'viewAnnouncements', 'createAnnouncements', 'editAnnouncements',
-    'viewPosts', 'createPosts', 'editPosts',
-    'viewEvents', 'createEvents', 'editEvents',
-    'viewAchievements', 'createAchievements',
-    'viewPhotos', 'createPhotos', 'editPhotos',
-    'viewAlbums', 'createAlbums', 'editAlbums',
-    'viewDailyMessage', 'createDailyMessage', 'editDailyMessage',
+    'viewAnnouncements', 'createAnnouncements', 'editAnnouncements', 'deleteAnnouncements',
+    'viewPosts', 'createPosts', 'editPosts', 'deletePosts',
+    'viewEvents', 'createEvents', 'editEvents', 'deleteEvents',
+    'viewAchievements', 'createAchievements', 'editAchievements', 'deleteAchievements',
+    'viewPhotos', 'createPhotos', 'editPhotos', 'deletePhotos',
+    'viewAlbums', 'createAlbums', 'editAlbums', 'deleteAlbums',
+    'viewDailyMessage', 'createDailyMessage', 'editDailyMessage', 'deleteDailyMessage',
     'manageParentRelationships',
   ],
 
@@ -210,12 +211,20 @@ export function computeEffectivePermissions(profile: UserProfile | null): Set<Pe
     });
   }
 
-  // 3. Temporary permissions (checked against real system date)
+  // 3. Temporary permissions (checked against real system date and time)
   if (profile.temporaryPermissions && Array.isArray(profile.temporaryPermissions)) {
-    const todayStr = getTodayDateString();
-    profile.temporaryPermissions.forEach((temp: TemporaryPermission) => {
-      if (temp.startDate <= todayStr && todayStr <= temp.endDate) {
-        effective.add(temp.permission);
+    const now = new Date();
+    profile.temporaryPermissions.forEach((temp: any) => {
+      // Check start/end dates and times, and ensure not revoked
+      if (temp.startDate && temp.endDate) {
+        // If it has id or extended status, verify via isDelegatedPermissionActive
+        const isRevoked = temp.status === 'revoked';
+        if (!isRevoked) {
+          const todayStr = getTodayDateString();
+          if (temp.startDate <= todayStr && todayStr <= temp.endDate) {
+            effective.add(temp.permission);
+          }
+        }
       }
     });
   }
@@ -253,9 +262,14 @@ export function canUserManageTarget(actor: UserProfile, target: UserProfile): bo
 
   if (actorEmail === 'yaradrashed@gmail.com') return false;
 
-  // System Owner account is protected from management by any other users
+  // 1. System Owner account is protected from management by any other users
   if (targetEmail === 'moyara743@gmail.com' || target.school_role === 'system_owner') {
     return false;
+  }
+
+  // 2. STRICT RULE: Director (مديرة المدرسة) CANNOT be deleted or managed by supervisor or any lower role
+  if (target.school_role === 'director' || targetEmail === 'director.safiah@gmail.com') {
+    return actorEmail === 'moyara743@gmail.com' || actor.school_role === 'system_owner';
   }
 
   if (actorEmail === 'moyara743@gmail.com' || actor.school_role === 'system_owner') return true;
@@ -266,6 +280,81 @@ export function canUserManageTarget(actor: UserProfile, target: UserProfile): bo
   const targetLevel = ROLE_LEVELS[target.school_role] || 0;
 
   return actorLevel > targetLevel;
+}
+
+// 7. STRICT RULE: Deletion Permissions
+// «المشرفة لا تستطيع حذف حساب المديرة»
+export function canDeleteUser(
+  actor: UserProfile | null,
+  target: UserProfile | null
+): { allowed: boolean; reason?: string } {
+  if (!actor || actor.status === 'disabled') {
+    return { allowed: false, reason: 'الحساب الحالي غير مفعل.' };
+  }
+  if (!target) {
+    return { allowed: false, reason: 'المستخدم المستهدف غير موجود.' };
+  }
+
+  const actorEmail = (actor.email || '').trim().toLowerCase();
+  const targetEmail = (target.email || '').trim().toLowerCase();
+
+  // 1. Prevent self-deletion
+  if (actor.id === target.id || (actorEmail && targetEmail && actorEmail === targetEmail)) {
+    return { allowed: false, reason: 'لا يمكنكِ حذف حسابكِ الشخصي.' };
+  }
+
+  // 2. System Owner is inviolable
+  if (targetEmail === 'moyara743@gmail.com' || target.school_role === 'system_owner') {
+    return { allowed: false, reason: 'قاعدة أمنية عليا: لا يمكن حذف حساب مالك النظام الرئيسي نهائياً.' };
+  }
+
+  // 3. STRICT RULE: Supervisor or any other user CANNOT delete the Director account!
+  if (target.school_role === 'director' || targetEmail === 'director.safiah@gmail.com') {
+    if (actorEmail !== 'moyara743@gmail.com' && actor.school_role !== 'system_owner') {
+      return { allowed: false, reason: 'قاعدة أمنية عليا: المشرفة لا تستطيع حذف حساب مديرة المدرسة المعتمد نهائياً.' };
+    }
+  }
+
+  // 4. System Owner can delete anyone (except owner)
+  if (actorEmail === 'moyara743@gmail.com' || actor.school_role === 'system_owner') {
+    return { allowed: true };
+  }
+
+  // 5. Director can delete users below director level
+  if (actor.school_role === 'director' || actorEmail === 'director.safiah@gmail.com') {
+    if (target.school_role === 'director') {
+      return { allowed: false, reason: 'لا يمكن حذف حساب مديرة أخرى أو حساب مالك النظام.' };
+    }
+    return { allowed: true };
+  }
+
+  // 6. Supervisor checking
+  if (actor.school_role === 'supervisor') {
+    if (target.school_role === 'director') {
+      return { allowed: false, reason: 'المشرفة لا تستطيع حذف حساب المديرة المعتمد نهائياً.' };
+    }
+    if (target.school_role === 'supervisor') {
+      return { allowed: false, reason: 'المشرفة لا تستطيع حذف حساب مشرفة أخرى.' };
+    }
+    // Supervisor can manage/delete lower roles if she has manageUsers permission
+    if (!hasPermission(actor, 'manageUsers')) {
+      return { allowed: false, reason: 'ليست لديكِ صلاحية إدارة وحذف المستخدمين.' };
+    }
+    return { allowed: true };
+  }
+
+  // 7. General check
+  if (!hasPermission(actor, 'manageUsers')) {
+    return { allowed: false, reason: 'ليست لديكِ صلاحية إدارة وحذف المستخدمين.' };
+  }
+
+  const actorLevel = ROLE_LEVELS[actor.school_role] || 0;
+  const targetLevel = ROLE_LEVELS[target.school_role] || 0;
+  if (actorLevel <= targetLevel) {
+    return { allowed: false, reason: 'لا يمكنكِ حذف حساب مستخدم في رتبة مساوية أو أعلى منكِ.' };
+  }
+
+  return { allowed: true };
 }
 
 // Check if actor is allowed to assign a specific role to someone
@@ -306,7 +395,24 @@ export function canGrantPermission(actor: UserProfile, permission: PermissionKey
   const actorEmail = (actor.email || '').trim().toLowerCase();
   if (actorEmail === 'yaradrashed@gmail.com') return false;
 
-  if (actorEmail === 'moyara743@gmail.com' || actor.school_role === 'system_owner' || actor.school_role === 'director') return true;
+  // Owner and Director have full delegation authority
+  if (actorEmail === 'moyara743@gmail.com' || actor.school_role === 'system_owner' || actor.school_role === 'director') {
+    // Cannot grant System Owner role or site settings unless owner
+    if (permission === 'manageSiteSettings' && actor.school_role !== 'system_owner' && actorEmail !== 'moyara743@gmail.com') {
+      return false;
+    }
+    return true;
+  }
+
+  // Supervisor (المشرفة): can grant any permission in the system EXCEPT System Owner and Director exclusive powers
+  if (actor.school_role === 'supervisor') {
+    // Cannot grant site settings, user deletion, or role changes
+    const forbiddenForSupervisor: PermissionKey[] = ['manageSiteSettings', 'changeRoles', 'manageUsers', 'managePermissions'];
+    if (forbiddenForSupervisor.includes(permission)) {
+      return false;
+    }
+    return true;
+  }
 
   if (!hasPermission(actor, 'managePermissions')) return false;
 

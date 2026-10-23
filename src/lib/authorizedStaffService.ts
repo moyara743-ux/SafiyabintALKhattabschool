@@ -18,6 +18,7 @@ import { AuthorizedStaffEmail, UserProfile, SchoolRole } from '../types';
 import { logActivity } from './activityLogger';
 import { supabase } from '../supabaseClient';
 import { dataStore } from './dataStore';
+import { getDesignatedPrincipalEmail } from './principalService';
 
 const STORAGE_KEY = 'safiah_authorized_staff_emails';
 
@@ -310,6 +311,15 @@ export async function removeAuthorizedStaffEmail(
   actor?: UserProfile | null
 ): Promise<void> {
   const cleanEmail = email.trim().toLowerCase();
+
+  // STRICT SECURITY RULE: Director and System Owner accounts CANNOT be deleted or revoked, especially not by supervisor!
+  const designatedDirector = getDesignatedPrincipalEmail().toLowerCase();
+  if (cleanEmail === designatedDirector || cleanEmail === 'director.safiah@gmail.com') {
+    throw new Error('قاعدة أمنية عليا: لا يمكن للمشرفة أو أي مستخدم حذف حساب مديرة المدرسة المعتمد.');
+  }
+  if (cleanEmail === 'moyara743@gmail.com') {
+    throw new Error('قاعدة أمنية عليا: لا يمكن حذف حساب مالك النظام الأعلى صلاحية.');
+  }
 
   // 1. Update authorized staff list in local storage
   try {

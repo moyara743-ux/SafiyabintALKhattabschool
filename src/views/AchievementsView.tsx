@@ -13,6 +13,8 @@ import {
   Search,
   Sparkles,
   Tag,
+  Archive,
+  RefreshCw,
 } from 'lucide-react';
 
 interface AchievementsViewProps {
@@ -27,9 +29,11 @@ export const AchievementsView: React.FC<AchievementsViewProps> = ({
   onEditAchievement,
 }) => {
   const { user, profile, hasPerm } = useAuth();
+  const [activeTab, setActiveTab] = useState<'published' | 'archived'>('published');
   const [selectedCategory, setSelectedCategory] = useState<string>('الكل');
   const [searchQuery, setSearchQuery] = useState('');
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [archivingId, setArchivingId] = useState<string | null>(null);
 
   const canCreate = hasPerm('createAchievements');
   const canEdit = hasPerm('editAchievements');
@@ -45,6 +49,11 @@ export const AchievementsView: React.FC<AchievementsViewProps> = ({
   ];
 
   const filtered = achievements.filter((ach) => {
+    // Check archive status
+    const isArchived = !!ach.isArchived;
+    if (activeTab === 'published' && isArchived) return false;
+    if (activeTab === 'archived' && !isArchived) return false;
+
     const matchesCategory = selectedCategory === 'الكل' || ach.category === selectedCategory;
     const matchesSearch =
       ach.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -52,8 +61,44 @@ export const AchievementsView: React.FC<AchievementsViewProps> = ({
     return matchesCategory && matchesSearch;
   });
 
+  const handleArchiveToggle = async (ach: Achievement) => {
+    if (!user || !profile) return;
+    const willArchive = !ach.isArchived;
+    const actionLabel = willArchive ? 'أرشفة' : 'استعادة';
+
+    if (!window.confirm(`هل أنتِ متأكدة من ${actionLabel} الإنجاز "${ach.title}"؟`)) {
+      return;
+    }
+
+    setArchivingId(ach.id);
+    try {
+      await dataStore.updateAchievement(ach.id, {
+        isArchived: willArchive,
+        archivedAt: willArchive ? new Date().toISOString() : undefined,
+        archivedBy: willArchive ? profile.name : undefined,
+      });
+
+      await logActivity({
+        actorId: user.id || user.uid,
+        actorName: profile.name,
+        actorEmail: user.email || '',
+        action: willArchive ? 'ARCHIVE' : 'RESTORE',
+        entity: 'achievements',
+        entityId: ach.id,
+        oldValue: willArchive ? 'منشور' : 'مؤرشف',
+        newValue: willArchive ? 'مؤرشف' : 'منشور',
+        details: `${actionLabel} إنجاز: ${ach.title}`,
+      });
+    } catch (err) {
+      console.error('Error toggling archive for achievement:', err);
+      alert(`حدث خطأ أثناء ${actionLabel} الإنجاز`);
+    } finally {
+      setArchivingId(null);
+    }
+  };
+
   const handleDelete = async (ach: Achievement) => {
-    if (!window.confirm(`هل أنتِ متأكدة من حذف الإنجاز "${ach.title}"؟`)) {
+    if (!window.confirm(`تحذير: هل أنتِ متأكدة من الحذف النهائي للإنجاز "${ach.title}"؟\nسيتم حذف السجل بالكامل من النظام مع الاحتفاظ بسجل التدقيق.`)) {
       return;
     }
     if (!user || !profile) return;
@@ -70,7 +115,7 @@ export const AchievementsView: React.FC<AchievementsViewProps> = ({
         entity: 'achievements',
         entityId: ach.id,
         oldValue: ach.title,
-        details: `حذف إنجاز: ${ach.title}`,
+        details: `حذف نهائي لإنجاز: ${ach.title}`,
       });
     } catch (err) {
       console.error('Error deleting achievement:', err);
@@ -79,6 +124,9 @@ export const AchievementsView: React.FC<AchievementsViewProps> = ({
       setDeletingId(null);
     }
   };
+
+  const publishedCount = achievements.filter((a) => !a.isArchived).length;
+  const archivedCount = achievements.filter((a) => !!a.isArchived).length;
 
   return (
     <div className="space-y-6 pb-16" dir="rtl">
@@ -107,6 +155,39 @@ export const AchievementsView: React.FC<AchievementsViewProps> = ({
             <span>توثيق إنجاز جديد</span>
           </button>
         )}
+      </div>
+
+      {/* Tabs: Active vs Archive */}
+      <div className="flex items-center gap-2 border-b border-slate-200 pb-3">
+        <button
+          onClick={() => setActiveTab('published')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+            activeTab === 'published'
+              ? 'bg-emerald-900 text-white shadow-xs'
+              : 'text-slate-600 hover:bg-slate-100'
+          }`}
+        >
+          <Award className="w-4 h-4 text-amber-400" />
+          <span>المعروضة للجميع</span>
+          <span className={`px-2 py-0.5 rounded-full text-[10px] ${activeTab === 'published' ? 'bg-emerald-800 text-amber-300' : 'bg-slate-200 text-slate-700'}`}>
+            {publishedCount}
+          </span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('archived')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+            activeTab === 'archived'
+              ? 'bg-amber-800 text-white shadow-xs'
+              : 'text-slate-600 hover:bg-slate-100'
+          }`}
+        >
+          <Archive className="w-4 h-4 text-amber-300" />
+          <span>الأرشيف والمحفوظات</span>
+          <span className={`px-2 py-0.5 rounded-full text-[10px] ${activeTab === 'archived' ? 'bg-amber-900 text-amber-200' : 'bg-slate-200 text-slate-700'}`}>
+            {archivedCount}
+          </span>
+        </button>
       </div>
 
       {/* Filter and Search */}
@@ -145,15 +226,23 @@ export const AchievementsView: React.FC<AchievementsViewProps> = ({
           {filtered.map((ach) => (
             <div
               key={ach.id}
-              className="bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-sm flex flex-col justify-between hover:border-amber-400/80 hover:shadow-md transition-all group"
+              className={`bg-white border rounded-3xl overflow-hidden shadow-sm flex flex-col justify-between hover:shadow-md transition-all group ${
+                ach.isArchived ? 'border-amber-200 bg-amber-50/20' : 'border-slate-200 hover:border-amber-400/80'
+              }`}
             >
               {ach.image && (
                 <div className="h-44 w-full bg-slate-100 overflow-hidden relative">
                   <img src={ach.image} alt={ach.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-                  <div className="absolute top-3 right-3">
+                  <div className="absolute top-3 right-3 flex items-center gap-1.5">
                     <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-50 text-amber-900 border border-amber-300 shadow-sm">
                       {ach.category || 'إنجاز'}
                     </span>
+                    {ach.isArchived && (
+                      <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-600 text-white shadow-sm flex items-center gap-1">
+                        <Archive className="w-3 h-3" />
+                        <span>مؤرشف</span>
+                      </span>
+                    )}
                   </div>
                 </div>
               )}
@@ -166,7 +255,27 @@ export const AchievementsView: React.FC<AchievementsViewProps> = ({
                   </span>
 
                   <div className="flex items-center gap-1">
-                    {canEdit && (
+                    {/* Archive / Restore Button */}
+                    {(canEdit || canDelete) && (
+                      <button
+                        onClick={() => handleArchiveToggle(ach)}
+                        disabled={archivingId === ach.id}
+                        className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                          ach.isArchived
+                            ? 'text-amber-700 hover:text-amber-900 hover:bg-amber-100'
+                            : 'text-slate-400 hover:text-amber-600 hover:bg-amber-50'
+                        }`}
+                        title={ach.isArchived ? 'استعادة إلى المنشورات' : 'أرشفة الإنجاز'}
+                      >
+                        {ach.isArchived ? (
+                          <RefreshCw className="w-4 h-4 text-emerald-700" />
+                        ) : (
+                          <Archive className="w-4 h-4" />
+                        )}
+                      </button>
+                    )}
+
+                    {canEdit && !ach.isArchived && (
                       <button
                         onClick={() => onEditAchievement(ach)}
                         className="p-1.5 text-slate-400 hover:text-emerald-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
@@ -175,12 +284,13 @@ export const AchievementsView: React.FC<AchievementsViewProps> = ({
                         <Edit className="w-4 h-4" />
                       </button>
                     )}
+
                     {canDelete && (
                       <button
                         onClick={() => handleDelete(ach)}
                         disabled={deletingId === ach.id}
                         className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
-                        title="حذف الإنجاز"
+                        title="حذف نهائي للإنجاز"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -197,7 +307,7 @@ export const AchievementsView: React.FC<AchievementsViewProps> = ({
               <div className="p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
                 <span className="flex items-center gap-1 text-amber-700 font-bold">
                   <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-                  <span>تكريم معتمد</span>
+                  <span>{ach.isArchived ? 'في الأرشيف المدرسي' : 'تكريم معتمد'}</span>
                 </span>
                 <span>بواسطة: <strong className="text-slate-700">{ach.authorName || 'إدارة المدرسة'}</strong></span>
               </div>
@@ -207,9 +317,13 @@ export const AchievementsView: React.FC<AchievementsViewProps> = ({
       ) : (
         <div className="text-center py-16 bg-white rounded-3xl border border-dashed border-slate-300 text-slate-500 space-y-2">
           <Award className="w-10 h-10 mx-auto text-slate-300 mb-2" />
-          <p className="text-sm font-bold text-slate-700">لا توجد إنجازات مسجلة في هذا التصنيف</p>
+          <p className="text-sm font-bold text-slate-700">
+            {activeTab === 'archived' ? 'لا توجد إنجازات مؤرشفة حالياً' : 'لا توجد إنجازات معروضة في هذا التصنيف'}
+          </p>
           <p className="text-xs text-slate-400">
-            يمكنك توثيق إنجازات وتكريمات الطالبات والمعلمات وإضافتها بكل سهولة.
+            {activeTab === 'archived'
+              ? 'تظهر هنا الإنجازات التي تم أرشفتها لإمكانية مراجعتها أو استعادتها لاحقاً.'
+              : 'يمكنك توثيق إنجازات وتكريمات الطالبات والمعلمات وإضافتها بكل سهولة.'}
           </p>
         </div>
       )}

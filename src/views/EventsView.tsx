@@ -18,6 +18,7 @@ import {
   Loader2,
   CheckCircle2,
   ShieldAlert,
+  Archive,
 } from 'lucide-react';
 
 interface EventsViewProps {
@@ -34,7 +35,7 @@ export const EventsView: React.FC<EventsViewProps> = ({
   onDeleteEvent,
 }) => {
   const { user, profile, hasPerm, isDirector } = useAuth();
-  const [filterTab, setFilterTab] = useState<'all' | 'today' | 'tomorrow' | 'upcoming' | 'completed'>('all');
+  const [filterTab, setFilterTab] = useState<'all' | 'today' | 'tomorrow' | 'upcoming' | 'completed' | 'archived'>('all');
   const [searchQuery, setSearchQuery] = useState('');
 
   // Delete Confirmation Modal State
@@ -53,16 +54,44 @@ export const EventsView: React.FC<EventsViewProps> = ({
   const canEdit = hasPerm('editEvents') || isSchoolDirector;
   const canDelete = hasPerm('deleteEvents') || isSchoolDirector;
 
+  // Handle Archive / Restore Event
+  const handleArchiveToggle = async (ev: SchoolEvent) => {
+    if (!user || !profile) return;
+    const newArchived = !ev.isArchived;
+    try {
+      await dataStore.updateEvent(ev.id, {
+        isArchived: newArchived,
+        archivedAt: newArchived ? new Date().toISOString() : undefined,
+        archivedBy: newArchived ? profile.name : undefined,
+        status: newArchived ? 'archived' : 'upcoming',
+      });
+
+      await logActivity({
+        actorId: user.id || user.uid,
+        actorName: profile.name,
+        actorEmail: user.email || '',
+        action: 'UPDATE',
+        entity: 'events',
+        entityId: ev.id,
+        details: newArchived ? `أرشفة فعالية: ${ev.title}` : `استعادة فعالية من الأرشيف: ${ev.title}`,
+      });
+
+      setSuccessMessage(newArchived ? 'تمت أرشفة الفعالية بنجاح' : 'تمت استعادة الفعالية من الأرشيف بنجاح');
+      setTimeout(() => setSuccessMessage(null), 3000);
+    } catch (err: any) {
+      alert(err?.message || 'تعذر تغيير حالة أرشفة الفعالية.');
+    }
+  };
+
   const filtered = events.filter((ev) => {
-    let matchesTab = true;
-    if (filterTab === 'today') {
-      matchesTab = isTodayDate(ev.date);
-    } else if (filterTab === 'tomorrow') {
-      matchesTab = isTomorrowDate(ev.date);
-    } else if (filterTab === 'upcoming') {
-      matchesTab = ev.status === 'upcoming';
-    } else if (filterTab === 'completed') {
-      matchesTab = ev.status === 'completed';
+    if (filterTab === 'archived') {
+      if (!ev.isArchived && ev.status !== 'archived') return false;
+    } else {
+      if (ev.isArchived || ev.status === 'archived') return false;
+      if (filterTab === 'today' && !isTodayDate(ev.date)) return false;
+      if (filterTab === 'tomorrow' && !isTomorrowDate(ev.date)) return false;
+      if (filterTab === 'upcoming' && ev.status !== 'upcoming') return false;
+      if (filterTab === 'completed' && ev.status !== 'completed') return false;
     }
 
     const matchesSearch =
@@ -70,7 +99,7 @@ export const EventsView: React.FC<EventsViewProps> = ({
       ev.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (ev.location || '').toLowerCase().includes(searchQuery.toLowerCase());
 
-    return matchesTab && matchesSearch;
+    return matchesSearch;
   });
 
   // Handle clicking the trash icon to initiate deletion
@@ -358,6 +387,7 @@ export const EventsView: React.FC<EventsViewProps> = ({
             { id: 'tomorrow', label: 'غداً' },
             { id: 'upcoming', label: 'القادمة' },
             { id: 'completed', label: 'المكتملة' },
+            { id: 'archived', label: 'الأرشيف' },
           ].map((tab) => (
             <button
               key={tab.id}
@@ -429,6 +459,25 @@ export const EventsView: React.FC<EventsViewProps> = ({
                       </button>
                     )}
 
+                    {canEdit && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleArchiveToggle(ev);
+                        }}
+                        className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                          ev.isArchived || ev.status === 'archived'
+                            ? 'text-amber-700 hover:bg-amber-100 bg-amber-50'
+                            : 'text-slate-400 hover:text-amber-700 hover:bg-amber-50'
+                        }`}
+                        title={ev.isArchived || ev.status === 'archived' ? 'استعادة الفعالية من الأرشيف' : 'أرشفة الفعالية'}
+                        aria-label="أرشفة أو استعادة الفعالية"
+                      >
+                        <Archive className="w-4 h-4" />
+                      </button>
+                    )}
+
                     {canDelete && (
                       <button
                         type="button"
@@ -437,7 +486,7 @@ export const EventsView: React.FC<EventsViewProps> = ({
                           handleInitiateDelete(ev);
                         }}
                         className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 active:scale-95 rounded-lg transition-all cursor-pointer"
-                        title="حذف الفعالية"
+                        title="حذف الفعالية نهائياً"
                         aria-label={`حذف فعالية ${ev.title}`}
                       >
                         <Trash2 className="w-4 h-4" />
