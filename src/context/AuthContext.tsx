@@ -28,6 +28,7 @@ import {
   isStaffEmailAuthorized,
   getOfficialApprovedStaffName,
   getApprovedAccountRole,
+  getSystemOfficialName,
 } from '../lib/authorizedStaffService';
 import {
   SYSTEM_OWNER_EMAIL,
@@ -139,6 +140,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     let activeProfile: UserProfile;
+    const resolvedOfficialName = getSystemOfficialName(currentEmail, dbUser?.name || authUser.user_metadata?.full_name || authUser.user_metadata?.name);
 
     if (dbUser) {
       let resolvedRole: SchoolRole = (dbUser.school_role as SchoolRole) || defaultRole;
@@ -154,11 +156,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         resolvedRole = approvedStaffRole;
       }
 
-      const resolvedName = isOwnerAccount
-        ? SYSTEM_OWNER_NAME
-        : (isPrincipalAccount
-            ? getDesignatedPrincipalName()
-            : (isMiaAccount ? 'أ. ميعاد العتيبي' : (approvedStaffName || dbUser.name || currentName)));
+      const resolvedName = resolvedOfficialName;
+
+      // Heal database in background if user row had a stale/google display name (e.g. 'mia')
+      if (dbUser.name !== resolvedName && (dbUser.id || currentId)) {
+        try {
+          await supabase.from('users').update({ name: resolvedName, school_role: resolvedRole }).eq('id', dbUser.id || currentId);
+        } catch {
+          // ignore
+        }
+      }
 
       const candidateProfile: UserProfile = {
         id: dbUser.id || currentId,
@@ -210,11 +217,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             : (isMiaAccount ? 'administrator' : (approvedStaffRole || localExisting?.school_role || defaultRole)));
       if (isYaraAccount) resolvedRole = 'student';
 
-      const resolvedName = isOwnerAccount
-        ? SYSTEM_OWNER_NAME
-        : (isPrincipalAccount
-            ? getDesignatedPrincipalName()
-            : (isMiaAccount ? 'أ. ميعاد العتيبي' : (approvedStaffName || localExisting?.name || currentName)));
+      const resolvedName = resolvedOfficialName;
 
       const candidateProfile: UserProfile = {
         id: localExisting?.id || currentId,

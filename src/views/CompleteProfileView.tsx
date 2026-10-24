@@ -15,6 +15,7 @@ import { logActivity } from '../lib/activityLogger';
 import {
   getOfficialApprovedStaffName,
   getApprovedAccountRole,
+  getSystemOfficialName,
 } from '../lib/authorizedStaffService';
 import {
   GraduationCap,
@@ -64,7 +65,7 @@ export const CompleteProfileView: React.FC<CompleteProfileViewProps> = ({ onComp
 
   const userEmail = (user?.email || profile?.email || '').trim().toLowerCase();
   const approvedStaffRole = getApprovedAccountRole(userEmail);
-  const officialApprovedName = getOfficialApprovedStaffName(userEmail);
+  const officialApprovedName = getSystemOfficialName(userEmail, profile?.name);
 
   const role: SchoolRole = (userEmail === 'miaaa7433@gmail.com')
     ? 'administrator'
@@ -183,15 +184,7 @@ export const CompleteProfileView: React.FC<CompleteProfileViewProps> = ({ onComp
 
     const cleanNationalId = nationalId.trim().replace(/\D/g, '');
     const cleanPhone = phone.trim().replace(/\D/g, '');
-    const cleanName = name.trim() || profile.name;
-
-    // Strict Character-for-Character Name Validation for Staff / Administrative Accounts
-    if (isStaff && officialApprovedName) {
-      if (cleanName !== officialApprovedName.trim()) {
-        setError('الاسم المدخل غير مطابق للاسم المعتمد في سجلات المدرسة');
-        return;
-      }
-    }
+    const cleanName = isStaff ? officialApprovedName : (name.trim() || profile.name);
 
     // 1. National ID Validation (Mandatory for all roles, 10 digits starting with 1 or 2)
     if (!cleanNationalId) {
@@ -454,7 +447,7 @@ export const CompleteProfileView: React.FC<CompleteProfileViewProps> = ({ onComp
             {role === 'student' ? 'إكمال البيانات الأساسية للطالبة' : `إكمال وتوثيق بيانات الحساب (${roleLabel})`}
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 max-w-md mx-auto leading-relaxed">
-            مرحباً بكِ <strong className="text-slate-800 font-bold">{profile?.name || 'في المنصة'}</strong>. لتفعيل حسابكِ المعتمد وفتح صلاحيات المنصة كاملة، يُرجى تعبئة الحقول الإلزامية أدناه.
+            مرحباً بكِ <strong className="text-slate-800 font-bold">{officialApprovedName}</strong>. لتفعيل حسابكِ المعتمد وفتح صلاحيات المنصة كاملة، يُرجى تعبئة الحقول الإلزامية أدناه.
           </p>
         </div>
 
@@ -647,43 +640,44 @@ export const CompleteProfileView: React.FC<CompleteProfileViewProps> = ({ onComp
 
             {/* Editable Required Fields */}
             <div className="space-y-4">
-              <div>
-                <div className="flex items-center justify-between mb-1.5 flex-wrap gap-2">
-                  <label className="block text-xs sm:text-sm font-bold text-slate-800">
-                    الاسم الكامل المعتمد *
-                  </label>
-                  {officialApprovedName && (
+              {/* Staff Name: Immutable Single Source of Truth */}
+              {isStaff ? (
+                <div>
+                  <div className="flex items-center justify-between mb-1.5 flex-wrap gap-2">
+                    <label className="block text-xs sm:text-sm font-bold text-slate-800">
+                      الاسم المعتمد في سجلات المدرسة (ثابت ومحمي)
+                    </label>
                     <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-800 bg-emerald-50 px-2.5 py-0.5 rounded-md border border-emerald-200">
                       <BadgeCheck className="w-3.5 h-3.5 text-emerald-700" />
-                      <span>الاسم المعتمد في السجلات: {officialApprovedName}</span>
+                      <span>الاسم الرسمي المعتمد في قاعدة البيانات</span>
                     </span>
-                  )}
-                </div>
-                <input
-                  type="text"
-                  required
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder={officialApprovedName || "الاسم الثلاثي أو الرباعي المعتمد"}
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-emerald-600 focus:bg-white transition-colors"
-                />
-                {officialApprovedName && (
-                  <div className="flex items-center justify-between mt-1.5 text-[11px] flex-wrap gap-1">
-                    <span className="text-slate-500">
-                      يُشترط مطابقة الاسم المدخل حرفياً للاسم المعتمد في سجلات المدرسة دون زيادة أو نقصان حرف.
-                    </span>
-                    {name.trim() !== officialApprovedName.trim() && (
-                      <button
-                        type="button"
-                        onClick={() => setName(officialApprovedName)}
-                        className="text-emerald-700 hover:text-emerald-950 font-extrabold underline cursor-pointer"
-                      >
-                        استعادة الاسم المعتمد ({officialApprovedName})
-                      </button>
-                    )}
                   </div>
-                )}
-              </div>
+                  <div className="w-full px-4 py-3 bg-slate-100 border border-slate-300 rounded-xl text-xs sm:text-sm font-black text-slate-900 flex items-center justify-between">
+                    <span>{officialApprovedName}</span>
+                    <span className="text-[11px] text-slate-500 font-medium flex items-center gap-1">
+                      <Lock className="w-3.5 h-3.5 text-slate-400" />
+                      محمي ومثبت في النظام
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 mt-1">
+                    الاسم المعتمد في سجلات المدرسة هو المصدر الوحيد المعتمد للحساب؛ لا يمكن تغييره أو استبداله باسم Google لضمان موثوقية السجلات وتوحيد العرض بكافة الشاشات.
+                  </p>
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-xs sm:text-sm font-bold text-slate-800 mb-1.5">
+                    الاسم الكامل *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="الاسم الكامل"
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-emerald-600 focus:bg-white transition-colors"
+                  />
+                </div>
+              )}
 
               <div>
                 <label className="block text-xs sm:text-sm font-bold text-slate-800 mb-1.5">

@@ -37,6 +37,10 @@ import {
   SYSTEM_OWNER_NAME,
 } from '../lib/principalService';
 import {
+  getSystemOfficialName,
+  getApprovedAccountRole,
+} from '../lib/authorizedStaffService';
+import {
   Users,
   Search,
   Shield,
@@ -130,17 +134,22 @@ export const UsersManagementView: React.FC = () => {
           const isDesignatedPrincipalAccount = isDesignatedPrincipal(email);
           const isYaraAccount = email === 'yaradrashed@gmail.com';
 
+          const approvedStaffRole = getApprovedAccountRole(email);
+
           let role: SchoolRole = (d.school_role === 'owner' ? 'director' : d.school_role) || 'student';
-          let name = d.name || 'مستخدم';
           if (isSystemOwnerAccount) {
             role = 'system_owner';
-            name = SYSTEM_OWNER_NAME;
           } else if (isDesignatedPrincipalAccount) {
             role = 'director';
-            name = getDesignatedPrincipalName();
           } else if (isYaraAccount) {
             role = 'student';
+          } else if (email === 'miaaa7433@gmail.com') {
+            role = 'administrator';
+          } else if (approvedStaffRole) {
+            role = approvedStaffRole;
           }
+
+          const name = getSystemOfficialName(email, d.name);
 
           return {
             id: d.id,

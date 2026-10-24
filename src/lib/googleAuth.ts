@@ -4,7 +4,7 @@ import { dataStore } from './dataStore';
 import { verifyGoogleEmailPreAuthorization } from './authSecurity';
 import { logActivity } from './activityLogger';
 import { verifyStaffRolePasscode } from './passcodeService';
-import { activateStaffEmail } from './authorizedStaffService';
+import { activateStaffEmail, getSystemOfficialName } from './authorizedStaffService';
 import { ROLE_LABELS_AR } from './permissions';
 import {
   SYSTEM_OWNER_EMAIL,
@@ -248,8 +248,10 @@ export async function handleGoogleCredential(credential: string): Promise<{
   }
 
   const preExistingProfile = authCheck.profile;
+  const officialName = getSystemOfficialName(cleanEmail, preExistingProfile.name);
   const finalProfile: UserProfile = {
     ...preExistingProfile,
+    name: officialName,
     photoURL: decoded.picture || preExistingProfile.photoURL,
     lastLoginAt: new Date().toISOString(),
   };
@@ -310,8 +312,10 @@ export async function authenticateGoogleAccountDirectly(
   }
 
   const authorizedProfile = authCheck.profile;
+  const officialName = getSystemOfficialName(cleanEmail, authorizedProfile.name);
   const updatedProfile: UserProfile = {
     ...authorizedProfile,
+    name: officialName,
     photoURL: photoURL || authorizedProfile.photoURL,
     lastLoginAt: new Date().toISOString(),
   };
@@ -425,7 +429,7 @@ export async function registerOrAuthenticateWithGoogle(params: {
 
     // Authorized staff member with valid passcode -> ACTIVATE ACCOUNT IMMEDIATELY!
     const profile = authCheck.profile;
-    const resolvedName = params.providedName?.trim() || profile.name || cleanEmail.split('@')[0];
+    const resolvedName = getSystemOfficialName(cleanEmail, profile.name);
 
     profile.school_role = staffRole;
     profile.name = resolvedName;

@@ -8,6 +8,7 @@ import {
   isSystemOwner as checkIsSystemOwner,
 } from '../lib/principalService';
 import { buildGoogleOAuthUrl } from '../lib/googleAuth';
+import { getSystemOfficialName } from '../lib/authorizedStaffService';
 import {
   GraduationCap,
   Shield,
@@ -63,9 +64,8 @@ export const Navbar: React.FC<NavbarProps> = ({
     (profile?.email && profile.email.trim().toLowerCase() === 'moyara743@gmail.com')
   );
 
-  const displayName = isSystemOwner
-    ? SYSTEM_OWNER_NAME
-    : (profile?.name || user?.email?.split('@')[0] || 'مستخدم');
+  const userEmail = (profile?.email || user?.email || '').trim().toLowerCase();
+  const displayName = getSystemOfficialName(userEmail, profile?.name);
 
   const displayRoleLabel = isSystemOwner ? SYSTEM_OWNER_ROLE_LABEL : roleLabel;
 

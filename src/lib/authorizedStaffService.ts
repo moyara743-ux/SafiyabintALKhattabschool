@@ -18,7 +18,13 @@ import { AuthorizedStaffEmail, UserProfile, SchoolRole } from '../types';
 import { logActivity } from './activityLogger';
 import { supabase } from '../supabaseClient';
 import { dataStore } from './dataStore';
-import { getDesignatedPrincipalEmail } from './principalService';
+import {
+  getDesignatedPrincipalEmail,
+  isSystemOwner,
+  SYSTEM_OWNER_NAME,
+  isDesignatedPrincipal,
+  getDesignatedPrincipalName,
+} from './principalService';
 
 const STORAGE_KEY = 'safiah_authorized_staff_emails';
 
@@ -615,4 +621,41 @@ export function getApprovedAccountRole(email: string): SchoolRole | null {
   if (defaultFound && defaultFound.assignedRole) return defaultFound.assignedRole;
 
   return null;
+}
+
+/**
+ * Single Source of Truth for Account Official Approved Name (system_official_name)
+ * Enforces the approved official name across all platform views.
+ * Strictly prevents overwriting with Google display names or arbitrary inputs.
+ */
+export function getSystemOfficialName(email?: string, fallbackName?: string): string {
+  const clean = (email || '').trim().toLowerCase();
+  if (!clean) return fallbackName?.trim() || 'مستخدم';
+
+  if (isSystemOwner(clean) || clean === 'moyara743@gmail.com') {
+    return SYSTEM_OWNER_NAME;
+  }
+  if (isDesignatedPrincipal(clean) || clean === 'director.safiah@gmail.com') {
+    return getDesignatedPrincipalName();
+  }
+
+  // Pre-authorized staff list check (Single Source of Truth)
+  const staffName = getOfficialApprovedStaffName(clean);
+  if (staffName) return staffName;
+
+  // Student known official records check
+  if (clean === 'sarah.safiah@gmail.com') return 'سارة محمد راشد العتيبي';
+  if (clean === 'yaradrashed@gmail.com') return 'يارا راشد - طالبة';
+  if (clean === 'mona.khaled@gmail.com' || clean === 'mona.safiah@gmail.com') return 'منى خالد';
+
+  // If fallbackName is present, verify it's not a raw email prefix like 'mia' or 'user'
+  if (fallbackName && fallbackName.trim()) {
+    const trimmed = fallbackName.trim();
+    const emailPrefix = clean.split('@')[0];
+    if (trimmed.toLowerCase() !== emailPrefix && trimmed.toLowerCase() !== 'mia' && trimmed !== 'مستخدم') {
+      return trimmed;
+    }
+  }
+
+  return fallbackName?.trim() || clean.split('@')[0] || 'مستخدم';
 }

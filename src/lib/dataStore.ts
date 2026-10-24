@@ -27,7 +27,11 @@ import {
   getDesignatedPrincipalName,
 } from './principalService';
 import { isProfileComplete } from './profileGuard';
-import { getOfficialApprovedStaffName, getApprovedAccountRole } from './authorizedStaffService';
+import {
+  getOfficialApprovedStaffName,
+  getApprovedAccountRole,
+  getSystemOfficialName,
+} from './authorizedStaffService';
 
 // Listener callback types
 type Listener<T> = (items: T) => void;
@@ -570,22 +574,19 @@ class LocalDataStore {
     const approvedStaffName = getOfficialApprovedStaffName(email);
 
     let role: SchoolRole = ((u.school_role as any) === 'owner' ? 'director' : u.school_role) || 'student';
-    let name = u.name;
     if (isOwnerAccount) {
       role = 'system_owner';
-      name = SYSTEM_OWNER_NAME;
     } else if (isPrincipalAccount) {
       role = 'director';
-      name = getDesignatedPrincipalName();
     } else if (isYaraAccount) {
       role = 'student';
     } else if (isMiaAccount) {
       role = 'administrator';
-      name = 'أ. ميعاد العتيبي';
     } else if (approvedStaffRole) {
       role = approvedStaffRole;
-      if (approvedStaffName) name = approvedStaffName;
     }
+
+    const name = getSystemOfficialName(email, u.name);
 
     const isHana = Boolean(
       (name && (name.includes('هنا') || name.includes('الدوسري'))) ||
@@ -638,25 +639,21 @@ class LocalDataStore {
           const isYaraAccount = email === 'yaradrashed@gmail.com';
           const isMiaAccount = email === 'miaaa7433@gmail.com';
           const approvedStaffRole = getApprovedAccountRole(email);
-          const approvedStaffName = getOfficialApprovedStaffName(email);
 
           let role: SchoolRole = (d.school_role === 'owner' ? 'director' : d.school_role) || 'student';
-          let name = d.name || 'مستخدم';
           if (isOwnerAccount) {
             role = 'system_owner';
-            name = SYSTEM_OWNER_NAME;
           } else if (isPrincipalAccount) {
             role = 'director';
-            name = getDesignatedPrincipalName();
           } else if (isYaraAccount) {
             role = 'student';
           } else if (isMiaAccount) {
             role = 'administrator';
-            name = 'أ. ميعاد العتيبي';
           } else if (approvedStaffRole) {
             role = approvedStaffRole;
-            if (approvedStaffName) name = approvedStaffName;
           }
+
+          const name = getSystemOfficialName(email, d.name);
 
           const isHana = Boolean(
             (name && (name.includes('هنا') || name.includes('الدوسري'))) ||
