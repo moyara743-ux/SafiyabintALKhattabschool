@@ -96,6 +96,15 @@ const DEFAULT_AUTHORIZED_STAFF: AuthorizedStaffEmail[] = [
     addedAt: '2024-02-01T00:00:00Z',
     isActivated: false,
   },
+  {
+    id: 'auth_staff_mia_01',
+    email: 'miaaa7433@gmail.com',
+    name: 'أ. ميعاد العتيبي',
+    addedBy: 'إدارة المدرسة',
+    addedAt: '2024-02-01T00:00:00Z',
+    isActivated: false,
+    assignedRole: 'administrator',
+  },
 ];
 
 /**
@@ -150,6 +159,21 @@ export async function getAuthorizedStaffEmails(): Promise<AuthorizedStaffEmail[]
                 isActivated: false,
               }
             );
+            changed = true;
+          }
+
+          // Ensure miaaa7433 exists in list as administrator with official name
+          const hasMia = parsed.some((item) => item.email.toLowerCase() === 'miaaa7433@gmail.com');
+          if (!hasMia) {
+            parsed.push({
+              id: 'auth_staff_mia_01',
+              email: 'miaaa7433@gmail.com',
+              name: 'أ. ميعاد العتيبي',
+              addedBy: 'إدارة المدرسة',
+              addedAt: new Date().toISOString(),
+              isActivated: false,
+              assignedRole: 'administrator',
+            });
             changed = true;
           }
 
@@ -523,4 +547,72 @@ export async function activateStaffEmail(params: {
   }
 
   return target;
+}
+
+/**
+ * Returns the authoritative approved name for a staff/administrative email.
+ */
+export function getOfficialApprovedStaffName(email: string): string | null {
+  const clean = (email || '').trim().toLowerCase();
+  if (!clean) return null;
+
+  if (clean === 'miaaa7433@gmail.com') return 'أ. ميعاد العتيبي';
+  if (clean.includes('hana') || clean.includes('dossari')) return 'أ. هنا محمد الدوسري';
+  if (clean === 'teacher.safiah@gmail.com') return 'أ. سحر أحمد';
+  if (clean === 'supervisor.safiah@gmail.com') return 'أ. منيرة إبراهيم';
+  if (clean === 'admin.safiah@gmail.com') return 'أ. نورة فهد';
+  if (clean === 'counselor.safiah@gmail.com') return 'أ. ريم سليمان';
+  if (clean === 'fatima.safiah@gmail.com') return 'أ. فاطمة علي العتيبي';
+  if (clean === 'nouf.safiah@gmail.com') return 'أ. نوف الحربي';
+
+  try {
+    if (typeof localStorage !== 'undefined') {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored) {
+        const parsed: AuthorizedStaffEmail[] = JSON.parse(stored);
+        const found = parsed.find((p) => p.email.toLowerCase() === clean);
+        if (found && found.name) return found.name;
+      }
+    }
+  } catch (e) {
+    // ignore
+  }
+
+  const defaultFound = DEFAULT_AUTHORIZED_STAFF.find((p) => p.email.toLowerCase() === clean);
+  if (defaultFound && defaultFound.name) return defaultFound.name;
+
+  return null;
+}
+
+/**
+ * Returns the authoritative approved role for a staff/administrative email.
+ */
+export function getApprovedAccountRole(email: string): SchoolRole | null {
+  const clean = (email || '').trim().toLowerCase();
+  if (!clean) return null;
+
+  if (clean === 'miaaa7433@gmail.com') return 'administrator';
+  if (clean === 'admin.safiah@gmail.com') return 'administrator';
+  if (clean.includes('hana') || clean.includes('dossari')) return 'teacher';
+  if (clean === 'teacher.safiah@gmail.com') return 'teacher';
+  if (clean === 'supervisor.safiah@gmail.com') return 'supervisor';
+  if (clean === 'counselor.safiah@gmail.com') return 'counselor';
+
+  try {
+    if (typeof localStorage !== 'undefined') {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored) {
+        const parsed: AuthorizedStaffEmail[] = JSON.parse(stored);
+        const found = parsed.find((p) => p.email.toLowerCase() === clean);
+        if (found && found.assignedRole) return found.assignedRole;
+      }
+    }
+  } catch (e) {
+    // ignore
+  }
+
+  const defaultFound = DEFAULT_AUTHORIZED_STAFF.find((p) => p.email.toLowerCase() === clean);
+  if (defaultFound && defaultFound.assignedRole) return defaultFound.assignedRole;
+
+  return null;
 }

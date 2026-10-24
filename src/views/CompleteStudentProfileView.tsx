@@ -40,14 +40,19 @@ export const CompleteStudentProfileView: React.FC<CompleteStudentProfileViewProp
     (profile?.email && isDesignatedPrincipal(profile.email)) ||
     profile?.school_role === 'director'
   );
+  const isStaffOrAdmin = Boolean(
+    (profile?.school_role && ['administrator', 'supervisor', 'director', 'system_owner', 'teacher', 'counselor'].includes(profile.school_role)) ||
+    (user?.email && user.email.toLowerCase() === 'miaaa7433@gmail.com') ||
+    (profile?.email && profile.email.toLowerCase() === 'miaaa7433@gmail.com')
+  );
 
   useEffect(() => {
-    if (isOwner || isPrin) {
+    if (isOwner || isPrin || isStaffOrAdmin) {
       onComplete?.();
     }
-  }, [isOwner, isPrin, onComplete]);
+  }, [isOwner, isPrin, isStaffOrAdmin, onComplete]);
 
-  if (isOwner || isPrin) {
+  if (isOwner || isPrin || isStaffOrAdmin) {
     return null;
   }
 

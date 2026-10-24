@@ -11,14 +11,13 @@ export type SchoolRole =
 
 export type UserStatus = 'active' | 'disabled';
 
-// Account lifecycle status as required by the school system:
-// جديد (new), يحتاج إكمال البيانات (needs_completion), مكتمل (completed), موقوف (suspended)
-export type AccountStatus = 'new' | 'needs_completion' | 'completed' | 'suspended';
+export type AccountStatus = 'new' | 'needs_completion' | 'pending' | 'completed' | 'suspended';
 
 export const ACCOUNT_STATUS_LABELS_AR: Record<AccountStatus, string> = {
-  new: 'جديد',
-  needs_completion: 'يحتاج إكمال البيانات',
-  completed: 'مكتمل',
+  new: 'بانتظار التفعيل والدخول',
+  needs_completion: 'بانتظار التفعيل والدخول',
+  pending: 'بانتظار التفعيل والدخول',
+  completed: 'نشط ومكتمل',
   suspended: 'موقوف',
 };
 

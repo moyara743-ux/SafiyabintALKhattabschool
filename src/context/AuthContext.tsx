@@ -24,7 +24,11 @@ import {
   verifyGoogleEmailPreAuthorization,
 } from '../lib/authSecurity';
 import { authenticateStudentByNameAndSecret } from '../lib/studentService';
-import { isStaffEmailAuthorized } from '../lib/authorizedStaffService';
+import {
+  isStaffEmailAuthorized,
+  getOfficialApprovedStaffName,
+  getApprovedAccountRole,
+} from '../lib/authorizedStaffService';
 import {
   SYSTEM_OWNER_EMAIL,
   SYSTEM_OWNER_NAME,
@@ -89,17 +93,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const isOwnerAccount = checkIsSystemOwner(currentEmail);
     const isPrincipalAccount = checkIsDesignatedPrincipal(currentEmail);
     const isYaraAccount = currentEmail === 'yaradrashed@gmail.com';
+    const isMiaAccount = currentEmail === 'miaaa7433@gmail.com';
+    const approvedStaffRole = getApprovedAccountRole(currentEmail);
+    const approvedStaffName = getOfficialApprovedStaffName(currentEmail);
 
     let currentName = authUser.user_metadata?.full_name || authUser.user_metadata?.name;
     if (isOwnerAccount) {
       currentName = SYSTEM_OWNER_NAME;
     } else if (isPrincipalAccount) {
       currentName = getDesignatedPrincipalName();
+    } else if (isMiaAccount) {
+      currentName = 'أ. ميعاد العتيبي';
+    } else if (approvedStaffName) {
+      currentName = approvedStaffName;
     } else if (!currentName) {
       currentName = currentEmail.split('@')[0] || 'مستخدم';
     }
 
-    const defaultRole: SchoolRole = isOwnerAccount ? 'system_owner' : (isPrincipalAccount ? 'director' : 'student');
+    const defaultRole: SchoolRole = isOwnerAccount
+      ? 'system_owner'
+      : (isPrincipalAccount
+          ? 'director'
+          : (isMiaAccount ? 'administrator' : (approvedStaffRole || 'student')));
 
     // 1. FRESH FETCH DIRECTLY FROM SUPABASE public.users TABLE
     let dbUser: any = null;
@@ -133,12 +148,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         resolvedRole = 'director';
       } else if (isYaraAccount) {
         resolvedRole = 'student';
+      } else if (isMiaAccount) {
+        resolvedRole = 'administrator';
+      } else if (approvedStaffRole) {
+        resolvedRole = approvedStaffRole;
       }
-
 
       const resolvedName = isOwnerAccount
         ? SYSTEM_OWNER_NAME
-        : (isPrincipalAccount ? getDesignatedPrincipalName() : (dbUser.name || currentName));
+        : (isPrincipalAccount
+            ? getDesignatedPrincipalName()
+            : (isMiaAccount ? 'أ. ميعاد العتيبي' : (approvedStaffName || dbUser.name || currentName)));
 
       const candidateProfile: UserProfile = {
         id: dbUser.id || currentId,
@@ -149,8 +169,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         phone: dbUser.phone || '',
         nationalId: dbUser.national_id || dbUser.nationalId || '',
         national_id: dbUser.national_id || dbUser.nationalId || '',
-        accountStatus: 'needs_completion',
-        account_status: 'needs_completion',
+        accountStatus: 'pending',
+        account_status: 'pending',
         is_profile_completed: false,
         is_profile_complete: false,
         studentIdCode: dbUser.student_id_code || dbUser.studentIdCode,
@@ -159,7 +179,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         jobCode: dbUser.job_code || dbUser.jobCode,
         gradeStage: dbUser.grade_stage || dbUser.gradeStage,
         classroom: dbUser.classroom,
-        specialization: dbUser.specialization,
+        specialization: isMiaAccount ? (dbUser.specialization || 'الشؤون الإدارية المدرسية') : dbUser.specialization,
         guardianRelation: dbUser.guardian_relation || dbUser.guardianRelation,
         customPermissions: isYaraAccount ? [] : (Array.isArray(dbUser.custom_permissions) ? dbUser.custom_permissions : []),
         temporaryPermissions: [],
@@ -167,11 +187,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         lastLoginAt: new Date().toISOString(),
       };
 
-      const isComp = isOwnerAccount || isPrincipalAccount || isProfileComplete(candidateProfile, currentEmail);
+      const isComp = isOwnerAccount || isPrincipalAccount || (
+        (dbUser.account_status === 'completed' || dbUser.accountStatus === 'completed') &&
+        isProfileComplete(candidateProfile, currentEmail)
+      );
       candidateProfile.is_profile_completed = isComp;
       candidateProfile.is_profile_complete = isComp;
-      candidateProfile.accountStatus = isComp ? 'completed' : 'needs_completion';
-      candidateProfile.account_status = isComp ? 'completed' : 'needs_completion';
+      candidateProfile.accountStatus = isComp ? 'completed' : 'pending';
+      candidateProfile.account_status = isComp ? 'completed' : 'pending';
 
       activeProfile = candidateProfile;
       dataStore.syncUserProfileFromRemote(activeProfile);
@@ -180,12 +203,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const localUsers = await dataStore.getUsers();
       const localExisting = localUsers.find((u) => u.email && u.email.trim().toLowerCase() === currentEmail);
 
-      let resolvedRole: SchoolRole = isOwnerAccount ? 'system_owner' : (isPrincipalAccount ? 'director' : (localExisting?.school_role || defaultRole));
+      let resolvedRole: SchoolRole = isOwnerAccount
+        ? 'system_owner'
+        : (isPrincipalAccount
+            ? 'director'
+            : (isMiaAccount ? 'administrator' : (approvedStaffRole || localExisting?.school_role || defaultRole)));
       if (isYaraAccount) resolvedRole = 'student';
 
       const resolvedName = isOwnerAccount
         ? SYSTEM_OWNER_NAME
-        : (isPrincipalAccount ? getDesignatedPrincipalName() : (localExisting?.name || currentName));
+        : (isPrincipalAccount
+            ? getDesignatedPrincipalName()
+            : (isMiaAccount ? 'أ. ميعاد العتيبي' : (approvedStaffName || localExisting?.name || currentName)));
 
       const candidateProfile: UserProfile = {
         id: localExisting?.id || currentId,
@@ -196,8 +225,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         phone: localExisting?.phone || '',
         nationalId: localExisting?.nationalId || localExisting?.national_id || '',
         national_id: localExisting?.national_id || localExisting?.nationalId || '',
-        accountStatus: 'needs_completion',
-        account_status: 'needs_completion',
+        accountStatus: 'pending',
+        account_status: 'pending',
         is_profile_completed: false,
         is_profile_complete: false,
         studentIdCode: localExisting?.studentIdCode,
@@ -206,7 +235,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         jobCode: localExisting?.jobCode,
         gradeStage: localExisting?.gradeStage,
         classroom: localExisting?.classroom,
-        specialization: localExisting?.specialization,
+        specialization: isMiaAccount ? (localExisting?.specialization || 'الشؤون الإدارية المدرسية') : localExisting?.specialization,
         guardianRelation: localExisting?.guardianRelation,
         customPermissions: isYaraAccount ? [] : (localExisting?.customPermissions || []),
         temporaryPermissions: [],
@@ -214,11 +243,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         lastLoginAt: new Date().toISOString(),
       };
 
-      const isComp = isOwnerAccount || isPrincipalAccount || isProfileComplete(candidateProfile, currentEmail);
+      const isComp = isOwnerAccount || isPrincipalAccount || (
+        (localExisting?.accountStatus === 'completed' || localExisting?.account_status === 'completed') &&
+        isProfileComplete(candidateProfile, currentEmail)
+      );
       candidateProfile.is_profile_completed = isComp;
       candidateProfile.is_profile_complete = isComp;
-      candidateProfile.accountStatus = isComp ? 'completed' : 'needs_completion';
-      candidateProfile.account_status = isComp ? 'completed' : 'needs_completion';
+      candidateProfile.accountStatus = isComp ? 'completed' : 'pending';
+      candidateProfile.account_status = isComp ? 'completed' : 'pending';
 
       activeProfile = candidateProfile;
       dataStore.syncUserProfileFromRemote(activeProfile);

@@ -13,6 +13,10 @@ import { dataStore } from '../lib/dataStore';
 import { supabase } from '../supabaseClient';
 import { logActivity } from '../lib/activityLogger';
 import {
+  getOfficialApprovedStaffName,
+  getApprovedAccountRole,
+} from '../lib/authorizedStaffService';
+import {
   GraduationCap,
   Sparkles,
   AlertCircle,
@@ -31,7 +35,7 @@ import {
 } from 'lucide-react';
 
 interface CompleteProfileViewProps {
-  onComplete?: () => void;
+  onComplete?: (completedRole?: SchoolRole) => void;
 }
 
 export const CompleteProfileView: React.FC<CompleteProfileViewProps> = ({ onComplete }) => {
@@ -58,11 +62,28 @@ export const CompleteProfileView: React.FC<CompleteProfileViewProps> = ({ onComp
     return null;
   }
 
+  const userEmail = (user?.email || profile?.email || '').trim().toLowerCase();
+  const approvedStaffRole = getApprovedAccountRole(userEmail);
+  const officialApprovedName = getOfficialApprovedStaffName(userEmail);
+
+  const role: SchoolRole = (userEmail === 'miaaa7433@gmail.com')
+    ? 'administrator'
+    : (profile?.school_role && profile.school_role !== 'student'
+        ? profile.school_role
+        : (approvedStaffRole || profile?.school_role || 'student'));
+
+  const roleLabel = ROLE_LABELS_AR[role] || 'مستخدم المنصة';
+  const isStaff = ['teacher', 'supervisor', 'administrator', 'counselor'].includes(role) || userEmail === 'miaaa7433@gmail.com';
+
   const [studentRecord, setStudentRecord] = useState<StudentRecord | null>(null);
   const [loadingRecord, setLoadingRecord] = useState(false);
 
   // Common Fields
-  const [name, setName] = useState(profile?.name || '');
+  const [name, setName] = useState(
+    isStaff && officialApprovedName
+      ? officialApprovedName
+      : (profile?.name && !profile.name.includes('@') ? profile.name : (officialApprovedName || ''))
+  );
   const [nationalId, setNationalId] = useState(
     profile?.nationalId ||
       profile?.national_id ||
@@ -72,7 +93,9 @@ export const CompleteProfileView: React.FC<CompleteProfileViewProps> = ({ onComp
   const [phone, setPhone] = useState(profile?.phone || '');
 
   // Role-specific fields
-  const [specialization, setSpecialization] = useState(profile?.specialization || '');
+  const [specialization, setSpecialization] = useState(
+    profile?.specialization || (userEmail === 'miaaa7433@gmail.com' ? 'الشؤون الإدارية المدرسية' : '')
+  );
   const [guardianRelation, setGuardianRelation] = useState(profile?.guardianRelation || 'أب');
   const [staffCode, setStaffCode] = useState(
     profile?.staffCode ||
@@ -89,9 +112,12 @@ export const CompleteProfileView: React.FC<CompleteProfileViewProps> = ({ onComp
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const role: SchoolRole = profile?.school_role || 'student';
-  const roleLabel = ROLE_LABELS_AR[role] || 'مستخدم المنصة';
-  const isStaff = ['teacher', 'supervisor', 'administrator', 'counselor'].includes(role);
+  // Sync official approved name if name is empty or default email
+  useEffect(() => {
+    if (isStaff && officialApprovedName && (!name || name.includes('@'))) {
+      setName(officialApprovedName);
+    }
+  }, [isStaff, officialApprovedName]);
 
   // For students, fetch authoritative school record
   useEffect(() => {
@@ -159,6 +185,14 @@ export const CompleteProfileView: React.FC<CompleteProfileViewProps> = ({ onComp
     const cleanPhone = phone.trim().replace(/\D/g, '');
     const cleanName = name.trim() || profile.name;
 
+    // Strict Character-for-Character Name Validation for Staff / Administrative Accounts
+    if (isStaff && officialApprovedName) {
+      if (cleanName !== officialApprovedName.trim()) {
+        setError('الاسم المدخل غير مطابق للاسم المعتمد في سجلات المدرسة');
+        return;
+      }
+    }
+
     // 1. National ID Validation (Mandatory for all roles, 10 digits starting with 1 or 2)
     if (!cleanNationalId) {
       setError('يرجى إدخال رقم الهوية الوطنية أو الإقامة (حقل إلزامي).');
@@ -199,7 +233,8 @@ export const CompleteProfileView: React.FC<CompleteProfileViewProps> = ({ onComp
         setError('يرجى إدخال الرتبة أو التخصص التعليمي/الإداري (حقل إلزامي).');
         return;
       }
-    } else if (role === 'parent') {
+    }
+ else if (role === 'parent') {
       if (!guardianRelation.trim()) {
         setError('يرجى تحديد صلة القرابة بالطالبة.');
         return;
@@ -372,7 +407,7 @@ export const CompleteProfileView: React.FC<CompleteProfileViewProps> = ({ onComp
 
       // Unlock route guard
       if (onComplete) {
-        onComplete();
+        onComplete(role);
       }
     } catch (err: any) {
       console.error('[CompleteProfileView] Error completing profile:', err);
@@ -613,17 +648,41 @@ export const CompleteProfileView: React.FC<CompleteProfileViewProps> = ({ onComp
             {/* Editable Required Fields */}
             <div className="space-y-4">
               <div>
-                <label className="block text-xs sm:text-sm font-bold text-slate-800 mb-1.5">
-                  الاسم الكامل *
-                </label>
+                <div className="flex items-center justify-between mb-1.5 flex-wrap gap-2">
+                  <label className="block text-xs sm:text-sm font-bold text-slate-800">
+                    الاسم الكامل المعتمد *
+                  </label>
+                  {officialApprovedName && (
+                    <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-800 bg-emerald-50 px-2.5 py-0.5 rounded-md border border-emerald-200">
+                      <BadgeCheck className="w-3.5 h-3.5 text-emerald-700" />
+                      <span>الاسم المعتمد في السجلات: {officialApprovedName}</span>
+                    </span>
+                  )}
+                </div>
                 <input
                   type="text"
                   required
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="الاسم الثلاثي أو الرباعي"
+                  placeholder={officialApprovedName || "الاسم الثلاثي أو الرباعي المعتمد"}
                   className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-emerald-600 focus:bg-white transition-colors"
                 />
+                {officialApprovedName && (
+                  <div className="flex items-center justify-between mt-1.5 text-[11px] flex-wrap gap-1">
+                    <span className="text-slate-500">
+                      يُشترط مطابقة الاسم المدخل حرفياً للاسم المعتمد في سجلات المدرسة دون زيادة أو نقصان حرف.
+                    </span>
+                    {name.trim() !== officialApprovedName.trim() && (
+                      <button
+                        type="button"
+                        onClick={() => setName(officialApprovedName)}
+                        className="text-emerald-700 hover:text-emerald-950 font-extrabold underline cursor-pointer"
+                      >
+                        استعادة الاسم المعتمد ({officialApprovedName})
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div>

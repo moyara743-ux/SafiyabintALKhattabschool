@@ -11,6 +11,7 @@ import {
   DailyMessage,
   SiteSettings,
   PostType,
+  SchoolRole,
 } from './types';
 import { dataStore } from './lib/dataStore';
 
@@ -195,6 +196,44 @@ function AppContent() {
     isPrincipal ||
     checkProfileComplete(profile, user?.email)
   );
+
+  // Role-based redirection upon profile completion
+  const handleProfileCompleted = (completedRole?: SchoolRole) => {
+    const userEmail = (user?.email || profile?.email || '').toLowerCase();
+    const targetRole = completedRole || profile?.school_role;
+    const isStaffOrAdmin = Boolean(
+      (targetRole && ['administrator', 'supervisor', 'director', 'system_owner', 'teacher', 'counselor'].includes(targetRole)) ||
+      userEmail === 'miaaa7433@gmail.com'
+    );
+
+    if (isStaffOrAdmin) {
+      setCurrentView('admin_dashboard');
+    } else if (targetRole === 'parent') {
+      setCurrentView('parent_portal');
+    } else {
+      setCurrentView('home');
+    }
+  };
+
+  // Staff & Admin strict routing: ensure they never get redirected or stuck in student onboarding
+  useEffect(() => {
+    const userEmail = (user?.email || profile?.email || '').toLowerCase();
+    const role = profile?.school_role;
+    const isStaffOrAdmin = Boolean(
+      (role && ['administrator', 'supervisor', 'director', 'system_owner', 'teacher', 'counselor'].includes(role)) ||
+      userEmail === 'miaaa7433@gmail.com'
+    );
+
+    if (isStaffOrAdmin) {
+      if (
+        (currentView as string) === 'complete_student_profile' ||
+        (currentView as string) === 'onboarding/student' ||
+        (currentView as string) === 'complete_profile'
+      ) {
+        setCurrentView('admin_dashboard');
+      }
+    }
+  }, [profile?.school_role, user?.email, currentView]);
 
   // System Owner immediate redirection: take directly to the Admin Dashboard
   useEffect(() => {
@@ -530,11 +569,7 @@ function AppContent() {
 
         {/* Main Isolated Form Content */}
         <main className="flex-1 max-w-5xl w-full mx-auto px-4 py-8 sm:py-12">
-          <CompleteProfileView
-            onComplete={() => {
-              setCurrentView(isSystemOwner ? 'admin_dashboard' : 'home');
-            }}
-          />
+          <CompleteProfileView onComplete={handleProfileCompleted} />
         </main>
 
         {/* Minimal Isolated Security Footer */}
@@ -705,7 +740,31 @@ function AppContent() {
             )}
 
             {currentView === 'complete_student_profile' && (
-              <CompleteStudentProfileView onComplete={() => setCurrentView('home')} />
+              (['administrator', 'supervisor', 'director', 'system_owner', 'teacher', 'counselor'].includes(profile?.school_role || '') || user?.email?.toLowerCase() === 'miaaa7433@gmail.com') ? (
+                <AdminDashboard
+                  posts={posts}
+                  announcements={announcements}
+                  events={events}
+                  achievements={achievements}
+                  photos={photos}
+                  albums={albums}
+                  dailyMessages={dailyMessages}
+                  siteSettings={settings}
+                  onOpenCreatePost={handleOpenCreatePost}
+                  onOpenCreateAnnouncement={handleOpenCreateAnnouncement}
+                  onOpenAddEvent={handleOpenAddEvent}
+                  onOpenAddAchievement={handleOpenAddAchievement}
+                  onOpenAddPhoto={handleOpenAddPhoto}
+                  onOpenCreateAlbum={handleOpenCreateAlbum}
+                  onOpenDailyMessageModal={handleOpenDailyMessageModal}
+                  onEditAnnouncement={handleEditAnnouncement}
+                  onEditEvent={handleEditEvent}
+                  onDeleteEvent={(id) => setEvents((prev) => prev.filter((e) => e.id !== id))}
+                  onNavigate={setCurrentView}
+                />
+              ) : (
+                <CompleteStudentProfileView onComplete={() => setCurrentView('home')} />
+              )
             )}
 
             {currentView === 'users_management' && <UsersManagementView />}

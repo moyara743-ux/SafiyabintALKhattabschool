@@ -26,6 +26,8 @@ import {
   isDesignatedPrincipal,
   getDesignatedPrincipalName,
 } from './principalService';
+import { isProfileComplete } from './profileGuard';
+import { getOfficialApprovedStaffName, getApprovedAccountRole } from './authorizedStaffService';
 
 // Listener callback types
 type Listener<T> = (items: T) => void;
@@ -563,6 +565,9 @@ class LocalDataStore {
     const isOwnerAccount = isSystemOwner(email);
     const isPrincipalAccount = isDesignatedPrincipal(email);
     const isYaraAccount = email === 'yaradrashed@gmail.com';
+    const isMiaAccount = email === 'miaaa7433@gmail.com';
+    const approvedStaffRole = getApprovedAccountRole(email);
+    const approvedStaffName = getOfficialApprovedStaffName(email);
 
     let role: SchoolRole = ((u.school_role as any) === 'owner' ? 'director' : u.school_role) || 'student';
     let name = u.name;
@@ -574,13 +579,36 @@ class LocalDataStore {
       name = getDesignatedPrincipalName();
     } else if (isYaraAccount) {
       role = 'student';
+    } else if (isMiaAccount) {
+      role = 'administrator';
+      name = 'أ. ميعاد العتيبي';
+    } else if (approvedStaffRole) {
+      role = approvedStaffRole;
+      if (approvedStaffName) name = approvedStaffName;
     }
+
+    const isHana = Boolean(
+      (name && (name.includes('هنا') || name.includes('الدوسري'))) ||
+      email.includes('hana') ||
+      email.includes('dossari')
+    );
+
+    const isComp = !isHana && Boolean(
+      isOwnerAccount ||
+      isPrincipalAccount ||
+      ((u.accountStatus === 'completed' || u.account_status === 'completed') && isProfileComplete(u, email))
+    );
 
     return {
       ...u,
       name,
       email,
       school_role: role,
+      accountStatus: isComp ? 'completed' : 'pending',
+      account_status: isComp ? 'completed' : 'pending',
+      is_profile_completed: isComp,
+      is_profile_complete: isComp,
+      specialization: isMiaAccount ? (u.specialization || 'الشؤون الإدارية المدرسية') : u.specialization,
       customPermissions: isYaraAccount ? [] : (u.customPermissions || []),
       temporaryPermissions: isYaraAccount ? [] : (u.temporaryPermissions || []),
     };
@@ -608,6 +636,9 @@ class LocalDataStore {
           const isOwnerAccount = isSystemOwner(email);
           const isPrincipalAccount = isDesignatedPrincipal(email);
           const isYaraAccount = email === 'yaradrashed@gmail.com';
+          const isMiaAccount = email === 'miaaa7433@gmail.com';
+          const approvedStaffRole = getApprovedAccountRole(email);
+          const approvedStaffName = getOfficialApprovedStaffName(email);
 
           let role: SchoolRole = (d.school_role === 'owner' ? 'director' : d.school_role) || 'student';
           let name = d.name || 'مستخدم';
@@ -619,38 +650,70 @@ class LocalDataStore {
             name = getDesignatedPrincipalName();
           } else if (isYaraAccount) {
             role = 'student';
+          } else if (isMiaAccount) {
+            role = 'administrator';
+            name = 'أ. ميعاد العتيبي';
+          } else if (approvedStaffRole) {
+            role = approvedStaffRole;
+            if (approvedStaffName) name = approvedStaffName;
           }
 
           const isHana = Boolean(
-            (d.name && (d.name.includes('هنا') || d.name.includes('الدوسري'))) ||
+            (name && (name.includes('هنا') || name.includes('الدوسري'))) ||
             email.includes('hana') ||
             email.includes('dossari')
           );
 
-          const isComp = !isHana && Boolean(
-            d.is_profile_completed ||
-            d.is_profile_complete ||
-            d.account_status === 'completed' ||
-            (Array.isArray(d.custom_permissions) && d.custom_permissions.includes('profile_completed'))
+          const candidatePartial: UserProfile = {
+            id: d.id,
+            name,
+            email,
+            school_role: role,
+            phone: d.phone || '',
+            nationalId: d.national_id || d.nationalId || '',
+            national_id: d.national_id || d.nationalId || '',
+            studentIdCode: d.student_id_code || d.studentIdCode,
+            staffCode: d.staff_code || d.staffCode || d.employeeIdCode,
+            employeeIdCode: d.employee_id_code || d.employeeIdCode,
+            jobCode: d.job_code || d.jobCode,
+            gradeStage: d.grade_stage || d.gradeStage,
+            classroom: d.classroom,
+            specialization: isMiaAccount ? (d.specialization || 'الشؤون الإدارية المدرسية') : d.specialization,
+            guardianRelation: d.guardian_relation || d.guardianRelation,
+            status: d.status || 'active',
+            createdAt: d.created_at || new Date().toISOString(),
+            accountStatus: (d.account_status as any) || 'pending',
+            account_status: (d.account_status as any) || 'pending',
+            is_profile_completed: Boolean(d.is_profile_completed),
+            is_profile_complete: Boolean(d.is_profile_complete),
+          };
+
+          const isComp = !isHana && (
+            isOwnerAccount ||
+            isPrincipalAccount ||
+            ((d.account_status === 'completed' || d.accountStatus === 'completed') && isProfileComplete(candidatePartial, email))
           );
 
           return {
             id: d.id,
-            name: d.name || 'مستخدم',
+            name,
             email,
             school_role: isHana ? 'teacher' : role,
             status: d.status || 'active',
             phone: d.phone || '',
             nationalId: d.national_id || d.nationalId || '',
             national_id: d.national_id || d.nationalId || '',
-            accountStatus: isHana ? 'needs_completion' : ((d.account_status as any) || (isComp ? 'completed' : 'needs_completion')),
-            account_status: isHana ? 'needs_completion' : ((d.account_status as any) || (isComp ? 'completed' : 'needs_completion')),
-            is_profile_completed: !isHana && isComp,
-            is_profile_complete: !isHana && isComp,
+            accountStatus: isComp ? 'completed' : 'pending',
+            account_status: isComp ? 'completed' : 'pending',
+            is_profile_completed: isComp,
+            is_profile_complete: isComp,
             studentIdCode: d.student_id_code || d.studentIdCode,
+            staffCode: d.staff_code || d.staffCode || d.employeeIdCode,
+            employeeIdCode: d.employee_id_code || d.employeeIdCode,
+            jobCode: d.job_code || d.jobCode,
             gradeStage: d.grade_stage || d.gradeStage,
             classroom: d.classroom,
-            specialization: d.specialization,
+            specialization: isMiaAccount ? (d.specialization || 'الشؤون الإدارية المدرسية') : d.specialization,
             guardianRelation: d.guardian_relation || d.guardianRelation,
             linkedStudentIds: d.linked_student_ids || d.linkedStudentIds,
             customPermissions: isYaraAccount ? [] : (Array.isArray(d.custom_permissions) ? d.custom_permissions : []),
@@ -659,6 +722,29 @@ class LocalDataStore {
             updatedAt: d.updated_at,
           };
         });
+
+        // Ensure miaaa7433@gmail.com exists in users list as administrator pending profile completion
+        const hasMia = remoteUsers.some((u) => u.email && u.email.trim().toLowerCase() === 'miaaa7433@gmail.com');
+        if (!hasMia) {
+          remoteUsers.push({
+            id: 'user_mia_admin_01',
+            name: 'أ. ميعاد العتيبي',
+            email: 'miaaa7433@gmail.com',
+            school_role: 'administrator',
+            status: 'active',
+            phone: '',
+            nationalId: '',
+            national_id: '',
+            specialization: 'الشؤون الإدارية المدرسية',
+            accountStatus: 'pending',
+            account_status: 'pending',
+            is_profile_completed: false,
+            is_profile_complete: false,
+            customPermissions: [],
+            temporaryPermissions: [],
+            createdAt: '2024-02-01T00:00:00Z',
+          });
+        }
 
         // Exclusively save Supabase users to storage, completely purging any old mock data
         this.setStorage('users', remoteUsers);
