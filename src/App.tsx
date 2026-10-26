@@ -554,7 +554,7 @@ function AppContent() {
 
             <div className="flex items-center gap-3">
               <div className="hidden sm:flex flex-col text-left text-xs">
-                <span className="font-bold text-slate-200">{getSystemOfficialName(user.email, profile?.name)}</span>
+                <span className="font-bold text-slate-200">حساب بانتظار التوثيق</span>
                 <span className="text-[10px] text-emerald-200 font-mono">{user.email}</span>
               </div>
               <button

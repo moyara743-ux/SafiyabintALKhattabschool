@@ -562,15 +562,7 @@ export function getOfficialApprovedStaffName(email: string): string | null {
   const clean = (email || '').trim().toLowerCase();
   if (!clean) return null;
 
-  if (clean === 'miaaa7433@gmail.com') return 'أ. ميعاد العتيبي';
-  if (clean.includes('hana') || clean.includes('dossari')) return 'أ. هنا محمد الدوسري';
-  if (clean === 'teacher.safiah@gmail.com') return 'أ. سحر أحمد';
-  if (clean === 'supervisor.safiah@gmail.com') return 'أ. منيرة إبراهيم';
-  if (clean === 'admin.safiah@gmail.com') return 'أ. نورة فهد';
-  if (clean === 'counselor.safiah@gmail.com') return 'أ. ريم سليمان';
-  if (clean === 'fatima.safiah@gmail.com') return 'أ. فاطمة علي العتيبي';
-  if (clean === 'nouf.safiah@gmail.com') return 'أ. نوف الحربي';
-
+  // 1. Dynamic Check: Stored database / local staff registry (reflects administration edits in real-time)
   try {
     if (typeof localStorage !== 'undefined') {
       const stored = localStorage.getItem(STORAGE_KEY);
@@ -583,6 +575,16 @@ export function getOfficialApprovedStaffName(email: string): string | null {
   } catch (e) {
     // ignore
   }
+
+  // 2. Authoritative Fallbacks for predefined school records
+  if (clean === 'miaaa7433@gmail.com') return 'أ. ميعاد العتيبي';
+  if (clean.includes('hana') || clean.includes('dossari')) return 'أ. هنا محمد الدوسري';
+  if (clean === 'teacher.safiah@gmail.com') return 'أ. سحر أحمد';
+  if (clean === 'supervisor.safiah@gmail.com') return 'أ. منيرة إبراهيم';
+  if (clean === 'admin.safiah@gmail.com') return 'أ. نورة فهد';
+  if (clean === 'counselor.safiah@gmail.com') return 'أ. ريم سليمان';
+  if (clean === 'fatima.safiah@gmail.com') return 'أ. فاطمة علي العتيبي';
+  if (clean === 'nouf.safiah@gmail.com') return 'أ. نوف الحربي';
 
   const defaultFound = DEFAULT_AUTHORIZED_STAFF.find((p) => p.email.toLowerCase() === clean);
   if (defaultFound && defaultFound.name) return defaultFound.name;
@@ -597,13 +599,7 @@ export function getApprovedAccountRole(email: string): SchoolRole | null {
   const clean = (email || '').trim().toLowerCase();
   if (!clean) return null;
 
-  if (clean === 'miaaa7433@gmail.com') return 'administrator';
-  if (clean === 'admin.safiah@gmail.com') return 'administrator';
-  if (clean.includes('hana') || clean.includes('dossari')) return 'teacher';
-  if (clean === 'teacher.safiah@gmail.com') return 'teacher';
-  if (clean === 'supervisor.safiah@gmail.com') return 'supervisor';
-  if (clean === 'counselor.safiah@gmail.com') return 'counselor';
-
+  // 1. Dynamic Check: Stored database / local staff registry
   try {
     if (typeof localStorage !== 'undefined') {
       const stored = localStorage.getItem(STORAGE_KEY);
@@ -616,6 +612,14 @@ export function getApprovedAccountRole(email: string): SchoolRole | null {
   } catch (e) {
     // ignore
   }
+
+  // 2. Authoritative Fallbacks
+  if (clean === 'miaaa7433@gmail.com') return 'administrator';
+  if (clean === 'admin.safiah@gmail.com') return 'administrator';
+  if (clean.includes('hana') || clean.includes('dossari')) return 'teacher';
+  if (clean === 'teacher.safiah@gmail.com') return 'teacher';
+  if (clean === 'supervisor.safiah@gmail.com') return 'supervisor';
+  if (clean === 'counselor.safiah@gmail.com') return 'counselor';
 
   const defaultFound = DEFAULT_AUTHORIZED_STAFF.find((p) => p.email.toLowerCase() === clean);
   if (defaultFound && defaultFound.assignedRole) return defaultFound.assignedRole;

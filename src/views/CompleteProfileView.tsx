@@ -79,12 +79,8 @@ export const CompleteProfileView: React.FC<CompleteProfileViewProps> = ({ onComp
   const [studentRecord, setStudentRecord] = useState<StudentRecord | null>(null);
   const [loadingRecord, setLoadingRecord] = useState(false);
 
-  // Common Fields
-  const [name, setName] = useState(
-    isStaff && officialApprovedName
-      ? officialApprovedName
-      : (profile?.name && !profile.name.includes('@') ? profile.name : (officialApprovedName || ''))
-  );
+  // Common Fields - Starts completely empty to ensure strict verification without revealing the approved name
+  const [name, setName] = useState('');
   const [nationalId, setNationalId] = useState(
     profile?.nationalId ||
       profile?.national_id ||
@@ -112,13 +108,6 @@ export const CompleteProfileView: React.FC<CompleteProfileViewProps> = ({ onComp
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  // Sync official approved name if name is empty or default email
-  useEffect(() => {
-    if (isStaff && officialApprovedName && (!name || name.includes('@'))) {
-      setName(officialApprovedName);
-    }
-  }, [isStaff, officialApprovedName]);
 
   // For students, fetch authoritative school record
   useEffect(() => {
@@ -184,7 +173,34 @@ export const CompleteProfileView: React.FC<CompleteProfileViewProps> = ({ onComp
 
     const cleanNationalId = nationalId.trim().replace(/\D/g, '');
     const cleanPhone = phone.trim().replace(/\D/g, '');
-    const cleanName = isStaff ? officialApprovedName : (name.trim() || profile.name);
+    const cleanEnteredName = name.trim();
+
+    // 0. Manual Name Validation & Strict Letter-for-Letter Matching with database record
+    if (role !== 'student') {
+      if (!cleanEnteredName) {
+        setError(isStaff ? 'توجد أخطاء في معلومات الدخول المعتمدة، يرجى التحقق وإعادة المحاولة' : 'يرجى إدخال الاسم الكامل (حقل إلزامي).');
+        return;
+      }
+
+      if (isStaff && officialApprovedName) {
+        const targetName = officialApprovedName.trim();
+        const targetWithoutPrefix = targetName.replace(/^أ\.\s*/, '').trim();
+        const enteredWithoutPrefix = cleanEnteredName.replace(/^أ\.\s*/, '').trim();
+
+        const isNameMatch =
+          cleanEnteredName === targetName ||
+          enteredWithoutPrefix === targetWithoutPrefix ||
+          cleanEnteredName === targetWithoutPrefix ||
+          `أ. ${cleanEnteredName}` === targetName;
+
+        if (!isNameMatch) {
+          setError('توجد أخطاء في معلومات الدخول المعتمدة، يرجى التحقق وإعادة المحاولة');
+          return;
+        }
+      }
+    }
+
+    const cleanName = isStaff ? (officialApprovedName || cleanEnteredName) : (cleanEnteredName || profile.name);
 
     // 1. National ID Validation (Mandatory for all roles, 10 digits starting with 1 or 2)
     if (!cleanNationalId) {
@@ -447,7 +463,7 @@ export const CompleteProfileView: React.FC<CompleteProfileViewProps> = ({ onComp
             {role === 'student' ? 'إكمال البيانات الأساسية للطالبة' : `إكمال وتوثيق بيانات الحساب (${roleLabel})`}
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 max-w-md mx-auto leading-relaxed">
-            مرحباً بكِ <strong className="text-slate-800 font-bold">{officialApprovedName}</strong>. لتفعيل حسابكِ المعتمد وفتح صلاحيات المنصة كاملة، يُرجى تعبئة الحقول الإلزامية أدناه.
+            مرحباً بكِ في المنصة الرسمية. لتفعيل حسابكِ المعتمد وفتح صلاحيات المنصة كاملة، يُرجى تعبئة الحقول الإلزامية أدناه.
           </p>
         </div>
 
@@ -640,44 +656,23 @@ export const CompleteProfileView: React.FC<CompleteProfileViewProps> = ({ onComp
 
             {/* Editable Required Fields */}
             <div className="space-y-4">
-              {/* Staff Name: Immutable Single Source of Truth */}
-              {isStaff ? (
-                <div>
-                  <div className="flex items-center justify-between mb-1.5 flex-wrap gap-2">
-                    <label className="block text-xs sm:text-sm font-bold text-slate-800">
-                      الاسم المعتمد في سجلات المدرسة (ثابت ومحمي)
-                    </label>
-                    <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-800 bg-emerald-50 px-2.5 py-0.5 rounded-md border border-emerald-200">
-                      <BadgeCheck className="w-3.5 h-3.5 text-emerald-700" />
-                      <span>الاسم الرسمي المعتمد في قاعدة البيانات</span>
-                    </span>
-                  </div>
-                  <div className="w-full px-4 py-3 bg-slate-100 border border-slate-300 rounded-xl text-xs sm:text-sm font-black text-slate-900 flex items-center justify-between">
-                    <span>{officialApprovedName}</span>
-                    <span className="text-[11px] text-slate-500 font-medium flex items-center gap-1">
-                      <Lock className="w-3.5 h-3.5 text-slate-400" />
-                      محمي ومثبت في النظام
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-slate-500 mt-1">
-                    الاسم المعتمد في سجلات المدرسة هو المصدر الوحيد المعتمد للحساب؛ لا يمكن تغييره أو استبداله باسم Google لضمان موثوقية السجلات وتوحيد العرض بكافة الشاشات.
-                  </p>
-                </div>
-              ) : (
-                <div>
-                  <label className="block text-xs sm:text-sm font-bold text-slate-800 mb-1.5">
-                    الاسم الكامل *
-                  </label>
+              {/* Full Name: User-editable input field without revealing the official approved name */}
+              <div>
+                <label className="block text-xs sm:text-sm font-bold text-slate-800 mb-1.5">
+                  الاسم الكامل كما هو مسجل في المدرسة *
+                </label>
+                <div className="relative">
                   <input
                     type="text"
                     required
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    placeholder="الاسم الكامل"
+                    placeholder="أدخلي الاسم الكامل المعتمد في سجلات المدرسة"
                     className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-emerald-600 focus:bg-white transition-colors"
                   />
+                  <UserCheck className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5 pointer-events-none" />
                 </div>
-              )}
+              </div>
 
               <div>
                 <label className="block text-xs sm:text-sm font-bold text-slate-800 mb-1.5">
