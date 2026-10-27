@@ -31,6 +31,7 @@ import {
   getOfficialApprovedStaffName,
   getApprovedAccountRole,
   getSystemOfficialName,
+  getAuthorizedStaffEmails,
 } from './authorizedStaffService';
 
 // Listener callback types
@@ -632,6 +633,9 @@ class LocalDataStore {
       const { data, error } = (await Promise.race([fetchPromise, timeoutPromise])) as any;
 
       if (!error && Array.isArray(data)) {
+        const authStaffList = await getAuthorizedStaffEmails();
+        const localCachedUsers = this.getCollection<UserProfile[]>('users') || [];
+
         remoteUsers = data.map((d: any) => {
           const email = (d.email || '').trim().toLowerCase();
           const isOwnerAccount = isSystemOwner(email);
@@ -661,34 +665,57 @@ class LocalDataStore {
             email.includes('dossari')
           );
 
+          // Extract encoded metadata tags from custom_permissions (reliable fallback when top-level columns are missing)
+          const perms: string[] = Array.isArray(d.custom_permissions) ? d.custom_permissions : [];
+          const phoneFromPerms = perms.find((p) => typeof p === 'string' && p.startsWith('phone:'))?.replace('phone:', '') || '';
+          const nidFromPerms = perms.find((p) => typeof p === 'string' && p.startsWith('nid:'))?.replace('nid:', '') || '';
+          const codeMatch = perms.find((p) => typeof p === 'string' && (p.startsWith('employee_code:') || p.startsWith('staff_code:') || p.startsWith('emp:')));
+          const codeFromPerms = codeMatch ? codeMatch.replace(/^(employee_code:|staff_code:|emp:)/, '') : '';
+          const specFromPerms = perms.find((p) => typeof p === 'string' && p.startsWith('spec:'))?.replace('spec:', '') || '';
+          const hasCompleteTag = perms.includes('profile_completed') || perms.includes('account_status:completed');
+
+          // Look up in authorized staff records
+          const staffMatch = authStaffList.find((s) => s.email && s.email.toLowerCase() === email);
+          // Look up in local storage cache
+          const cachedMatch = localCachedUsers.find(
+            (u) => (u.id === d.id) || (u.email && u.email.toLowerCase() === email)
+          );
+
+          const resolvedPhone = (d.phone || phoneFromPerms || staffMatch?.phone || cachedMatch?.phone || '').trim();
+          const resolvedNid = (d.national_id || d.nationalId || nidFromPerms || staffMatch?.national_id || staffMatch?.nationalId || cachedMatch?.nationalId || cachedMatch?.national_id || '').trim();
+          const resolvedCode = (d.staff_code || d.employee_code || d.employee_id_code || d.staffCode || codeFromPerms || staffMatch?.employee_code || staffMatch?.staff_code || cachedMatch?.staffCode || cachedMatch?.employeeIdCode || '').trim();
+          const resolvedSpec = (d.specialization || specFromPerms || staffMatch?.specialization || cachedMatch?.specialization || (isMiaAccount ? 'الشؤون الإدارية المدرسية' : '')).trim();
+
           const candidatePartial: UserProfile = {
             id: d.id,
             name,
             email,
             school_role: role,
-            phone: d.phone || '',
-            nationalId: d.national_id || d.nationalId || '',
-            national_id: d.national_id || d.nationalId || '',
+            phone: resolvedPhone,
+            nationalId: resolvedNid,
+            national_id: resolvedNid,
             studentIdCode: d.student_id_code || d.studentIdCode,
-            staffCode: d.staff_code || d.staffCode || d.employeeIdCode,
-            employeeIdCode: d.employee_id_code || d.employeeIdCode,
+            staffCode: resolvedCode,
+            staff_code: resolvedCode,
+            employeeIdCode: resolvedCode,
+            employee_code: resolvedCode,
             jobCode: d.job_code || d.jobCode,
             gradeStage: d.grade_stage || d.gradeStage,
             classroom: d.classroom,
-            specialization: isMiaAccount ? (d.specialization || 'الشؤون الإدارية المدرسية') : d.specialization,
+            specialization: resolvedSpec,
             guardianRelation: d.guardian_relation || d.guardianRelation,
             status: d.status || 'active',
             createdAt: d.created_at || new Date().toISOString(),
-            accountStatus: (d.account_status as any) || 'pending',
-            account_status: (d.account_status as any) || 'pending',
-            is_profile_completed: Boolean(d.is_profile_completed),
-            is_profile_complete: Boolean(d.is_profile_complete),
+            accountStatus: (d.account_status as any) || (hasCompleteTag ? 'completed' : 'pending'),
+            account_status: (d.account_status as any) || (hasCompleteTag ? 'completed' : 'pending'),
+            is_profile_completed: Boolean(d.is_profile_completed || hasCompleteTag),
+            is_profile_complete: Boolean(d.is_profile_complete || hasCompleteTag),
           };
 
           const isComp = !isHana && (
             isOwnerAccount ||
             isPrincipalAccount ||
-            ((d.account_status === 'completed' || d.accountStatus === 'completed') && isProfileComplete(candidatePartial, email))
+            ((d.account_status === 'completed' || d.accountStatus === 'completed' || hasCompleteTag || staffMatch?.isActivated) && isProfileComplete(candidatePartial, email))
           );
 
           return {
@@ -697,47 +724,55 @@ class LocalDataStore {
             email,
             school_role: isHana ? 'teacher' : role,
             status: d.status || 'active',
-            phone: d.phone || '',
-            nationalId: d.national_id || d.nationalId || '',
-            national_id: d.national_id || d.nationalId || '',
+            phone: resolvedPhone,
+            nationalId: resolvedNid,
+            national_id: resolvedNid,
             accountStatus: isComp ? 'completed' : 'pending',
             account_status: isComp ? 'completed' : 'pending',
             is_profile_completed: isComp,
             is_profile_complete: isComp,
             studentIdCode: d.student_id_code || d.studentIdCode,
-            staffCode: d.staff_code || d.staffCode || d.employeeIdCode,
-            employeeIdCode: d.employee_id_code || d.employeeIdCode,
+            staffCode: resolvedCode,
+            staff_code: resolvedCode,
+            employeeIdCode: resolvedCode,
+            employee_code: resolvedCode,
             jobCode: d.job_code || d.jobCode,
             gradeStage: d.grade_stage || d.gradeStage,
             classroom: d.classroom,
-            specialization: isMiaAccount ? (d.specialization || 'الشؤون الإدارية المدرسية') : d.specialization,
+            specialization: resolvedSpec,
             guardianRelation: d.guardian_relation || d.guardianRelation,
             linkedStudentIds: d.linked_student_ids || d.linkedStudentIds,
-            customPermissions: isYaraAccount ? [] : (Array.isArray(d.custom_permissions) ? d.custom_permissions : []),
+            customPermissions: isYaraAccount ? [] : perms,
             temporaryPermissions: isYaraAccount ? [] : (Array.isArray(d.temporary_permissions) ? d.temporary_permissions : []),
             createdAt: d.created_at || new Date().toISOString(),
             updatedAt: d.updated_at,
           };
         });
 
-        // Ensure miaaa7433@gmail.com exists in users list as administrator pending profile completion
+        // Ensure miaaa7433@gmail.com exists in users list with preserved profile data
         const hasMia = remoteUsers.some((u) => u.email && u.email.trim().toLowerCase() === 'miaaa7433@gmail.com');
         if (!hasMia) {
+          const miaStaff = authStaffList.find((s) => s.email.toLowerCase() === 'miaaa7433@gmail.com');
+          const miaCached = localCachedUsers.find((u) => u.email?.toLowerCase() === 'miaaa7433@gmail.com');
+          const isMiaDone = Boolean(miaCached?.is_profile_completed || miaStaff?.isActivated);
+
           remoteUsers.push({
-            id: 'user_mia_admin_01',
+            id: miaCached?.id || 'user_mia_admin_01',
             name: 'أ. ميعاد العتيبي',
             email: 'miaaa7433@gmail.com',
             school_role: 'administrator',
             status: 'active',
-            phone: '',
-            nationalId: '',
-            national_id: '',
+            phone: miaCached?.phone || miaStaff?.phone || '',
+            nationalId: miaCached?.nationalId || miaStaff?.national_id || '',
+            national_id: miaCached?.national_id || miaStaff?.national_id || '',
+            staffCode: miaCached?.staffCode || miaStaff?.staff_code || 'ADM-101',
+            employeeIdCode: miaCached?.employeeIdCode || miaStaff?.employee_code || 'ADM-101',
             specialization: 'الشؤون الإدارية المدرسية',
-            accountStatus: 'pending',
-            account_status: 'pending',
-            is_profile_completed: false,
-            is_profile_complete: false,
-            customPermissions: [],
+            accountStatus: isMiaDone ? 'completed' : 'pending',
+            account_status: isMiaDone ? 'completed' : 'pending',
+            is_profile_completed: isMiaDone,
+            is_profile_complete: isMiaDone,
+            customPermissions: isMiaDone ? ['profile_completed', 'account_status:completed'] : [],
             temporaryPermissions: [],
             createdAt: '2024-02-01T00:00:00Z',
           });
@@ -863,20 +898,53 @@ class LocalDataStore {
       throw new Error('الحساب yaradrashed@gmail.com مقيد برتبة طالبة ولا يمكن منحه صلاحيات إدارة أو ترقيته.');
     }
 
+    const effectivePhone = (updates.phone !== undefined ? updates.phone : (existing?.phone || '')).trim();
+    const effectiveNid = (updates.nationalId || (updates as any).national_id || existing?.nationalId || existing?.national_id || '').trim();
+    const effectiveStaffCode = (updates.staffCode || (updates as any).staff_code || (updates as any).employee_code || (updates as any).employeeIdCode || existing?.staffCode || existing?.employeeIdCode || '').trim();
+    const effectiveSpec = (updates.specialization !== undefined ? updates.specialization : (existing?.specialization || '')).trim();
+
+    // Prepare tags inside custom_permissions for 100% permanence
+    const baseCustomPerms: string[] = Array.isArray(updates.customPermissions || existing?.customPermissions)
+      ? [...(updates.customPermissions || existing?.customPermissions || []).filter(
+          (p: any) =>
+            typeof p === 'string' &&
+            !p.startsWith('phone:') &&
+            !p.startsWith('nid:') &&
+            !p.startsWith('staff_code:') &&
+            !p.startsWith('employee_code:') &&
+            !p.startsWith('spec:')
+        )]
+      : [];
+
+    if (effectivePhone) baseCustomPerms.push(`phone:${effectivePhone}`);
+    if (effectiveNid) baseCustomPerms.push(`nid:${effectiveNid}`);
+    if (effectiveStaffCode) {
+      baseCustomPerms.push(`staff_code:${effectiveStaffCode}`);
+      baseCustomPerms.push(`employee_code:${effectiveStaffCode}`);
+    }
+    if (effectiveSpec) baseCustomPerms.push(`spec:${effectiveSpec}`);
+    if (updates.is_profile_completed || updates.is_profile_complete || existing?.is_profile_completed) {
+      if (!baseCustomPerms.includes('profile_completed')) baseCustomPerms.push('profile_completed');
+      if (!baseCustomPerms.includes('account_status:completed')) baseCustomPerms.push('account_status:completed');
+    }
+
     // Prepare payload for Supabase public.users table
     const payload: Record<string, any> = {
       updated_at: new Date().toISOString(),
+      custom_permissions: isYaraAccount ? [] : baseCustomPerms,
     };
     if (updates.school_role) {
       payload.school_role = isDirectorAccount ? 'director' : (isYaraAccount ? 'student' : ((updates.school_role as any) === 'owner' ? 'director' : updates.school_role));
     }
     if (updates.status) payload.status = updates.status;
     if (updates.name) payload.name = updates.name;
-    if (updates.customPermissions) payload.custom_permissions = isYaraAccount ? [] : updates.customPermissions;
-    if (updates.phone !== undefined) payload.phone = updates.phone;
-    if (updates.nationalId || (updates as any).national_id) {
-      payload.national_id = updates.nationalId || (updates as any).national_id;
+    if (effectivePhone) payload.phone = effectivePhone;
+    if (effectiveNid) payload.national_id = effectiveNid;
+    if (effectiveStaffCode) {
+      payload.staff_code = effectiveStaffCode;
+      payload.employee_code = effectiveStaffCode;
     }
+    if (effectiveSpec) payload.specialization = effectiveSpec;
     if (updates.accountStatus || (updates as any).account_status) {
       payload.account_status = updates.accountStatus || (updates as any).account_status;
     }
@@ -906,12 +974,36 @@ class LocalDataStore {
       if (isValidUuid) {
         console.log(`[dataStore.updateUser] Executing update by ID: ${id}`);
         updateRes = await supabase.from('users').update(payload).eq('id', id).select();
+        // If column not found (PGRST204), retry with safe core columns + custom_permissions tags
+        if (updateRes?.error && updateRes.error.code === 'PGRST204') {
+          console.log('[dataStore.updateUser] PGRST204: Retrying update by ID with safe core columns + custom_permissions');
+          const safePayload = {
+            name: payload.name,
+            status: payload.status,
+            school_role: payload.school_role,
+            custom_permissions: payload.custom_permissions,
+            updated_at: payload.updated_at,
+          };
+          updateRes = await supabase.from('users').update(safePayload).eq('id', id).select();
+        }
       }
 
       // 2. If update by ID was not possible or returned 0 rows, try update by UNIQUE email
       if ((!updateRes || (Array.isArray(updateRes.data) && updateRes.data.length === 0)) && targetEmail) {
         console.log(`[dataStore.updateUser] Executing update by email: ${targetEmail}`);
         updateRes = await supabase.from('users').update(payload).eq('email', targetEmail).select();
+        // If column not found (PGRST204), retry with safe core columns + custom_permissions tags
+        if (updateRes?.error && updateRes.error.code === 'PGRST204') {
+          console.log('[dataStore.updateUser] PGRST204: Retrying update by email with safe core columns + custom_permissions');
+          const safePayload = {
+            name: payload.name,
+            status: payload.status,
+            school_role: payload.school_role,
+            custom_permissions: payload.custom_permissions,
+            updated_at: payload.updated_at,
+          };
+          updateRes = await supabase.from('users').update(safePayload).eq('email', targetEmail).select();
+        }
       }
 
       // Inspect response from Supabase update
@@ -995,9 +1087,14 @@ class LocalDataStore {
           school_role: payload.school_role || u.school_role,
           status: payload.status || u.status,
           name: payload.name || u.name,
-          phone: updates.phone !== undefined ? updates.phone : u.phone,
-          nationalId: updates.nationalId || (updates as any).national_id || u.nationalId,
-          national_id: updates.nationalId || (updates as any).national_id || u.national_id,
+          phone: effectivePhone || updates.phone || u.phone,
+          nationalId: effectiveNid || updates.nationalId || (updates as any).national_id || u.nationalId,
+          national_id: effectiveNid || updates.nationalId || (updates as any).national_id || u.national_id,
+          staffCode: effectiveStaffCode || updates.staffCode || u.staffCode,
+          staff_code: effectiveStaffCode || (updates as any).staff_code || u.staff_code,
+          employeeIdCode: effectiveStaffCode || updates.employeeIdCode || u.employeeIdCode,
+          employee_code: effectiveStaffCode || (updates as any).employee_code || u.employee_code,
+          specialization: effectiveSpec || updates.specialization || u.specialization,
           accountStatus: updates.accountStatus || (updates as any).account_status || u.accountStatus,
           account_status: updates.accountStatus || (updates as any).account_status || u.account_status,
           is_profile_completed: updates.is_profile_completed !== undefined ? updates.is_profile_completed : (updates.is_profile_complete !== undefined ? updates.is_profile_complete : u.is_profile_completed),

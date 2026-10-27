@@ -556,6 +556,72 @@ export async function activateStaffEmail(params: {
 }
 
 /**
+ * Permanently stores and completes a staff member's profile data
+ * (national_id, phone, employee_code, staff_code, specialization) in the database and local registry
+ */
+export async function completeAuthorizedStaffProfile(params: {
+  email: string;
+  name: string;
+  phone: string;
+  national_id: string;
+  staff_code: string;
+  employee_code?: string;
+  specialization?: string;
+  role?: SchoolRole;
+}): Promise<AuthorizedStaffEmail> {
+  const cleanEmail = params.email.trim().toLowerCase();
+  const list = await getAuthorizedStaffEmails();
+  const now = new Date().toISOString();
+
+  let target = list.find((item) => item.email.toLowerCase() === cleanEmail);
+  const code = (params.employee_code || params.staff_code || '').trim();
+
+  if (target) {
+    target.name = params.name.trim();
+    target.phone = params.phone.trim();
+    target.national_id = params.national_id.trim();
+    target.nationalId = params.national_id.trim();
+    target.staff_code = code;
+    target.staffCode = code;
+    target.employee_code = code;
+    target.specialization = params.specialization?.trim();
+    target.isActivated = true;
+    target.activatedAt = target.activatedAt || now;
+    if (params.role && ['teacher', 'supervisor', 'administrator', 'counselor'].includes(params.role)) {
+      target.assignedRole = params.role as any;
+    }
+  } else {
+    target = {
+      id: `staff_auth_${Date.now()}`,
+      email: cleanEmail,
+      name: params.name.trim(),
+      phone: params.phone.trim(),
+      national_id: params.national_id.trim(),
+      nationalId: params.national_id.trim(),
+      staff_code: code,
+      staffCode: code,
+      employee_code: code,
+      specialization: params.specialization?.trim(),
+      addedAt: now,
+      isActivated: true,
+      activatedAt: now,
+      assignedRole: (params.role as any) || 'teacher',
+    };
+    list.unshift(target);
+  }
+
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+    }
+  } catch (e) {
+    console.warn('[authorizedStaffService] Error updating storage:', e);
+  }
+
+  return target;
+}
+
+/**
  * Returns the authoritative approved name for a staff/administrative email.
  */
 export function getOfficialApprovedStaffName(email: string): string | null {

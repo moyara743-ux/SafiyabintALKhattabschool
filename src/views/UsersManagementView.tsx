@@ -39,6 +39,7 @@ import {
 import {
   getSystemOfficialName,
   getApprovedAccountRole,
+  completeAuthorizedStaffProfile,
 } from '../lib/authorizedStaffService';
 import {
   Users,
@@ -63,6 +64,10 @@ import {
   Sparkles,
   Phone,
   Mail,
+  Eye,
+  IdCard,
+  KeyRound,
+  BadgeCheck,
   User as UserIcon,
 } from 'lucide-react';
 
@@ -75,10 +80,17 @@ export const UsersManagementView: React.FC = () => {
   const [roleFilter, setRoleFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
 
+  // User Details Modal State (لعرض تفاصيل المنسوبة وبيانات الاعتماد والهوية والجوال)
+  const [viewingDetailsUser, setViewingDetailsUser] = useState<UserProfile | null>(null);
+
   // Edit Modal State
   const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
   const [editRole, setEditRole] = useState<SchoolRole>('teacher');
   const [editStatus, setEditStatus] = useState<UserStatus>('active');
+  const [editPhone, setEditPhone] = useState('');
+  const [editNationalId, setEditNationalId] = useState('');
+  const [editStaffCode, setEditStaffCode] = useState('');
+  const [editSpecialization, setEditSpecialization] = useState('');
   const [editCustomPerms, setEditCustomPerms] = useState<PermissionKey[]>([]);
   const [editTempPerms, setEditTempPerms] = useState<TemporaryPermission[]>([]);
 
@@ -275,6 +287,10 @@ export const UsersManagementView: React.FC = () => {
     }
 
     setEditingUser(target);
+    setEditPhone(target.phone || '');
+    setEditNationalId(target.nationalId || target.national_id || '');
+    setEditStaffCode(target.staffCode || target.staff_code || target.employeeIdCode || target.employee_code || '');
+    setEditSpecialization(target.specialization || '');
     const targetEmail = (target.email || '').trim().toLowerCase();
     if (targetEmail === 'yaradrashed@gmail.com') {
       setEditRole('student');
@@ -380,13 +396,44 @@ export const UsersManagementView: React.FC = () => {
     setErrorMessage(null);
 
     try {
+      const cleanPhone = editPhone.trim();
+      const cleanNid = editNationalId.trim();
+      const cleanCode = editStaffCode.trim();
+      const cleanSpec = editSpecialization.trim();
+
       await dataStore.updateUser(editingUser.id, {
         name: editingUser.name,
         email: editingUser.email,
+        phone: cleanPhone,
+        nationalId: cleanNid,
+        national_id: cleanNid,
+        staffCode: cleanCode,
+        staff_code: cleanCode,
+        employeeIdCode: cleanCode,
+        employee_code: cleanCode,
+        specialization: cleanSpec,
         school_role: editRole,
         status: editStatus,
         customPermissions: editCustomPerms,
       });
+
+      // Synchronize with authorized staff database service if staff role
+      if (['teacher', 'supervisor', 'administrator', 'counselor'].includes(editRole)) {
+        try {
+          await completeAuthorizedStaffProfile({
+            email: editingUser.email,
+            name: editingUser.name,
+            phone: cleanPhone,
+            national_id: cleanNid,
+            staff_code: cleanCode,
+            employee_code: cleanCode,
+            specialization: cleanSpec,
+            role: editRole,
+          });
+        } catch (staffSyncErr) {
+          console.warn('[UsersManagementView] Staff sync notice:', staffSyncErr);
+        }
+      }
 
       // Audit Log
       await logActivity({
@@ -796,9 +843,10 @@ export const UsersManagementView: React.FC = () => {
                   <th className="p-4">المستخدم</th>
                   <th className="p-4">البريد الإلكتروني</th>
                   <th className="p-4">الرتبة والدور</th>
-                  <th className="p-4">الحالة</th>
-                  <th className="p-4">علاقات أولياء الأمور</th>
-                  <th className="p-4">صلاحيات مخصصة</th>
+                  <th className="p-4">رقم الهوية / الإقامة</th>
+                  <th className="p-4">رقم الجوال المعتمد</th>
+                  <th className="p-4">الرمز الوظيفي</th>
+                  <th className="p-4">الحالة والتوثيق</th>
                   <th className="p-4 text-center">الإجراءات</th>
                 </tr>
               </thead>
@@ -812,6 +860,11 @@ export const UsersManagementView: React.FC = () => {
                   const linkedStudents = isParent ? getLinkedStudentsForParent(u.id) : [];
                   const activeStudentCount = linkedStudents.filter((r) => r.is_active).length;
                   const linkedParents = isStudent ? getLinkedParentsForStudent(u.id) : [];
+
+                  const displayNid = u.national_id || u.nationalId || '';
+                  const displayPhone = u.phone || '';
+                  const displayStaffCode = u.staffCode || u.staff_code || u.employeeIdCode || u.employee_code || '';
+                  const isComplete = Boolean(u.is_profile_completed || u.is_profile_complete || u.accountStatus === 'completed');
 
                   return (
                     <tr key={u.id} className="hover:bg-slate-50/70 transition-colors">
@@ -833,82 +886,109 @@ export const UsersManagementView: React.FC = () => {
 
                       <td className="p-4">{getRoleBadge(u.school_role, u.email)}</td>
 
+                      {/* National ID / Iqama Column */}
                       <td className="p-4">
-                        {isUserActive ? (
-                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-900 border border-emerald-300 flex items-center gap-1 w-fit">
-                            <UserCheck className="w-3 h-3 text-emerald-600" />
-                            <span>نشط</span>
+                        {displayNid ? (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 text-slate-900 font-mono text-xs font-bold border border-slate-200">
+                            <Shield className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
+                            <span dir="ltr">{displayNid}</span>
                           </span>
                         ) : (
-                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-800 border border-rose-300 flex items-center gap-1 w-fit">
-                            <UserX className="w-3 h-3 text-rose-600" />
-                            <span>معطل</span>
-                          </span>
+                          <span className="text-slate-400 text-xs">—</span>
                         )}
                       </td>
 
-                      {/* Parent-Student Relationships column */}
+                      {/* Phone Column */}
                       <td className="p-4">
-                        {isParent ? (
-                          <div className="flex items-center gap-2">
-                            <span className={`px-2.5 py-0.5 rounded-md text-[10px] font-bold border ${
-                              activeStudentCount > 0 ? 'bg-amber-50 text-amber-900 border-amber-300' : 'bg-slate-100 text-slate-500 border-slate-200'
-                            }`}>
-                              {activeStudentCount > 0 ? `${activeStudentCount} طالبات` : 'لا طالبات'}
+                        {displayPhone ? (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-950 font-mono text-xs font-bold border border-emerald-200">
+                            <Phone className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
+                            <span dir="ltr">{displayPhone}</span>
+                          </span>
+                        ) : (
+                          <span className="text-slate-400 text-xs">—</span>
+                        )}
+                      </td>
+
+                      {/* Staff Code Column */}
+                      <td className="p-4">
+                        {displayStaffCode ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-50 text-amber-950 font-mono text-xs font-bold border border-amber-200">
+                            <KeyRound className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+                            <span dir="ltr">{displayStaffCode}</span>
+                          </span>
+                        ) : isParent ? (
+                          <button
+                            type="button"
+                            onClick={() => openParentManagement(u)}
+                            className="px-2 py-0.5 rounded text-[11px] font-bold bg-amber-100 text-amber-900 hover:bg-amber-200 transition-colors cursor-pointer"
+                          >
+                            {activeStudentCount > 0 ? `${activeStudentCount} طالبات` : 'ربط طالبة'}
+                          </button>
+                        ) : (
+                          <span className="text-slate-400 text-xs">—</span>
+                        )}
+                      </td>
+
+                      {/* Status & Completion Column */}
+                      <td className="p-4">
+                        <div className="flex flex-col gap-1 items-start">
+                          {isUserActive ? (
+                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-900 border border-emerald-300 flex items-center gap-1 w-fit">
+                              <UserCheck className="w-3 h-3 text-emerald-600" />
+                              <span>نشط</span>
                             </span>
-                            <button
-                              type="button"
-                              onClick={() => openParentManagement(u)}
-                              className="px-2.5 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-lg text-[10px] shadow-xs cursor-pointer flex items-center gap-1 transition-colors"
-                            >
-                              <Link className="w-3 h-3" />
-                              <span>إدارة الأبناء</span>
-                            </button>
-                          </div>
-                        ) : isStudent ? (
-                          linkedParents.length > 0 ? (
-                            <div className="text-[11px] text-slate-600 space-y-0.5">
-                              {linkedParents.map((lp) => (
-                                <span key={lp.id} className="inline-block px-2 py-0.5 bg-slate-100 text-slate-700 rounded text-[10px] ml-1">
-                                  ولي الأمر: {lp.parent?.name || 'ولي أمر'}
-                                </span>
-                              ))}
-                            </div>
                           ) : (
-                            <span className="text-slate-400 text-[11px]">—</span>
-                          )
-                        ) : (
-                          <span className="text-slate-400 text-[11px]">—</span>
-                        )}
-                      </td>
-
-                      <td className="p-4">
-                        {customCount > 0 ? (
-                          <span className="px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-900 border border-indigo-200 text-[11px] font-bold">
-                            {customCount} مخصصة
-                          </span>
-                        ) : (
-                          <span className="text-slate-400 text-[11px]">الافتراضية</span>
-                        )}
+                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-800 border border-rose-300 flex items-center gap-1 w-fit">
+                              <UserX className="w-3 h-3 text-rose-600" />
+                              <span>معطل</span>
+                            </span>
+                          )}
+                          {isComplete ? (
+                            <span className="text-[10px] text-emerald-800 font-extrabold flex items-center gap-0.5">
+                              <BadgeCheck className="w-3 h-3 text-emerald-600" />
+                              <span>مكتمل وموثق</span>
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-amber-700 font-bold">
+                              بانتظار التوثيق
+                            </span>
+                          )}
+                        </div>
                       </td>
 
                       <td className="p-4 text-center">
-                        <div className="flex items-center justify-center gap-1.5">
+                        <div className="flex items-center justify-center gap-1.5 flex-wrap">
+                          {/* Details Button */}
                           <button
-                            onClick={() => openEditModal(u)}
-                            className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-bold transition-colors inline-flex items-center gap-1 border border-slate-200 cursor-pointer"
+                            type="button"
+                            onClick={() => setViewingDetailsUser(u)}
+                            className="px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-900 rounded-xl text-xs font-bold transition-colors inline-flex items-center gap-1 border border-emerald-200 cursor-pointer shadow-2xs"
+                            title="عرض تفاصيل المنسوبة وبيانات الاعتماد"
                           >
-                            <Edit className="w-3.5 h-3.5 text-emerald-700" />
+                            <Eye className="w-3.5 h-3.5 text-emerald-700" />
+                            <span>التفاصيل</span>
+                          </button>
+
+                          {/* Edit Button */}
+                          <button
+                            type="button"
+                            onClick={() => openEditModal(u)}
+                            className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-bold transition-colors inline-flex items-center gap-1 border border-slate-200 cursor-pointer shadow-2xs"
+                            title="تعديل الرتبة والبيانات"
+                          >
+                            <Edit className="w-3.5 h-3.5 text-slate-700" />
                             <span>تعديل</span>
                           </button>
 
+                          {/* Delete Button */}
                           <button
+                            type="button"
                             onClick={() => handleInitiateDeleteUser(u)}
-                            className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-xl text-xs font-bold transition-colors inline-flex items-center gap-1 border border-rose-200 cursor-pointer"
+                            className="p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-xl text-xs font-bold transition-colors inline-flex items-center gap-1 border border-rose-200 cursor-pointer shadow-2xs"
                             title="حذف المستخدم نهائياً"
                           >
                             <Trash2 className="w-3.5 h-3.5 text-rose-600" />
-                            <span>حذف</span>
                           </button>
                         </div>
                       </td>
@@ -1340,6 +1420,67 @@ export const UsersManagementView: React.FC = () => {
               </div>
             </div>
 
+            {/* National ID, Phone & Staff Info Inputs */}
+            <div className="p-4 bg-emerald-50/50 border border-emerald-100 rounded-2xl space-y-3">
+              <div className="flex items-center gap-2 text-xs font-bold text-emerald-950">
+                <IdCard className="w-4 h-4 text-emerald-700" />
+                <span>البيانات الرسمية ومعلومات الاتصال المعتمدة</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                    رقم الهوية الوطنية / الإقامة
+                  </label>
+                  <input
+                    type="text"
+                    value={editNationalId}
+                    onChange={(e) => setEditNationalId(e.target.value)}
+                    placeholder="10XXXXXXXX"
+                    maxLength={10}
+                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 font-mono focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                    رقم الجوال المعتمد
+                  </label>
+                  <input
+                    type="text"
+                    value={editPhone}
+                    onChange={(e) => setEditPhone(e.target.value)}
+                    placeholder="05XXXXXXXX"
+                    maxLength={14}
+                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 font-mono focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                    dir="ltr"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                    الرمز الوظيفي / الرقم الإداري
+                  </label>
+                  <input
+                    type="text"
+                    value={editStaffCode}
+                    onChange={(e) => setEditStaffCode(e.target.value)}
+                    placeholder="مثال: ST-2024"
+                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                    التخصص / المسمى الوظيفي
+                  </label>
+                  <input
+                    type="text"
+                    value={editSpecialization}
+                    onChange={(e) => setEditSpecialization(e.target.value)}
+                    placeholder="مثال: لغة عربية، رياضيات..."
+                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                  />
+                </div>
+              </div>
+            </div>
+
             {/* If user is Parent, display linked children directly in edit modal too */}
             {editRole === 'parent' && (
               <div className="p-4 bg-amber-50/70 border border-amber-200 rounded-2xl space-y-2">
@@ -1450,6 +1591,163 @@ export const UsersManagementView: React.FC = () => {
                   )}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* USER DETAILS MODAL */}
+      {viewingDetailsUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in" dir="rtl">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-emerald-200 text-slate-900 space-y-5">
+            {/* Header */}
+            <div className="flex items-start justify-between border-b border-slate-100 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-2xl bg-emerald-800 text-white flex items-center justify-center font-extrabold text-base shadow-sm">
+                  {viewingDetailsUser.name?.charAt(0) || 'م'}
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-extrabold text-base text-slate-900">
+                      تفاصيل المنسوبة / المستخدمة
+                    </h3>
+                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-900 border border-emerald-300">
+                      {ROLE_LABELS_AR[viewingDetailsUser.school_role] || viewingDetailsUser.school_role}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-0.5 font-bold">
+                    {viewingDetailsUser.name}
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setViewingDetailsUser(null)}
+                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Profile Info Cards Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+              {/* National ID */}
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-2xl space-y-1">
+                <div className="text-[11px] text-slate-500 font-bold flex items-center gap-1.5">
+                  <IdCard className="w-3.5 h-3.5 text-emerald-700" />
+                  <span>رقم الهوية الوطنية / الإقامة:</span>
+                </div>
+                <div className="font-mono font-black text-slate-900 text-sm">
+                  {viewingDetailsUser.national_id || viewingDetailsUser.nationalId || (
+                    <span className="text-slate-400 font-sans font-normal text-xs">غير مسجل</span>
+                  )}
+                </div>
+              </div>
+
+              {/* Phone */}
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-2xl space-y-1">
+                <div className="text-[11px] text-slate-500 font-bold flex items-center gap-1.5">
+                  <Phone className="w-3.5 h-3.5 text-emerald-700" />
+                  <span>رقم الجوال المعتمد:</span>
+                </div>
+                <div className="font-mono font-black text-slate-900 text-sm" dir="ltr">
+                  {viewingDetailsUser.phone ? (
+                    <a
+                      href={`tel:${viewingDetailsUser.phone}`}
+                      className="text-emerald-800 hover:underline font-bold"
+                    >
+                      {viewingDetailsUser.phone}
+                    </a>
+                  ) : (
+                    <span className="text-slate-400 font-sans font-normal text-xs">غير مسجل</span>
+                  )}
+                </div>
+              </div>
+
+              {/* Staff Code */}
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-2xl space-y-1">
+                <div className="text-[11px] text-slate-500 font-bold flex items-center gap-1.5">
+                  <KeyRound className="w-3.5 h-3.5 text-emerald-700" />
+                  <span>الرمز الوظيفي:</span>
+                </div>
+                <div className="font-mono font-bold text-slate-900">
+                  {viewingDetailsUser.employee_code || viewingDetailsUser.staff_code || (
+                    <span className="text-slate-400 font-sans font-normal text-xs">غير محدد</span>
+                  )}
+                </div>
+              </div>
+
+              {/* Specialization */}
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-2xl space-y-1">
+                <div className="text-[11px] text-slate-500 font-bold flex items-center gap-1.5">
+                  <GraduationCap className="w-3.5 h-3.5 text-emerald-700" />
+                  <span>التخصص / المسمى:</span>
+                </div>
+                <div className="font-bold text-slate-900">
+                  {viewingDetailsUser.specialization || (
+                    <span className="text-slate-400 font-normal text-xs">غير محدد</span>
+                  )}
+                </div>
+              </div>
+
+              {/* Email */}
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-2xl space-y-1 sm:col-span-2">
+                <div className="text-[11px] text-slate-500 font-bold flex items-center gap-1.5">
+                  <Mail className="w-3.5 h-3.5 text-emerald-700" />
+                  <span>البريد الإلكتروني المعتمد:</span>
+                </div>
+                <div className="font-mono font-bold text-slate-900 text-xs truncate" dir="ltr">
+                  {viewingDetailsUser.email}
+                </div>
+              </div>
+
+              {/* Status and Profile Completion */}
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-2xl space-y-1.5 sm:col-span-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] text-slate-500 font-bold">حالة الحساب والتوثيق:</span>
+                  <div className="flex items-center gap-2">
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                      viewingDetailsUser.status === 'active'
+                        ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
+                        : 'bg-rose-100 text-rose-800 border border-rose-300'
+                    }`}>
+                      {viewingDetailsUser.status === 'active' ? 'حساب نشط' : 'حساب معطل'}
+                    </span>
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                      viewingDetailsUser.is_profile_completed
+                        ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
+                        : 'bg-amber-100 text-amber-900 border border-amber-300'
+                    }`}>
+                      {viewingDetailsUser.is_profile_completed ? 'مكتمل وموثق' : 'بانتظار استكمال البيانات'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="flex items-center justify-between gap-3 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => {
+                  const target = viewingDetailsUser;
+                  setViewingDetailsUser(null);
+                  openEditModal(target);
+                }}
+                className="px-4 py-2 bg-emerald-800 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-md cursor-pointer flex items-center gap-1.5"
+              >
+                <Edit className="w-3.5 h-3.5" />
+                <span>تعديل بيانات ورتبة المستخدمة</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setViewingDetailsUser(null)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+              >
+                إغلاق
+              </button>
             </div>
           </div>
         </div>

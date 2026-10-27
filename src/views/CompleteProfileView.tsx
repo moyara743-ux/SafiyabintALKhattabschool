@@ -16,6 +16,7 @@ import {
   getOfficialApprovedStaffName,
   getApprovedAccountRole,
   getSystemOfficialName,
+  completeAuthorizedStaffProfile,
 } from '../lib/authorizedStaffService';
 import {
   GraduationCap,
@@ -335,14 +336,22 @@ export const CompleteProfileView: React.FC<CompleteProfileViewProps> = ({ onComp
       } else {
         // Staff or Parent Completion Flow
         const updatedCustomPerms = Array.isArray(profile.customPermissions)
-          ? [...profile.customPermissions.filter((p) => typeof p === 'string' && !p.startsWith('nid:') && !p.startsWith('staff_code:'))]
+          ? [...profile.customPermissions.filter((p) => typeof p === 'string' && !p.startsWith('nid:') && !p.startsWith('phone:') && !p.startsWith('staff_code:') && !p.startsWith('employee_code:') && !p.startsWith('spec:'))]
           : [];
         updatedCustomPerms.push(`nid:${cleanNationalId}` as any);
+        updatedCustomPerms.push(`phone:${cleanPhone}` as any);
         if (staffCode.trim()) {
           updatedCustomPerms.push(`staff_code:${staffCode.trim()}` as any);
+          updatedCustomPerms.push(`employee_code:${staffCode.trim()}` as any);
+        }
+        if (specialization.trim()) {
+          updatedCustomPerms.push(`spec:${specialization.trim()}` as any);
         }
         if (!updatedCustomPerms.includes('profile_completed' as any)) {
           updatedCustomPerms.push('profile_completed' as any);
+        }
+        if (!updatedCustomPerms.includes('account_status:completed' as any)) {
+          updatedCustomPerms.push('account_status:completed' as any);
         }
 
         const updatePayload: any = {
@@ -363,35 +372,80 @@ export const CompleteProfileView: React.FC<CompleteProfileViewProps> = ({ onComp
 
         if (isStaff) {
           updatePayload.staffCode = staffCode.trim();
+          updatePayload.staff_code = staffCode.trim();
           updatePayload.employeeIdCode = staffCode.trim();
+          updatePayload.employee_code = staffCode.trim();
           updatePayload.jobCode = staffCode.trim();
           updatePayload.specialization = specialization.trim();
+
+          // 1. Call Profile Completion POST handler (/api/staff/complete-profile)
+          try {
+            await fetch('/api/staff/complete-profile', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                email: profile.email,
+                name: cleanName,
+                national_id: cleanNationalId,
+                phone: cleanPhone,
+                employee_code: staffCode.trim(),
+                staff_code: staffCode.trim(),
+                specialization: specialization.trim(),
+                role,
+              }),
+            });
+          } catch (apiErr) {
+            console.warn('[CompleteProfileView] API POST notice:', apiErr);
+          }
+
+          // 2. Permanently record into authorized staff database service
+          try {
+            await completeAuthorizedStaffProfile({
+              email: profile.email,
+              name: cleanName,
+              phone: cleanPhone,
+              national_id: cleanNationalId,
+              staff_code: staffCode.trim(),
+              employee_code: staffCode.trim(),
+              specialization: specialization.trim(),
+              role,
+            });
+          } catch (staffErr) {
+            console.warn('[CompleteProfileView] Staff service notice:', staffErr);
+          }
         } else if (role === 'parent') {
           updatePayload.guardian_relation = guardianRelation;
           updatePayload.guardianRelation = guardianRelation;
         }
 
-        // 1. Update in Supabase public.users if row exists
+        // 3. Direct update in Supabase public.users table with safe custom_permissions tags
         try {
           await supabase
             .from('users')
             .update({
               name: cleanName,
-              phone: cleanPhone,
-              national_id: cleanNationalId,
-              specialization: updatePayload.specialization || null,
-              account_status: 'completed',
               status: 'active',
-              is_profile_completed: true,
               custom_permissions: updatedCustomPerms,
               updated_at: new Date().toISOString(),
             })
-            .eq('id', profile.id);
+            .eq('email', profile.email.toLowerCase());
+
+          if (profile.id) {
+            await supabase
+              .from('users')
+              .update({
+                name: cleanName,
+                status: 'active',
+                custom_permissions: updatedCustomPerms,
+                updated_at: new Date().toISOString(),
+              })
+              .eq('id', profile.id);
+          }
         } catch (dbErr) {
-          console.warn('[CompleteProfileView] Supabase update notice:', dbErr);
+          console.warn('[CompleteProfileView] Supabase direct update notice:', dbErr);
         }
 
-        // 2. Update in DataStore
+        // 4. Update in local DataStore (also updates local storage and triggers listeners)
         await dataStore.updateUser(profile.id, {
           ...profile,
           ...updatePayload,

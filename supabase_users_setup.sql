@@ -20,6 +20,24 @@ ALTER TABLE public.users DROP CONSTRAINT IF EXISTS users_school_role_check;
 ALTER TABLE public.users ADD CONSTRAINT users_school_role_check 
   CHECK (school_role IN ('owner', 'director', 'supervisor', 'administrator', 'counselor', 'teacher', 'parent', 'student'));
 
+-- إضافة وتأكيد وجود أعمدة الهوية والجوال والرمز الوظيفي والتخصص في جدول المستخدمين
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS phone TEXT;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS national_id TEXT;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS staff_code TEXT;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS employee_code TEXT;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS specialization TEXT;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS account_status TEXT DEFAULT 'pending';
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS is_profile_completed BOOLEAN DEFAULT false;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS student_id_code TEXT;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS grade_stage TEXT;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS classroom TEXT;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS temporary_permissions JSONB DEFAULT '[]'::jsonb;
+
+-- فهارس البحث والتحقق
+CREATE INDEX IF NOT EXISTS idx_users_phone ON public.users(phone);
+CREATE INDEX IF NOT EXISTS idx_users_national_id ON public.users(national_id);
+CREATE INDEX IF NOT EXISTS idx_users_staff_code ON public.users(staff_code);
+
 -- 2. تفعيل سياسات الأمان على مستوى الصفوف (Row Level Security - RLS)
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 
